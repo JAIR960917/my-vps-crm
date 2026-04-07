@@ -1,6 +1,5 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, User } from "lucide-react";
+import { Pencil, Trash2, User, MessageSquare } from "lucide-react";
 
 type Profile = { user_id: string; full_name: string; email: string };
 
@@ -11,6 +10,7 @@ type LeadCardProps = {
   isAdmin: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onHistory: () => void;
 };
 
 export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onDelete }: LeadCardProps) {
