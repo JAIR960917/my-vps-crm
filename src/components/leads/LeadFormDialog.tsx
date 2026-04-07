@@ -90,10 +90,10 @@ export default function LeadFormDialog({
           </div>
           <div className="space-y-2">
             <Label>Atribuído a</Label>
-            <Select value={formAssigned} onValueChange={setFormAssigned}>
+            <Select value={formAssigned || "__none__"} onValueChange={(v) => setFormAssigned(v === "__none__" ? "" : v)}>
               <SelectTrigger><SelectValue placeholder="Ninguém" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Ninguém</SelectItem>
+                <SelectItem value="__none__">Ninguém</SelectItem>
                 {profiles.map((p) => (
                   <SelectItem key={p.user_id} value={p.user_id}>
                     {p.full_name || p.email}
