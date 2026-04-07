@@ -13,7 +13,7 @@ type LeadCardProps = {
   onHistory: () => void;
 };
 
-export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onDelete }: LeadCardProps) {
+export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onDelete, onHistory }: LeadCardProps) {
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
   const primaryCol = columns[0];
@@ -35,6 +35,9 @@ export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onD
           )}
         </div>
         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>
+            <MessageSquare className="h-3.5 w-3.5 text-primary" />
+          </Button>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
             <Pencil className="h-3.5 w-3.5" />
           </Button>
