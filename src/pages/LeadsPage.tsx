@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import LeadCard from "@/components/leads/LeadCard";
 import LeadFormDialog from "@/components/leads/LeadFormDialog";
+import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
@@ -48,11 +49,14 @@ export default function LeadsPage() {
   const [formStatus, setFormStatus] = useState("novo");
   const [formAssigned, setFormAssigned] = useState("");
   const [saving, setSaving] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
+  const [historyLeadName, setHistoryLeadName] = useState("");
 
   const fetchAll = async () => {
     const [{ data: cols }, { data: lds }, { data: profs }] = await Promise.all([
       supabase.from("crm_columns").select("*").order("position"),
-      supabase.from("crm_leads").select("*").order("created_at", { ascending: false }),
+      supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
       supabase.from("profiles").select("user_id, full_name, email"),
     ]);
     setColumns(cols || []);
@@ -176,6 +180,13 @@ export default function LeadsPage() {
                                 isAdmin={isAdmin}
                                 onEdit={() => openEdit(lead)}
                                 onDelete={() => handleDelete(lead.id)}
+                                onHistory={() => {
+                                  const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
+                                  const primaryCol = columns[0];
+                                  setHistoryLeadId(lead.id);
+                                  setHistoryLeadName(primaryCol ? (data[primaryCol.field_key] || "Lead") : "Lead");
+                                  setHistoryOpen(true);
+                                }}
                               />
                             </div>
                           )}
@@ -214,6 +225,15 @@ export default function LeadsPage() {
         onSubmit={handleSave}
         statusOptions={STATUS_OPTIONS}
         statusLabels={statusLabels}
+      />
+
+      <LeadHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        leadId={historyLeadId}
+        leadName={historyLeadName}
+        profiles={profiles}
+        onNoteAdded={fetchAll}
       />
     </AppLayout>
   );
