@@ -1,12 +1,11 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2 } from "lucide-react";
+import { LayoutDashboard, Users, Settings, LogOut, Columns3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { path: "/", label: "Leads", icon: LayoutDashboard },
   { path: "/usuarios", label: "Usuários", icon: Users, adminOnly: true },
-  { path: "/empresas", label: "Empresas", icon: Building2, adminOnly: true },
   { path: "/colunas", label: "Colunas CRM", icon: Columns3, adminOnly: true },
 ];
 

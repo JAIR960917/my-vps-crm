@@ -12,14 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 
-type Company = { id: string; name: string };
-
 type Profile = {
   id: string;
   user_id: string;
   full_name: string;
   email: string;
-  company_id: string | null;
 };
 
 type UserRole = {
@@ -37,34 +34,20 @@ export default function UsersPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("vendedor");
   const [creating, setCreating] = useState(false);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState("");
 
   const fetchData = async () => {
-    const [{ data: p }, { data: r }, { data: c }] = await Promise.all([
+    const [{ data: p }, { data: r }] = await Promise.all([
       supabase.from("profiles").select("*").order("created_at"),
       supabase.from("user_roles").select("*"),
-      supabase.from("companies").select("id, name").order("name"),
     ]);
     setProfiles(p || []);
     setUserRoles(r || []);
-    setCompanies(c || []);
   };
 
   useEffect(() => { fetchData(); }, []);
 
   const getRoles = (userId: string) =>
     userRoles.filter((r) => r.user_id === userId).map((r) => r.role);
-
-  const getCompanyName = (companyId: string | null) =>
-    companies.find((c) => c.id === companyId)?.name || "—";
-
-  const handleAssignCompany = async (profileUserId: string, companyId: string) => {
-    const val = companyId === "__none__" ? null : companyId;
-    const { error } = await supabase.from("profiles").update({ company_id: val }).eq("user_id", profileUserId);
-    if (error) toast.error("Erro ao atribuir empresa");
-    else { toast.success("Empresa atribuída"); fetchData(); }
-  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,7 +138,6 @@ export default function UsersPage() {
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Papel</TableHead>
-              <TableHead>Empresa</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -169,19 +151,6 @@ export default function UsersPage() {
                       <Badge key={r} variant={roleBadgeVariant(r) as any}>{r}</Badge>
                     ))}
                   </div>
-                </TableCell>
-                <TableCell>
-                  <Select value={p.company_id || "__none__"} onValueChange={(v) => handleAssignCompany(p.user_id, v)}>
-                    <SelectTrigger className="w-40 h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhuma</SelectItem>
-                      {companies.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </TableCell>
               </TableRow>
             ))}

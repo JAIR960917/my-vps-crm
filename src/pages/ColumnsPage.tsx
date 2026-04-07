@@ -22,8 +22,6 @@ type CrmColumn = {
   is_required: boolean;
 };
 
-type EditingColumn = { id: string; name: string } | null;
-
 export default function ColumnsPage() {
   const { isAdmin } = useAuth();
   const [columns, setColumns] = useState<CrmColumn[]>([]);
@@ -32,7 +30,6 @@ export default function ColumnsPage() {
   const [fieldType, setFieldType] = useState("text");
   const [isRequired, setIsRequired] = useState(false);
   const [options, setOptions] = useState("");
-  const [editing, setEditing] = useState<EditingColumn>(null);
 
   const fetchColumns = async () => {
     const { data } = await supabase
@@ -69,14 +66,6 @@ export default function ColumnsPage() {
       setOptions("");
       fetchColumns();
     }
-  };
-
-  const handleRename = async () => {
-    if (!editing || !editing.name.trim()) return;
-    const { error } = await supabase.from("crm_columns").update({ name: editing.name }).eq("id", editing.id);
-    if (error) toast.error("Erro ao renomear");
-    else { toast.success("Coluna renomeada"); fetchColumns(); }
-    setEditing(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -149,7 +138,6 @@ export default function ColumnsPage() {
             <TableRow>
               <TableHead>Nome</TableHead>
               <TableHead>Chave</TableHead>
-
               <TableHead>Tipo</TableHead>
               <TableHead>Obrigatório</TableHead>
               <TableHead className="w-12"></TableHead>
@@ -158,24 +146,7 @@ export default function ColumnsPage() {
           <TableBody>
             {columns.map((col) => (
               <TableRow key={col.id}>
-                <TableCell className="font-medium">
-                  {editing?.id === col.id ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={editing.name}
-                        onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                        className="h-8 w-40"
-                        autoFocus
-                        onKeyDown={(e) => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setEditing(null); }}
-                      />
-                      <Button size="sm" variant="outline" className="h-8" onClick={handleRename}>OK</Button>
-                    </div>
-                  ) : (
-                    <span className="cursor-pointer hover:underline" onClick={() => setEditing({ id: col.id, name: col.name })}>
-                      {col.name}
-                    </span>
-                  )}
-                </TableCell>
+                <TableCell className="font-medium">{col.name}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">{col.field_key}</TableCell>
                 <TableCell>{typeLabels[col.field_type] || col.field_type}</TableCell>
                 <TableCell>{col.is_required ? "Sim" : "Não"}</TableCell>

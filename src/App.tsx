@@ -8,7 +8,6 @@ import Login from "./pages/Login";
 import LeadsPage from "./pages/LeadsPage";
 import UsersPage from "./pages/UsersPage";
 import ColumnsPage from "./pages/ColumnsPage";
-import CompaniesPage from "./pages/CompaniesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,7 +37,6 @@ const App = () => (
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
             <Route path="/usuarios" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-            <Route path="/empresas" element={<ProtectedRoute><CompaniesPage /></ProtectedRoute>} />
             <Route path="/colunas" element={<ProtectedRoute><ColumnsPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
