@@ -1,36 +1,22 @@
 import { useEffect, useState } from "react";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
+import LeadCard from "@/components/leads/LeadCard";
+import LeadFormDialog from "@/components/leads/LeadFormDialog";
 
 type CrmColumn = {
-  id: string;
-  name: string;
-  field_key: string;
-  field_type: string;
-  options: any;
-  position: number;
-  is_required: boolean;
+  id: string; name: string; field_key: string; field_type: string;
+  options: any; position: number; is_required: boolean;
 };
-
 type Lead = {
-  id: string;
-  data: Record<string, any>;
-  assigned_to: string | null;
-  created_by: string;
-  status: string;
-  created_at: string;
+  id: string; data: Record<string, any>; assigned_to: string | null;
+  created_by: string; status: string; created_at: string;
 };
-
 type Profile = { user_id: string; full_name: string; email: string };
 
 const STATUS_OPTIONS = ["novo", "em_contato", "qualificado", "proposta", "fechado", "perdido"];
@@ -38,9 +24,21 @@ const statusLabels: Record<string, string> = {
   novo: "Novo", em_contato: "Em Contato", qualificado: "Qualificado",
   proposta: "Proposta", fechado: "Fechado", perdido: "Perdido",
 };
+const statusColors: Record<string, string> = {
+  novo: "bg-blue-500/15 text-blue-700 border-blue-300",
+  em_contato: "bg-amber-500/15 text-amber-700 border-amber-300",
+  qualificado: "bg-violet-500/15 text-violet-700 border-violet-300",
+  proposta: "bg-cyan-500/15 text-cyan-700 border-cyan-300",
+  fechado: "bg-emerald-500/15 text-emerald-700 border-emerald-300",
+  perdido: "bg-red-500/15 text-red-700 border-red-300",
+};
+const columnHeaderColors: Record<string, string> = {
+  novo: "bg-blue-500", em_contato: "bg-amber-500", qualificado: "bg-violet-500",
+  proposta: "bg-cyan-500", fechado: "bg-emerald-500", perdido: "bg-red-500",
+};
 
 export default function LeadsPage() {
-  const { user, isAdmin, isGerente } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [columns, setColumns] = useState<CrmColumn[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -64,10 +62,10 @@ export default function LeadsPage() {
 
   useEffect(() => { fetchAll(); }, []);
 
-  const openCreate = () => {
+  const openCreate = (status?: string) => {
     setEditingLead(null);
     setFormData({});
-    setFormStatus("novo");
+    setFormStatus(status || "novo");
     setFormAssigned("");
     setOpen(true);
   };
@@ -83,29 +81,20 @@ export default function LeadsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-
     if (editingLead) {
-      const { error } = await supabase
-        .from("crm_leads")
-        .update({
-          data: formData,
-          status: formStatus,
-          assigned_to: formAssigned || null,
-        })
-        .eq("id", editingLead.id);
+      const { error } = await supabase.from("crm_leads").update({
+        data: formData, status: formStatus, assigned_to: formAssigned || null,
+      }).eq("id", editingLead.id);
       if (error) toast.error("Erro ao atualizar");
       else toast.success("Lead atualizado");
     } else {
       const { error } = await supabase.from("crm_leads").insert({
-        data: formData,
-        status: formStatus,
-        assigned_to: formAssigned || null,
-        created_by: user!.id,
+        data: formData, status: formStatus,
+        assigned_to: formAssigned || null, created_by: user!.id,
       });
       if (error) toast.error("Erro ao criar lead");
       else toast.success("Lead criado");
     }
-
     setSaving(false);
     setOpen(false);
     fetchAll();
@@ -117,153 +106,115 @@ export default function LeadsPage() {
     else { toast.success("Lead removido"); fetchAll(); }
   };
 
-  const getProfileName = (userId: string | null) => {
-    if (!userId) return "—";
-    const p = profiles.find((p) => p.user_id === userId);
-    return p?.full_name || p?.email || "—";
-  };
+  const onDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+    const newStatus = result.destination.droppableId;
+    const leadId = result.draggableId;
+    if (newStatus === result.source.droppableId) return;
 
-  const renderFieldInput = (col: CrmColumn) => {
-    const value = formData[col.field_key] || "";
-    if (col.field_type === "select" && Array.isArray(col.options)) {
-      return (
-        <Select value={value} onValueChange={(v) => setFormData({ ...formData, [col.field_key]: v })}>
-          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-          <SelectContent>
-            {(col.options as string[]).map((opt) => (
-              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      );
-    }
-    const inputType = col.field_type === "number" ? "number" : col.field_type === "date" ? "date" : col.field_type === "email" ? "email" : "text";
-    return (
-      <Input
-        type={inputType}
-        value={value}
-        onChange={(e) => setFormData({ ...formData, [col.field_key]: e.target.value })}
-        required={col.is_required}
-      />
-    );
-  };
+    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, status: newStatus } : l));
 
-  const statusColor = (s: string) => {
-    switch (s) {
-      case "fechado": return "default";
-      case "perdido": return "destructive";
-      case "qualificado": return "secondary";
-      default: return "outline";
+    const { error } = await supabase.from("crm_leads").update({ status: newStatus }).eq("id", leadId);
+    if (error) {
+      toast.error("Erro ao mover lead");
+      fetchAll();
     }
   };
+
+  const getLeadsByStatus = (status: string) => leads.filter((l) => l.status === status);
 
   return (
     <AppLayout>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Leads</h1>
-          <p className="text-sm text-muted-foreground">{leads.length} lead{leads.length !== 1 ? "s" : ""} cadastrado{leads.length !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-muted-foreground">
+            {leads.length} lead{leads.length !== 1 ? "s" : ""}
+          </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Novo Lead</Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingLead ? "Editar Lead" : "Novo Lead"}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4">
-              {columns.map((col) => (
-                <div key={col.id} className="space-y-2">
-                  <Label>{col.name}{col.is_required && " *"}</Label>
-                  {renderFieldInput(col)}
-                </div>
-              ))}
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={formStatus} onValueChange={setFormStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Atribuído a</Label>
-                <Select value={formAssigned} onValueChange={setFormAssigned}>
-                  <SelectTrigger><SelectValue placeholder="Ninguém" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Ninguém</SelectItem>
-                    {profiles.map((p) => (
-                      <SelectItem key={p.user_id} value={p.user_id}>
-                        {p.full_name || p.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button type="submit" className="w-full" disabled={saving}>
-                {saving ? "Salvando..." : editingLead ? "Atualizar" : "Criar"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => openCreate()}>
+          <Plus className="mr-2 h-4 w-4" />Novo Lead
+        </Button>
       </div>
 
-      <div className="rounded-xl border bg-card overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {columns.map((col) => (
-                <TableHead key={col.id}>{col.name}</TableHead>
-              ))}
-              <TableHead>Status</TableHead>
-              <TableHead>Atribuído</TableHead>
-              <TableHead className="w-24">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {leads.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length + 3} className="text-center text-muted-foreground py-8">
-                  Nenhum lead cadastrado
-                </TableCell>
-              </TableRow>
-            ) : (
-              leads.map((lead) => {
-                const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
-                return (
-                  <TableRow key={lead.id}>
-                    {columns.map((col) => (
-                      <TableCell key={col.id}>{data[col.field_key] || "—"}</TableCell>
-                    ))}
-                    <TableCell>
-                      <Badge variant={statusColor(lead.status) as any}>
-                        {statusLabels[lead.status] || lead.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{getProfileName(lead.assigned_to)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(lead)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        {isAdmin && (
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(lead.id)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "calc(100vh - 180px)" }}>
+          {STATUS_OPTIONS.map((status) => {
+            const statusLeads = getLeadsByStatus(status);
+            return (
+              <div key={status} className="flex-shrink-0 w-[280px] flex flex-col">
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <div className={`h-2.5 w-2.5 rounded-full ${columnHeaderColors[status]}`} />
+                  <h3 className="font-semibold text-sm text-foreground">{statusLabels[status]}</h3>
+                  <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[status]}`}>
+                    {statusLeads.length}
+                  </span>
+                </div>
+
+                <Droppable droppableId={status}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`flex-1 rounded-xl p-2 space-y-2 transition-colors ${
+                        snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
+                      }`}
+                    >
+                      {statusLeads.map((lead, index) => (
+                        <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={snapshot.isDragging ? "opacity-90 rotate-2" : ""}
+                            >
+                              <LeadCard
+                                lead={lead}
+                                columns={columns}
+                                profiles={profiles}
+                                isAdmin={isAdmin}
+                                onEdit={() => openEdit(lead)}
+                                onDelete={() => handleDelete(lead.id)}
+                              />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+
+                      <button
+                        onClick={() => openCreate(status)}
+                        className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors"
+                      >
+                        + Adicionar lead
+                      </button>
+                    </div>
+                  )}
+                </Droppable>
+              </div>
+            );
+          })}
+        </div>
+      </DragDropContext>
+
+      <LeadFormDialog
+        open={open}
+        onOpenChange={setOpen}
+        columns={columns}
+        profiles={profiles}
+        formData={formData}
+        setFormData={setFormData}
+        formStatus={formStatus}
+        setFormStatus={setFormStatus}
+        formAssigned={formAssigned}
+        setFormAssigned={setFormAssigned}
+        saving={saving}
+        isEditing={!!editingLead}
+        onSubmit={handleSave}
+        statusOptions={STATUS_OPTIONS}
+        statusLabels={statusLabels}
+      />
     </AppLayout>
   );
 }
