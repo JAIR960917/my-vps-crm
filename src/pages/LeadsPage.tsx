@@ -57,7 +57,7 @@ export default function LeadsPage() {
     const [{ data: cols }, { data: lds }, { data: profs }] = await Promise.all([
       supabase.from("crm_columns").select("*").order("position"),
       supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
-      supabase.from("profiles").select("user_id, full_name, email"),
+      supabase.rpc("get_profile_names"),
     ]);
     setColumns(cols || []);
     setLeads((lds || []) as Lead[]);
