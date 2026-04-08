@@ -248,9 +248,8 @@ export default function LeadsPage() {
                                 onDelete={() => handleDelete(lead.id)}
                                 onHistory={() => {
                                   const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
-                                  const primaryCol = columns[0];
                                   setHistoryLeadId(lead.id);
-                                  setHistoryLeadName(primaryCol ? (data[primaryCol.field_key] || "Lead") : "Lead");
+                                  setHistoryLeadName(data.nome_lead || (columns[0] ? data[columns[0].field_key] : null) || "Lead");
                                   setHistoryOpen(true);
                                 }}
                               />
