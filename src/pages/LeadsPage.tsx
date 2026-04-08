@@ -81,13 +81,14 @@ export default function LeadsPage() {
     if (!navigator.onLine) return;
 
     try {
-      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }, { data: ff }] = await Promise.all([
+      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
         supabase.from("companies").select("id, name").order("name"),
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
+        supabase.from("crm_form_fields").select("*").order("position"),
       ]);
       setColumns(cols || []);
       const loadedLeads = (lds || []) as Lead[];
@@ -149,6 +150,8 @@ export default function LeadsPage() {
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
         localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
         localStorage.setItem("crm_cache_formfields", JSON.stringify(ff || []));
+        localStorage.setItem("crm_cache_fields", JSON.stringify(ffFull || []));
+        localStorage.setItem("crm_cache_statuses", JSON.stringify(sts || []));
         const me2 = (profs || []).find((p: Profile) => p.user_id === user?.id);
         localStorage.setItem("crm_cache_username", me2?.full_name || user?.email || "");
       } catch {}
