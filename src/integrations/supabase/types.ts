@@ -80,6 +80,7 @@ export type Database = {
       crm_form_fields: {
         Row: {
           created_at: string
+          date_status_ranges: Json | null
           field_type: string
           id: string
           is_name_field: boolean
@@ -95,6 +96,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          date_status_ranges?: Json | null
           field_type?: string
           id?: string
           is_name_field?: boolean
@@ -110,6 +112,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          date_status_ranges?: Json | null
           field_type?: string
           id?: string
           is_name_field?: boolean

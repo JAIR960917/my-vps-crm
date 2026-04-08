@@ -1,0 +1,1 @@
+ALTER TABLE public.crm_form_fields ADD COLUMN date_status_ranges jsonb DEFAULT NULL;
