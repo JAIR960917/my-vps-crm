@@ -60,7 +60,7 @@ export default function NewLeadPage() {
       setFields((flds || []) as FormField[]);
       setStatuses((sts || []) as CrmStatus[]);
       setCompanies((comps || []) as Company[]);
-      if (sts && sts.length > 0) setFormStatus(sts[0].key);
+      if (sts && sts.length > 0) setFormStatus(searchParams.get("status") || sts[0].key);
       const me = (profs || []).find((p: any) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
 
