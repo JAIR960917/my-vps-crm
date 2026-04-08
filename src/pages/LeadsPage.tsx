@@ -391,6 +391,7 @@ export default function LeadsPage() {
                   <LeadCard
                     lead={lead}
                     columns={columns}
+                    formFields={formFields}
                     profiles={profiles}
                     isAdmin={isAdmin}
                     syncStatus={getSyncStatus(lead.id)}
@@ -486,6 +487,7 @@ export default function LeadsPage() {
                               <LeadCard
                                 lead={lead}
                                 columns={columns}
+                                formFields={formFields}
                                 profiles={profiles}
                                 isAdmin={isAdmin}
                                 syncStatus={getSyncStatus(lead.id)}
