@@ -102,7 +102,7 @@ export default function LeadsPage() {
       // Auto-recalculate lead statuses based on date fields
       const dateFields = loadedFields.filter(f => f.date_status_ranges);
       if (dateFields.length > 0) {
-        const updates: Promise<any>[] = [];
+        const updates: PromiseLike<any>[] = [];
         const updatedLeads = loadedLeads.map(lead => {
           const leadData = (typeof lead.data === "object" && lead.data !== null) ? lead.data as Record<string, any> : {};
           for (const df of dateFields) {
