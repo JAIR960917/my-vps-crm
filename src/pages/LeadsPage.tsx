@@ -280,6 +280,8 @@ export default function LeadsPage() {
         onOpenChange={setOpen}
         columns={columns}
         profiles={profiles}
+        companies={companies}
+        currentUserName={currentUserName}
         formData={formData}
         setFormData={setFormData}
         formStatus={formStatus}
