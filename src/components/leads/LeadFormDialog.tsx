@@ -164,6 +164,8 @@ export default function LeadFormDialog({
     );
   };
 
+  const hasMappingField = fields.some(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
