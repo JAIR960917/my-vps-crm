@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { syncOfflineQueue, getOfflineQueue } from "@/lib/offlineSync";
 import { useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -6,12 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Pencil, Check, X, Trash2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus } from "lucide-react";
 import LeadCard from "@/components/leads/LeadCard";
 import LeadFormDialog from "@/components/leads/LeadFormDialog";
 import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
@@ -59,23 +55,12 @@ export default function LeadsPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
   const [historyLeadName, setHistoryLeadName] = useState("");
-  // New status column dialog state
-  const [newColOpen, setNewColOpen] = useState(false);
-  const [newColLabel, setNewColLabel] = useState("");
-  const [newColColor, setNewColColor] = useState("blue");
-  const [savingCol, setSavingCol] = useState(false);
-
   // Mobile: active tab for status columns
   const [mobileTab, setMobileTab] = useState<string>("");
 
   // Offline sync tracking
   const [offlineIds, setOfflineIds] = useState<Set<string>>(new Set());
   const [recentlySyncedIds, setRecentlySyncedIds] = useState<Set<string>>(new Set());
-
-  // Inline rename state
-  const [renamingKey, setRenamingKey] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const loadFromCache = useCallback(() => {
     try {
@@ -244,54 +229,6 @@ export default function LeadsPage() {
     }
   };
 
-  const startRename = (status: CrmStatus) => {
-    setRenamingKey(status.key);
-    setRenameValue(status.label);
-    setTimeout(() => renameInputRef.current?.focus(), 50);
-  };
-
-  const saveRename = async () => {
-    if (!renamingKey || !renameValue.trim()) return;
-    const { error } = await supabase
-      .from("crm_statuses")
-      .update({ label: renameValue.trim() })
-      .eq("key", renamingKey);
-    if (error) toast.error("Erro ao renomear");
-    else {
-      toast.success("Coluna renomeada");
-      fetchAll();
-    }
-    setRenamingKey(null);
-  };
-
-  const cancelRename = () => setRenamingKey(null);
-
-  const handleCreateStatus = async () => {
-    if (!newColLabel.trim()) return;
-    setSavingCol(true);
-    const key = newColLabel.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-    const maxPos = statuses.length > 0 ? Math.max(...statuses.map(s => s.position)) + 1 : 0;
-    const { error } = await supabase.from("crm_statuses").insert({
-      key, label: newColLabel.trim(), color: newColColor, position: maxPos,
-    });
-    if (error) toast.error("Erro ao criar coluna");
-    else { toast.success("Coluna criada"); fetchAll(); }
-    setSavingCol(false);
-    setNewColOpen(false);
-    setNewColLabel("");
-    setNewColColor("blue");
-  };
-
-  const handleDeleteStatus = async (statusKey: string) => {
-    const leadsInCol = leads.filter(l => l.status === statusKey);
-    if (leadsInCol.length > 0) {
-      toast.error("Remova os leads desta coluna antes de excluí-la");
-      return;
-    }
-    const { error } = await supabase.from("crm_statuses").delete().eq("key", statusKey);
-    if (error) toast.error("Erro ao excluir coluna");
-    else { toast.success("Coluna excluída"); fetchAll(); }
-  };
 
   const getLeadsByStatus = (status: string) => leads.filter((l) => l.status === status);
 
@@ -313,11 +250,6 @@ export default function LeadsPage() {
           <Button size="sm" className="shrink-0" onClick={() => navigate("/novo-lead")}>
             <Plus className="mr-1 h-4 w-4" />Lead
           </Button>
-          {isAdmin && (
-            <Button size="sm" variant="outline" className="shrink-0 hidden sm:inline-flex" onClick={() => setNewColOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />Coluna
-            </Button>
-          )}
         </div>
       </div>
 
@@ -354,35 +286,6 @@ export default function LeadsPage() {
           const statusLeads = getLeadsByStatus(status.key);
           return (
             <div key={status.key}>
-              {isAdmin && (
-                <div className="flex items-center gap-2 mb-2">
-                  {renamingKey === status.key ? (
-                    <div className="flex items-center gap-1 flex-1">
-                      <Input
-                        ref={renameInputRef}
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveRename();
-                          if (e.key === "Escape") cancelRename();
-                        }}
-                        className="h-7 text-sm"
-                      />
-                      <button onClick={saveRename} className="text-emerald-500 shrink-0"><Check className="h-4 w-4" /></button>
-                      <button onClick={cancelRename} className="text-muted-foreground shrink-0"><X className="h-4 w-4" /></button>
-                    </div>
-                  ) : (
-                    <>
-                      <button onClick={() => startRename(status)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
-                        <Pencil className="h-3 w-3" /> Renomear
-                      </button>
-                      <button onClick={() => handleDeleteStatus(status.key)} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1">
-                        <Trash2 className="h-3 w-3" /> Excluir
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
               {statusLeads.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhum lead nesta coluna</p>
               )}
@@ -428,40 +331,7 @@ export default function LeadsPage() {
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col">
                 <div className="flex items-center gap-2 mb-2 px-1">
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
-                  {renamingKey === status.key ? (
-                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                      <Input
-                        ref={renameInputRef}
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveRename();
-                          if (e.key === "Escape") cancelRename();
-                        }}
-                        className="h-6 text-sm py-0 px-1"
-                      />
-                      <button onClick={saveRename} className="text-emerald-500 hover:text-emerald-400 shrink-0">
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button onClick={cancelRename} className="text-muted-foreground hover:text-foreground shrink-0">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
-                      {isAdmin && (
-                        <button onClick={() => startRename(status)} className="text-muted-foreground hover:text-foreground">
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      )}
-                      {isAdmin && (
-                        <button onClick={() => handleDeleteStatus(status.key)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      )}
-                    </>
-                  )}
+                  <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
                     {statusLeads.length}
                   </span>
@@ -551,33 +421,6 @@ export default function LeadsPage() {
         onNoteAdded={fetchAll}
       />
 
-      <Dialog open={newColOpen} onOpenChange={setNewColOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Nova Coluna</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome da Coluna</Label>
-              <Input value={newColLabel} onChange={(e) => setNewColLabel(e.target.value)} placeholder="Ex: Em Negociação" />
-            </div>
-            <div className="space-y-2">
-              <Label>Cor</Label>
-              <Select value={newColColor} onValueChange={setNewColColor}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.keys(colorMap).map((c) => (
-                    <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button className="w-full" onClick={handleCreateStatus} disabled={savingCol || !newColLabel.trim()}>
-              {savingCol ? "Criando..." : "Criar Coluna"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </AppLayout>
   );
 }
