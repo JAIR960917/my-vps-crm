@@ -21,7 +21,7 @@ type Lead = {
   id: string; data: Record<string, any>; assigned_to: string | null;
   created_by: string; status: string; created_at: string;
 };
-type Profile = { user_id: string; full_name: string; email?: string };
+type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
