@@ -21,6 +21,7 @@ type FormField = {
   parent_field_id: string | null;
   parent_trigger_value: string | null;
   status_mapping: Record<string, string> | null;
+  date_status_ranges: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null;
 };
 
 type Props = {
@@ -164,7 +165,7 @@ export default function LeadFormDialog({
     );
   };
 
-  const hasMappingField = fields.some(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
+  const hasMappingField = fields.some(f => (f.status_mapping && Object.keys(f.status_mapping).length > 0) || f.date_status_ranges);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

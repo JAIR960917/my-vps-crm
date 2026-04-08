@@ -13,6 +13,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Pencil, Trash2, GripVertical, ChevronRight, CornerDownRight } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 
+type DateStatusRange = { max_years: number; status_key: string };
+type DateStatusConfig = { ranges: DateStatusRange[]; above_all: string; no_answer: string };
+
 type FormField = {
   id: string;
   label: string;
@@ -26,6 +29,7 @@ type FormField = {
   is_phone_field: boolean;
   show_on_card: boolean;
   status_mapping: Record<string, string> | null;
+  date_status_ranges: DateStatusConfig | null;
 };
 
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
@@ -60,13 +64,23 @@ export default function FormBuilderPage() {
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [statusMapping, setStatusMapping] = useState<Record<string, string>>({});
   const [isStatusField, setIsStatusField] = useState(false);
+  const [isDateStatusField, setIsDateStatusField] = useState(false);
+  const [dateStatusRanges, setDateStatusRanges] = useState<DateStatusConfig>({
+    ranges: [
+      { max_years: 1, status_key: "" },
+      { max_years: 2, status_key: "" },
+      { max_years: 3, status_key: "" },
+    ],
+    above_all: "",
+    no_answer: "",
+  });
 
   const fetchFields = async () => {
     const { data } = await supabase
       .from("crm_form_fields")
       .select("*")
       .order("position");
-    setFields((data || []) as FormField[]);
+    setFields((data || []) as unknown as FormField[]);
   };
 
   useEffect(() => {
@@ -87,6 +101,16 @@ export default function FormBuilderPage() {
     setEditingField(null);
     setIsStatusField(false);
     setStatusMapping({});
+    setIsDateStatusField(false);
+    setDateStatusRanges({
+      ranges: [
+        { max_years: 1, status_key: "" },
+        { max_years: 2, status_key: "" },
+        { max_years: 3, status_key: "" },
+      ],
+      above_all: "",
+      no_answer: "",
+    });
   };
 
   const openCreate = (parentId?: string, triggerVal?: string) => {
@@ -123,6 +147,10 @@ export default function FormBuilderPage() {
     setParentTriggerValues(parseTriggerValues(field.parent_trigger_value));
     setIsStatusField(!!field.status_mapping);
     setStatusMapping(field.status_mapping || {});
+    setIsDateStatusField(!!field.date_status_ranges);
+    if (field.date_status_ranges) {
+      setDateStatusRanges(field.date_status_ranges as DateStatusConfig);
+    }
     setDialogOpen(true);
   };
 
@@ -145,6 +173,7 @@ export default function FormBuilderPage() {
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
       parent_trigger_value: parentFieldId === "__none__" ? null : (parentTriggerValues.length > 0 ? JSON.stringify(parentTriggerValues) : null),
       status_mapping: isStatusField && Object.keys(statusMapping).length > 0 ? statusMapping : null,
+      date_status_ranges: isDateStatusField ? dateStatusRanges : null,
     };
 
     if (editingField) {
@@ -490,6 +519,74 @@ export default function FormBuilderPage() {
                         </Select>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Date-based status mapping */}
+            {fieldType === "date" && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Switch checked={isDateStatusField} onCheckedChange={setIsDateStatusField} />
+                  <Label>Definir coluna automaticamente pelo tempo desde a data</Label>
+                </div>
+                {isDateStatusField && (
+                  <div className="space-y-3 p-3 border rounded-md bg-muted/30">
+                    <p className="text-xs text-muted-foreground">
+                      O sistema calcula quanto tempo faz desde a data informada e coloca o lead na coluna correspondente.
+                    </p>
+                    {dateStatusRanges.ranges.map((range, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-sm whitespace-nowrap">Até {range.max_years} ano{range.max_years > 1 ? "s" : ""}</span>
+                        <Select
+                          value={range.status_key || "__none__"}
+                          onValueChange={(v) => {
+                            const newRanges = [...dateStatusRanges.ranges];
+                            newRanges[i] = { ...newRanges[i], status_key: v === "__none__" ? "" : v };
+                            setDateStatusRanges(prev => ({ ...prev, ranges: newRanges }));
+                          }}
+                        >
+                          <SelectTrigger className="flex-1"><SelectValue placeholder="Coluna" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                            {statuses.map(s => (
+                              <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm whitespace-nowrap">Mais de {dateStatusRanges.ranges[dateStatusRanges.ranges.length - 1]?.max_years || 3} anos</span>
+                      <Select
+                        value={dateStatusRanges.above_all || "__none__"}
+                        onValueChange={(v) => setDateStatusRanges(prev => ({ ...prev, above_all: v === "__none__" ? "" : v }))}
+                      >
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Coluna" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                          {statuses.map(s => (
+                            <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm whitespace-nowrap">Sem resposta</span>
+                      <Select
+                        value={dateStatusRanges.no_answer || "__none__"}
+                        onValueChange={(v) => setDateStatusRanges(prev => ({ ...prev, no_answer: v === "__none__" ? "" : v }))}
+                      >
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Coluna" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                          {statuses.map(s => (
+                            <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
               </div>
