@@ -21,6 +21,8 @@ type FormField = {
   is_required: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
+  is_name_field: boolean;
+  is_phone_field: boolean;
 };
 
 const FIELD_TYPES = [
