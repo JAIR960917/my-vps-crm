@@ -28,16 +28,16 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
 
-  // Find name and phone from form field flags
-  const nameField = formFields.find((f) => f.is_name_field);
-  const phoneField = formFields.find((f) => f.is_phone_field);
+  // Find name and phone from form field flags (try all matching fields)
+  const nameFields = formFields.filter((f) => f.is_name_field);
+  const phoneFields = formFields.filter((f) => f.is_phone_field);
 
-  const displayName = (nameField ? data[`field_${nameField.id}`] : null)
+  const displayName = nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
     || data.nome_lead
     || (columns[0] && data[columns[0].field_key])
     || "Sem nome";
 
-  const displayPhone = (phoneField ? data[`field_${phoneField.id}`] : null)
+  const displayPhone = phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
     || data.telefone
     || null;
 
@@ -52,10 +52,10 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
   }
 
   // Other fields to display (exclude name and phone fields)
-  const nameFieldId = nameField?.id;
-  const phoneFieldId = phoneField?.id;
+  const nameFieldIds = new Set(nameFields.map((f) => f.id));
+  const phoneFieldIds = new Set(phoneFields.map((f) => f.id));
   const otherFields = formFields.filter(
-    (f) => f.id !== nameFieldId && f.id !== phoneFieldId
+    (f) => !nameFieldIds.has(f.id) && !phoneFieldIds.has(f.id)
   );
 
   return (
