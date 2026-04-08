@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
@@ -30,6 +30,7 @@ type Company = { id: string; name: string };
 export default function NewLeadPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [fields, setFields] = useState<FormField[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
