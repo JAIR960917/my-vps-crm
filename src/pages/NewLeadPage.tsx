@@ -361,7 +361,7 @@ export default function NewLeadPage() {
               <Label>Vendedor Responsável</Label>
               <Input value={currentUserName || "—"} readOnly className="bg-muted" />
             </div>
-            {!fields.some(f => f.status_mapping && Object.keys(f.status_mapping).length > 0) ? (
+            {!fields.some(f => (f.status_mapping && Object.keys(f.status_mapping).length > 0) || f.date_status_ranges) ? (
               <div className="space-y-2">
                 <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
                 <Select value={formStatus} onValueChange={setFormStatus}>
