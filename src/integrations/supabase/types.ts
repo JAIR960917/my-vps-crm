@@ -82,6 +82,8 @@ export type Database = {
           created_at: string
           field_type: string
           id: string
+          is_name_field: boolean
+          is_phone_field: boolean
           is_required: boolean
           label: string
           options: Json | null
@@ -93,6 +95,8 @@ export type Database = {
           created_at?: string
           field_type?: string
           id?: string
+          is_name_field?: boolean
+          is_phone_field?: boolean
           is_required?: boolean
           label: string
           options?: Json | null
@@ -104,6 +108,8 @@ export type Database = {
           created_at?: string
           field_type?: string
           id?: string
+          is_name_field?: boolean
+          is_phone_field?: boolean
           is_required?: boolean
           label?: string
           options?: Json | null
