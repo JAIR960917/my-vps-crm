@@ -211,6 +211,11 @@ export default function LeadsPage() {
         <Button size="sm" className="shrink-0" onClick={() => openCreate()}>
           <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo </span>Lead
         </Button>
+        {isAdmin && (
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => setNewColOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /><span className="hidden sm:inline">Nova </span>Coluna
+          </Button>
+        )}
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
