@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -32,24 +32,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const initialized = useRef(false);
 
   useEffect(() => {
     let mounted = true;
-    let resolved = false;
 
-    const resolve = () => {
-      if (mounted && !resolved) {
-        resolved = true;
+    // Step 1: Restore session from storage FIRST
+    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
+      if (!mounted) return;
+      initialized.current = true;
+      setSession(sess);
+      if (sess?.user) {
+        const r = await fetchRoles(sess.user.id);
+        if (mounted) setRoles(r);
+      }
+      if (mounted) setLoading(false);
+    }).catch(() => {
+      if (mounted) {
+        initialized.current = true;
         setLoading(false);
       }
-    };
+    });
 
-    // Safety timeout — never stay on "Carregando..." forever
-    const timeout = setTimeout(resolve, 4000);
-
+    // Step 2: Listen for SUBSEQUENT auth changes (sign in, sign out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, sess) => {
+      async (event, sess) => {
         if (!mounted) return;
+        // Skip the INITIAL_SESSION event — we handle it via getSession above
+        if (event === "INITIAL_SESSION") return;
+
         setSession(sess);
         if (sess?.user) {
           const r = await fetchRoles(sess.user.id);
@@ -57,19 +68,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setRoles([]);
         }
-        resolve();
+        // If getSession hasn't resolved yet, mark as ready now
+        if (!initialized.current) {
+          initialized.current = true;
+          setLoading(false);
+        }
       }
     );
 
-    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
-      if (!mounted) return;
-      setSession(sess);
-      if (sess?.user) {
-        const r = await fetchRoles(sess.user.id);
-        if (mounted) setRoles(r);
+    // Safety timeout
+    const timeout = setTimeout(() => {
+      if (mounted && !initialized.current) {
+        initialized.current = true;
+        setLoading(false);
       }
-      resolve();
-    }).catch(() => resolve());
+    }, 5000);
 
     return () => {
       mounted = false;
