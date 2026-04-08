@@ -52,10 +52,10 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
   }
 
   // Other fields to display (exclude name and phone fields)
-  const nameFieldId = nameField?.id;
-  const phoneFieldId = phoneField?.id;
+  const nameFieldIds = new Set(nameFields.map((f) => f.id));
+  const phoneFieldIds = new Set(phoneFields.map((f) => f.id));
   const otherFields = formFields.filter(
-    (f) => f.id !== nameFieldId && f.id !== phoneFieldId
+    (f) => !nameFieldIds.has(f.id) && !phoneFieldIds.has(f.id)
   );
 
   return (
