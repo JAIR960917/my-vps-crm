@@ -22,6 +22,7 @@ type FormField = {
   is_required: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
+  status_mapping: Record<string, string> | null;
 };
 
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
@@ -170,12 +171,33 @@ export default function NewLeadPage() {
     ? visibleFields.slice((step - 1) * FIELDS_PER_PAGE, step * FIELDS_PER_PAGE)
     : [];
 
+  const resolveStatus = (): string => {
+    // Find field with status_mapping
+    const mappingField = fields.find(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
+    if (!mappingField) return formStatus;
+    const fieldKey = `field_${mappingField.id}`;
+    const answer = formData[fieldKey];
+    if (!answer || (typeof answer === "string" && !answer.trim())) {
+      // No answer → first status (informações insuficientes)
+      return statuses.length > 0 ? statuses[0].key : formStatus;
+    }
+    const mapping = mappingField.status_mapping!;
+    if (typeof answer === "string" && mapping[answer]) return mapping[answer];
+    if (Array.isArray(answer)) {
+      for (const v of answer) {
+        if (mapping[v]) return mapping[v];
+      }
+    }
+    return statuses.length > 0 ? statuses[0].key : formStatus;
+  };
+
   const handleSubmit = async () => {
     setSaving(true);
+    const resolvedStatus = resolveStatus();
     const leadData = {
       id: crypto.randomUUID(),
       data: formData,
-      status: formStatus,
+      status: resolvedStatus,
       assigned_to: user?.id || null,
       created_by: user!.id,
       created_at: new Date().toISOString(),
@@ -191,7 +213,7 @@ export default function NewLeadPage() {
 
     const { error } = await supabase.from("crm_leads").insert({
       data: formData,
-      status: formStatus,
+      status: resolvedStatus,
       assigned_to: user?.id || null,
       created_by: user!.id,
     });
