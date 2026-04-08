@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { syncOfflineQueue, getOfflineQueue } from "@/lib/offlineSync";
 import { useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -8,10 +8,7 @@ import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Pencil, Check, X, Trash2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus } from "lucide-react";
 import LeadCard from "@/components/leads/LeadCard";
 import LeadFormDialog from "@/components/leads/LeadFormDialog";
 import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
@@ -59,23 +56,12 @@ export default function LeadsPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
   const [historyLeadName, setHistoryLeadName] = useState("");
-  // New status column dialog state
-  const [newColOpen, setNewColOpen] = useState(false);
-  const [newColLabel, setNewColLabel] = useState("");
-  const [newColColor, setNewColColor] = useState("blue");
-  const [savingCol, setSavingCol] = useState(false);
-
   // Mobile: active tab for status columns
   const [mobileTab, setMobileTab] = useState<string>("");
 
   // Offline sync tracking
   const [offlineIds, setOfflineIds] = useState<Set<string>>(new Set());
   const [recentlySyncedIds, setRecentlySyncedIds] = useState<Set<string>>(new Set());
-
-  // Inline rename state
-  const [renamingKey, setRenamingKey] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const loadFromCache = useCallback(() => {
     try {
