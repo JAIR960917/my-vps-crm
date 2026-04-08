@@ -25,9 +25,9 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
       },
       manifest: {
-        name: "CRM",
-        short_name: "CRM",
-        description: "CRM - Gestão de Leads",
+        name: "CRM Ótica Joonker",
+        short_name: "CRM Joonker",
+        description: "CRM Ótica Joonker - Gestão de Leads",
         theme_color: "#0f172a",
         background_color: "#0f172a",
         display: "standalone",
