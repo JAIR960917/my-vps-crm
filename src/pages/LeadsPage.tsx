@@ -187,18 +187,18 @@ export default function LeadsPage() {
   };
 
   const resolveStatus = (data: Record<string, any>): string => {
-    const mappingField = formFields.find(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
-    if (!mappingField) return formStatus;
-    const fieldKey = `field_${mappingField.id}`;
-    const answer = data[fieldKey];
-    if (!answer || (typeof answer === "string" && !answer.trim())) {
-      return statuses.length > 0 ? statuses[0].key : formStatus;
-    }
-    const mapping = mappingField.status_mapping!;
-    if (typeof answer === "string" && mapping[answer]) return mapping[answer];
-    if (Array.isArray(answer)) {
-      for (const v of answer) {
-        if (mapping[v]) return mapping[v];
+    const mappingFields = formFields.filter(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
+    if (mappingFields.length === 0) return formStatus;
+    for (const mf of [...mappingFields].reverse()) {
+      const fieldKey = `field_${mf.id}`;
+      const answer = data[fieldKey];
+      if (!answer || (typeof answer === "string" && !answer.trim())) continue;
+      const mapping = mf.status_mapping!;
+      if (typeof answer === "string" && mapping[answer]) return mapping[answer];
+      if (Array.isArray(answer)) {
+        for (const v of answer) {
+          if (mapping[v]) return mapping[v];
+        }
       }
     }
     return statuses.length > 0 ? statuses[0].key : formStatus;

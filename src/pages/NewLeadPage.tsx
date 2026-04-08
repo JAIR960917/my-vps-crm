@@ -172,23 +172,24 @@ export default function NewLeadPage() {
     : [];
 
   const resolveStatus = (): string => {
-    // Find field with status_mapping
-    const mappingField = fields.find(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
-    if (!mappingField) return formStatus;
-    const fieldKey = `field_${mappingField.id}`;
-    const answer = formData[fieldKey];
-    if (!answer || (typeof answer === "string" && !answer.trim())) {
-      // No answer → first status (informações insuficientes)
-      return statuses.length > 0 ? statuses[0].key : formStatus;
-    }
-    const mapping = mappingField.status_mapping!;
-    if (typeof answer === "string" && mapping[answer]) return mapping[answer];
-    if (Array.isArray(answer)) {
-      for (const v of answer) {
-        if (mapping[v]) return mapping[v];
+    const mappingFields = fields.filter(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
+    if (mappingFields.length === 0) return formStatus;
+    // Check deepest fields first (children before parents)
+    for (const mf of [...mappingFields].reverse()) {
+      const fieldKey = `field_${mf.id}`;
+      const answer = formData[fieldKey];
+      if (!answer || (typeof answer === "string" && !answer.trim())) continue;
+      const mapping = mf.status_mapping!;
+      if (typeof answer === "string" && mapping[answer]) return mapping[answer];
+      if (Array.isArray(answer)) {
+        for (const v of answer) {
+          if (mapping[v]) return mapping[v];
+        }
       }
     }
-    return statuses.length > 0 ? statuses[0].key : formStatus;
+    // No matched answer in any mapping field → check if any mapping field has no answer at all
+    const defaultStatus = statuses.length > 0 ? statuses[0].key : formStatus;
+    return defaultStatus;
   };
 
   const handleSubmit = async () => {
