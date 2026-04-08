@@ -11,6 +11,7 @@ import { Plus } from "lucide-react";
 import LeadCard from "@/components/leads/LeadCard";
 import LeadFormDialog from "@/components/leads/LeadFormDialog";
 import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
@@ -55,6 +56,7 @@ export default function LeadsPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
   const [historyLeadName, setHistoryLeadName] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   // Mobile: active tab for status columns
   const [mobileTab, setMobileTab] = useState<string>("");
 
@@ -296,6 +298,18 @@ export default function LeadsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmId) return;
+    const { error } = await supabase.from("crm_leads").delete().eq("id", deleteConfirmId);
+    if (error) toast.error("Erro ao remover");
+    else { toast.success("Lead removido"); fetchAll(); }
+    setDeleteConfirmId(null);
+  };
+
+  const oldHandleDelete = async (id: string) => {
     const { error } = await supabase.from("crm_leads").delete().eq("id", id);
     if (error) toast.error("Erro ao remover");
     else { toast.success("Lead removido"); fetchAll(); }
