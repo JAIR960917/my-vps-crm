@@ -456,8 +456,48 @@ export default function FormBuilderPage() {
               </div>
             )}
 
+            {/* Status mapping */}
+            {["select", "checkbox_group"].includes(fieldType) && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Switch checked={isStatusField} onCheckedChange={setIsStatusField} />
+                  <Label>Definir coluna do lead automaticamente pela resposta</Label>
+                </div>
+                {isStatusField && (
+                  <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Mapeie cada opção para a coluna onde o lead será colocado. Opções sem mapeamento irão para "Informações Insuficientes".
+                    </p>
+                    {(options.split(",").map(o => o.trim()).filter(Boolean)).map((opt) => (
+                      <div key={opt} className="flex items-center gap-2">
+                        <span className="text-sm flex-1 min-w-0 truncate">{opt}</span>
+                        <Select
+                          value={statusMapping[opt] || "__none__"}
+                          onValueChange={(v) => setStatusMapping(prev => {
+                            const next = { ...prev };
+                            if (v === "__none__") delete next[opt];
+                            else next[opt] = v;
+                            return next;
+                          })}
+                        >
+                          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Coluna" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                            {statuses.map(s => (
+                              <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <Button className="w-full" onClick={handleSave} disabled={saving || !label.trim()}>
               {saving ? "Salvando..." : editingField ? "Atualizar" : "Criar"}
+            </Button>
             </Button>
           </div>
         </DialogContent>
