@@ -230,54 +230,6 @@ export default function LeadsPage() {
     }
   };
 
-  const startRename = (status: CrmStatus) => {
-    setRenamingKey(status.key);
-    setRenameValue(status.label);
-    setTimeout(() => renameInputRef.current?.focus(), 50);
-  };
-
-  const saveRename = async () => {
-    if (!renamingKey || !renameValue.trim()) return;
-    const { error } = await supabase
-      .from("crm_statuses")
-      .update({ label: renameValue.trim() })
-      .eq("key", renamingKey);
-    if (error) toast.error("Erro ao renomear");
-    else {
-      toast.success("Coluna renomeada");
-      fetchAll();
-    }
-    setRenamingKey(null);
-  };
-
-  const cancelRename = () => setRenamingKey(null);
-
-  const handleCreateStatus = async () => {
-    if (!newColLabel.trim()) return;
-    setSavingCol(true);
-    const key = newColLabel.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-    const maxPos = statuses.length > 0 ? Math.max(...statuses.map(s => s.position)) + 1 : 0;
-    const { error } = await supabase.from("crm_statuses").insert({
-      key, label: newColLabel.trim(), color: newColColor, position: maxPos,
-    });
-    if (error) toast.error("Erro ao criar coluna");
-    else { toast.success("Coluna criada"); fetchAll(); }
-    setSavingCol(false);
-    setNewColOpen(false);
-    setNewColLabel("");
-    setNewColColor("blue");
-  };
-
-  const handleDeleteStatus = async (statusKey: string) => {
-    const leadsInCol = leads.filter(l => l.status === statusKey);
-    if (leadsInCol.length > 0) {
-      toast.error("Remova os leads desta coluna antes de excluí-la");
-      return;
-    }
-    const { error } = await supabase.from("crm_statuses").delete().eq("key", statusKey);
-    if (error) toast.error("Erro ao excluir coluna");
-    else { toast.success("Coluna excluída"); fetchAll(); }
-  };
 
   const getLeadsByStatus = (status: string) => leads.filter((l) => l.status === status);
 
