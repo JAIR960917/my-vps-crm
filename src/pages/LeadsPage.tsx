@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -39,6 +40,7 @@ const colorMap: Record<string, { header: string; badge: string }> = {
 
 export default function LeadsPage() {
   const { user, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [columns, setColumns] = useState<CrmColumn[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
