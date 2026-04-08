@@ -1,0 +1,378 @@
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import AppLayout from "@/components/AppLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { Plus, Pencil, Trash2, GripVertical, ChevronRight, CornerDownRight } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+
+type FormField = {
+  id: string;
+  label: string;
+  field_type: string;
+  options: string[] | null;
+  position: number;
+  is_required: boolean;
+  parent_field_id: string | null;
+  parent_trigger_value: string | null;
+};
+
+const FIELD_TYPES = [
+  { value: "text", label: "Texto" },
+  { value: "number", label: "Número" },
+  { value: "date", label: "Data" },
+  { value: "email", label: "Email" },
+  { value: "select", label: "Seleção" },
+  { value: "checkbox_group", label: "Múltipla escolha" },
+  { value: "textarea", label: "Texto longo" },
+];
+
+export default function FormBuilderPage() {
+  const { isAdmin } = useAuth();
+  const [fields, setFields] = useState<FormField[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingField, setEditingField] = useState<FormField | null>(null);
+
+  // Form state
+  const [label, setLabel] = useState("");
+  const [fieldType, setFieldType] = useState("text");
+  const [options, setOptions] = useState("");
+  const [isRequired, setIsRequired] = useState(false);
+  const [parentFieldId, setParentFieldId] = useState<string>("__none__");
+  const [parentTriggerValue, setParentTriggerValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const fetchFields = async () => {
+    const { data } = await supabase
+      .from("crm_form_fields")
+      .select("*")
+      .order("position");
+    setFields((data || []) as FormField[]);
+  };
+
+  useEffect(() => { fetchFields(); }, []);
+
+  const resetForm = () => {
+    setLabel("");
+    setFieldType("text");
+    setOptions("");
+    setIsRequired(false);
+    setParentFieldId("__none__");
+    setParentTriggerValue("");
+    setEditingField(null);
+  };
+
+  const openCreate = (parentId?: string, triggerVal?: string) => {
+    resetForm();
+    if (parentId) {
+      setParentFieldId(parentId);
+      setParentTriggerValue(triggerVal || "");
+    }
+    setDialogOpen(true);
+  };
+
+  const openEdit = (field: FormField) => {
+    setEditingField(field);
+    setLabel(field.label);
+    setFieldType(field.field_type);
+    setOptions(field.options ? field.options.join(", ") : "");
+    setIsRequired(field.is_required);
+    setParentFieldId(field.parent_field_id || "__none__");
+    setParentTriggerValue(field.parent_trigger_value || "");
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!label.trim()) return;
+    setSaving(true);
+
+    const parsedOptions = ["select", "checkbox_group"].includes(fieldType)
+      ? options.split(",").map((o) => o.trim()).filter(Boolean)
+      : null;
+
+    const payload = {
+      label: label.trim(),
+      field_type: fieldType,
+      options: parsedOptions,
+      is_required: isRequired,
+      parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
+      parent_trigger_value: parentFieldId === "__none__" ? null : parentTriggerValue || null,
+    };
+
+    if (editingField) {
+      const { error } = await supabase
+        .from("crm_form_fields")
+        .update(payload)
+        .eq("id", editingField.id);
+      if (error) toast.error("Erro ao atualizar");
+      else toast.success("Pergunta atualizada");
+    } else {
+      const maxPos = fields.length > 0 ? Math.max(...fields.map((f) => f.position)) + 1 : 0;
+      const { error } = await supabase
+        .from("crm_form_fields")
+        .insert({ ...payload, position: maxPos });
+      if (error) toast.error("Erro ao criar");
+      else toast.success("Pergunta criada");
+    }
+
+    setSaving(false);
+    setDialogOpen(false);
+    resetForm();
+    fetchFields();
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from("crm_form_fields").delete().eq("id", id);
+    if (error) toast.error("Erro ao excluir");
+    else { toast.success("Pergunta excluída"); fetchFields(); }
+  };
+
+  const onDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+    const rootFields = fields.filter((f) => !f.parent_field_id);
+    const reordered = [...rootFields];
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+
+    const updates = reordered.map((f, i) => ({ id: f.id, position: i }));
+    setFields((prev) => {
+      const copy = [...prev];
+      updates.forEach((u) => {
+        const idx = copy.findIndex((f) => f.id === u.id);
+        if (idx !== -1) copy[idx] = { ...copy[idx], position: u.position };
+      });
+      return copy.sort((a, b) => a.position - b.position);
+    });
+
+    for (const u of updates) {
+      await supabase.from("crm_form_fields").update({ position: u.position }).eq("id", u.id);
+    }
+  };
+
+  // Get root fields (no parent)
+  const rootFields = fields.filter((f) => !f.parent_field_id).sort((a, b) => a.position - b.position);
+
+  // Get children of a field triggered by a specific value
+  const getChildren = (parentId: string) =>
+    fields.filter((f) => f.parent_field_id === parentId).sort((a, b) => a.position - b.position);
+
+  // Get possible parent fields (only select types that have options)
+  const selectFields = fields.filter((f) => f.field_type === "select" && f.options && f.options.length > 0);
+
+  // Get parent trigger options
+  const getParentOptions = (parentId: string): string[] => {
+    const parent = fields.find((f) => f.id === parentId);
+    return parent?.options || [];
+  };
+
+  const typeLabel = (t: string) => FIELD_TYPES.find((ft) => ft.value === t)?.label || t;
+
+  const renderField = (field: FormField, depth: number = 0) => {
+    const children = getChildren(field.id);
+    const hasOptions = field.field_type === "select" && field.options && field.options.length > 0;
+
+    return (
+      <div key={field.id}>
+        <div
+          className={`flex items-center gap-2 p-3 rounded-lg border bg-card mb-2 group ${
+            depth > 0 ? "ml-6 sm:ml-10 border-l-2 border-l-primary/30" : ""
+          }`}
+        >
+          {depth === 0 && (
+            <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab shrink-0" />
+          )}
+          {depth > 0 && (
+            <CornerDownRight className="h-4 w-4 text-primary/50 shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm truncate">
+              {field.label}
+              {field.is_required && <span className="text-destructive ml-1">*</span>}
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                {typeLabel(field.field_type)}
+              </span>
+              {field.parent_trigger_value && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                  Quando: "{field.parent_trigger_value}"
+                </span>
+              )}
+              {field.options && field.options.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {field.options.length} opções
+                </span>
+              )}
+            </div>
+          </div>
+          {isAdmin && (
+            <div className="flex gap-1 shrink-0">
+              {hasOptions && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Adicionar sub-pergunta"
+                  onClick={() => openCreate(field.id)}
+                >
+                  <Plus className="h-3.5 w-3.5 text-primary" />
+                </Button>
+              )}
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(field)}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(field.id)}>
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Render children grouped by trigger value */}
+        {hasOptions && field.options!.map((opt) => {
+          const optChildren = children.filter((c) => c.parent_trigger_value === opt);
+          if (optChildren.length === 0) return null;
+          return (
+            <div key={opt}>
+              <div className="ml-6 sm:ml-10 mb-1 flex items-center gap-1.5">
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Se "{opt}":</span>
+              </div>
+              {optChildren.map((child) => renderField(child, depth + 1))}
+            </div>
+          );
+        })}
+
+        {/* Children without specific trigger */}
+        {children.filter((c) => !c.parent_trigger_value).map((child) => renderField(child, depth + 1))}
+      </div>
+    );
+  };
+
+  return (
+    <AppLayout>
+      <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold">Formulário de Lead</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {fields.length} pergunta{fields.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        {isAdmin && (
+          <Button size="sm" onClick={() => openCreate()}>
+            <Plus className="mr-1 h-4 w-4" /> Nova Pergunta
+          </Button>
+        )}
+      </div>
+
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="fields">
+          {(provided) => (
+            <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-1">
+              {rootFields.map((field, index) => (
+                <Draggable key={field.id} draggableId={field.id} index={index}>
+                  {(provided) => (
+                    <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                      {renderField(field)}
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
+
+      {fields.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>Nenhuma pergunta criada ainda.</p>
+          <p className="text-sm mt-1">Clique em "Nova Pergunta" para começar.</p>
+        </div>
+      )}
+
+      {/* Create/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingField ? "Editar Pergunta" : "Nova Pergunta"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Pergunta</Label>
+              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ex: Já usa óculos?" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipo de campo</Label>
+              <Select value={fieldType} onValueChange={setFieldType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {FIELD_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {["select", "checkbox_group"].includes(fieldType) && (
+              <div className="space-y-2">
+                <Label>Opções (separadas por vírgula)</Label>
+                <Input
+                  value={options}
+                  onChange={(e) => setOptions(e.target.value)}
+                  placeholder="Sim, Não, Talvez"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <Switch checked={isRequired} onCheckedChange={setIsRequired} />
+              <Label>Obrigatório</Label>
+            </div>
+
+            {/* Conditional parent */}
+            <div className="space-y-2">
+              <Label>Condicional (aparece dentro de outra pergunta)</Label>
+              <Select value={parentFieldId} onValueChange={(v) => { setParentFieldId(v); setParentTriggerValue(""); }}>
+                <SelectTrigger><SelectValue placeholder="Nenhuma (pergunta raiz)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Nenhuma (pergunta raiz)</SelectItem>
+                  {selectFields
+                    .filter((f) => f.id !== editingField?.id)
+                    .map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {parentFieldId !== "__none__" && (
+              <div className="space-y-2">
+                <Label>Aparece quando a resposta for</Label>
+                <Select value={parentTriggerValue} onValueChange={setParentTriggerValue}>
+                  <SelectTrigger><SelectValue placeholder="Qualquer resposta" /></SelectTrigger>
+                  <SelectContent>
+                    {getParentOptions(parentFieldId).map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <Button className="w-full" onClick={handleSave} disabled={saving || !label.trim()}>
+              {saving ? "Salvando..." : editingField ? "Atualizar" : "Criar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </AppLayout>
+  );
+}
