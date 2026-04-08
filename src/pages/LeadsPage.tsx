@@ -18,7 +18,7 @@ type Lead = {
   id: string; data: Record<string, any>; assigned_to: string | null;
   created_by: string; status: string; created_at: string;
 };
-type Profile = { user_id: string; full_name: string; email: string };
+type Profile = { user_id: string; full_name: string; email?: string };
 
 const STATUS_OPTIONS = ["novo", "em_contato", "qualificado", "proposta", "fechado", "perdido"];
 const statusLabels: Record<string, string> = {
@@ -57,7 +57,7 @@ export default function LeadsPage() {
     const [{ data: cols }, { data: lds }, { data: profs }] = await Promise.all([
       supabase.from("crm_columns").select("*").order("position"),
       supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
-      supabase.from("profiles").select("user_id, full_name, email"),
+      supabase.rpc("get_profile_names"),
     ]);
     setColumns(cols || []);
     setLeads((lds || []) as Lead[]);

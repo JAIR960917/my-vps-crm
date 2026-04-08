@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Pencil, Trash2, User, MessageSquare } from "lucide-react";
 
-type Profile = { user_id: string; full_name: string; email: string };
+type Profile = { user_id: string; full_name: string; email?: string };
 
 type LeadCardProps = {
   lead: { id: string; data: Record<string, any>; assigned_to: string | null; status: string; created_at: string };

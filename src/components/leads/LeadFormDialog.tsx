@@ -14,7 +14,7 @@ type CrmColumn = {
   is_required: boolean;
 };
 
-type Profile = { user_id: string; full_name: string; email: string };
+type Profile = { user_id: string; full_name: string; email?: string };
 
 type Props = {
   open: boolean;
