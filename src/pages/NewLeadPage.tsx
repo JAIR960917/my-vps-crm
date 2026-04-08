@@ -216,7 +216,8 @@ export default function NewLeadPage() {
       }
     }
     return defaultStatus;
-  };
+
+  const handleSubmit = async () => {
     setSaving(true);
     const resolvedStatus = resolveStatus();
     const leadData = {
