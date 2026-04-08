@@ -107,7 +107,10 @@ Deno.serve(async (req) => {
   });
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    const safeMessage = error.message?.includes("already been registered")
+      ? "Este email já está cadastrado"
+      : "Falha ao criar usuário";
+    return new Response(JSON.stringify({ error: safeMessage }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
