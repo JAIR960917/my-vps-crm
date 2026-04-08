@@ -90,13 +90,56 @@ export default function LeadsPage() {
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
       ]);
       setColumns(cols || []);
-      setLeads((lds || []) as Lead[]);
+      const loadedLeads = (lds || []) as Lead[];
       setProfiles(profs || []);
       setStatuses((sts || []) as CrmStatus[]);
       setCompanies((comps || []) as Company[]);
-      setFormFields((ff || []) as unknown as FormFieldInfo[]);
+      const loadedFields = (ff || []) as unknown as FormFieldInfo[];
+      setFormFields(loadedFields);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
+
+      // Auto-recalculate lead statuses based on date fields
+      const dateFields = loadedFields.filter(f => f.date_status_ranges);
+      if (dateFields.length > 0) {
+        const updates: PromiseLike<any>[] = [];
+        const updatedLeads = loadedLeads.map(lead => {
+          const leadData = (typeof lead.data === "object" && lead.data !== null) ? lead.data as Record<string, any> : {};
+          for (const df of dateFields) {
+            const config = df.date_status_ranges!;
+            const fieldKey = `field_${df.id}`;
+            const dateVal = leadData[fieldKey];
+            let newStatus: string | null = null;
+            if (!dateVal || (typeof dateVal === "string" && !dateVal.trim())) {
+              if (config.no_answer) newStatus = config.no_answer;
+            } else {
+              const diffMs = Date.now() - new Date(dateVal).getTime();
+              const diffYears = diffMs / (1000 * 60 * 60 * 24 * 365.25);
+              const sortedRanges = [...config.ranges].sort((a, b) => a.max_years - b.max_years);
+              let matched = false;
+              for (const range of sortedRanges) {
+                if (diffYears <= range.max_years && range.status_key) {
+                  newStatus = range.status_key;
+                  matched = true;
+                  break;
+                }
+              }
+              if (!matched && config.above_all) newStatus = config.above_all;
+            }
+            if (newStatus && newStatus !== lead.status) {
+              updates.push(supabase.from("crm_leads").update({ status: newStatus }).eq("id", lead.id));
+              return { ...lead, status: newStatus };
+            }
+          }
+          return lead;
+        });
+        if (updates.length > 0) {
+          await Promise.all(updates);
+        }
+        setLeads(updatedLeads);
+      } else {
+        setLeads(loadedLeads);
+      }
 
       // Cache for offline
       try {
