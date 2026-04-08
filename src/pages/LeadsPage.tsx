@@ -387,6 +387,7 @@ export default function LeadsPage() {
                     columns={columns}
                     profiles={profiles}
                     isAdmin={isAdmin}
+                    syncStatus={getSyncStatus(lead.id)}
                     onEdit={() => openEdit(lead)}
                     onDelete={() => handleDelete(lead.id)}
                     onHistory={() => {
@@ -481,6 +482,7 @@ export default function LeadsPage() {
                                 columns={columns}
                                 profiles={profiles}
                                 isAdmin={isAdmin}
+                                syncStatus={getSyncStatus(lead.id)}
                                 onEdit={() => openEdit(lead)}
                                 onDelete={() => handleDelete(lead.id)}
                                 onHistory={() => {
