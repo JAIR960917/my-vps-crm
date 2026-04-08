@@ -29,7 +29,7 @@ interface Props {
 export default function AppSidebar({ onNavigate }: Props) {
   const { user, isAdmin, isGerente, signOut } = useAuth();
   const { settings } = useSystemSettings();
-  const { canInstall, install } = usePwaInstall();
+  const { canInstall, install, showIOSGuide, dismissIOSGuide } = usePwaInstall();
   const [signingOut, setSigningOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -100,6 +100,14 @@ export default function AppSidebar({ onNavigate }: Props) {
             <Download className="h-4 w-4" />
             Instalar App
           </button>
+        )}
+        {showIOSGuide && (
+          <div className="rounded-lg bg-sidebar-accent p-3 text-xs text-sidebar-foreground space-y-1">
+            <p className="font-medium">Instalar no iPhone:</p>
+            <p>1. Toque no ícone <strong>Compartilhar</strong> (⬆)</p>
+            <p>2. Selecione <strong>"Adicionar à Tela de Início"</strong></p>
+            <button onClick={dismissIOSGuide} className="text-primary text-[11px] mt-1">Entendi, não mostrar novamente</button>
+          </div>
         )}
         <button
           onClick={() => {
