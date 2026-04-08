@@ -29,6 +29,7 @@ type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
 type Company = { id: string; name: string };
+type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -47,6 +48,7 @@ export default function LeadsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [formFields, setFormFields] = useState<FormFieldInfo[]>([]);
   const [currentUserName, setCurrentUserName] = useState("");
   const [open, setOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
