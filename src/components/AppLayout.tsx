@@ -1,10 +1,12 @@
 import { ReactNode, useState } from "react";
 import AppSidebar from "./AppSidebar";
+import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { settings } = useSystemSettings();
 
   return (
     <div className="flex h-[100dvh] overflow-hidden">
@@ -29,7 +31,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
-          <span className="font-bold text-lg truncate">CRM Ótica Joonker</span>
+          <span className="font-bold text-lg truncate">{settings.system_name}</span>
         </div>
         <div className="p-3 sm:p-4 lg:p-6">{children}</div>
       </main>
