@@ -233,7 +233,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Mobile: Tab selector */}
-      <div className="md:hidden mb-3 overflow-x-auto -mx-4 px-4">
+      <div className="lg:hidden mb-3 overflow-x-auto -mx-3 px-3 sm:-mx-4 sm:px-4">
         <div className="flex gap-1.5 min-w-max">
           {statuses.map((status) => {
             const colors = colorMap[status.color] || colorMap.blue;
@@ -260,7 +260,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Mobile: Active column cards */}
-      <div className="md:hidden space-y-2 mb-4">
+      <div className="lg:hidden space-y-2 mb-4">
         {statuses.filter(s => s.key === mobileTab).map((status) => {
           const statusLeads = getLeadsByStatus(status.key);
           return (
@@ -328,7 +328,7 @@ export default function LeadsPage() {
 
       {/* Desktop: Kanban board with drag & drop */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="hidden md:flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "calc(100vh - 200px)" }}>
+        <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "calc(100vh - 200px)" }}>
           {statuses.map((status) => {
             const statusLeads = getLeadsByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
