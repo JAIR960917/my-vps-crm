@@ -113,18 +113,6 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
         </div>
       )}
 
-      {/* Other dynamic fields */}
-      {otherFields.map((f) => {
-        const value = data[`field_${f.id}`];
-        if (value === undefined || value === null || value === "") return null;
-        return (
-          <div key={f.id} className="mt-1.5">
-            <p className="text-[11px] text-muted-foreground leading-tight">{f.label}</p>
-            <p className="text-xs font-medium text-foreground truncate">{String(value)}</p>
-          </div>
-        );
-      })}
-
       {/* Assigned user */}
       {assignedProfile && (
         <div className="mt-2 pt-2 border-t">
