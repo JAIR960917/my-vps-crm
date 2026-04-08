@@ -335,17 +335,23 @@ export default function NewLeadPage() {
               <Label>Vendedor Responsável</Label>
               <Input value={currentUserName || "—"} readOnly className="bg-muted" />
             </div>
-            <div className="space-y-2">
-              <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
-              <Select value={formStatus} onValueChange={setFormStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {statuses.map((s) => (
-                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!fields.some(f => f.status_mapping && Object.keys(f.status_mapping).length > 0) ? (
+              <div className="space-y-2">
+                <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
+                <Select value={formStatus} onValueChange={setFormStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {statuses.map((s) => (
+                      <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+                ℹ️ A coluna será definida automaticamente com base nas respostas.
+              </p>
+            )}
           </div>
         )}
 
