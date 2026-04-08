@@ -24,16 +24,12 @@ export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onD
     <div className="rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          {primaryCol && (
-            <p className="font-semibold text-sm text-foreground truncate">
-              {data[primaryCol.field_key] || "Sem nome"}
-            </p>
-          )}
-          {secondaryCol && (
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {data[secondaryCol.field_key] || "—"}
-            </p>
-          )}
+          <p className="font-semibold text-sm text-foreground truncate">
+            {displayName}
+          </p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">
+            {displaySecondary}
+          </p>
         </div>
         <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>
