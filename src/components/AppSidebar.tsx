@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -122,6 +122,18 @@ export default function AppSidebar({ onNavigate }: Props) {
           <Moon className="h-4 w-4 dark:hidden" />
           <span className="dark:hidden">Modo Escuro</span>
           <span className="hidden dark:inline">Modo Claro</span>
+        </button>
+        <button
+          onClick={() => handleNav("/perfil")}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+            location.pathname === "/perfil"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50"
+          )}
+        >
+          <UserCircle className="h-4 w-4" />
+          Meu Perfil
         </button>
         <div className="truncate px-3 text-xs text-sidebar-foreground/60">
           {user?.email}
