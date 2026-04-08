@@ -6,7 +6,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import LeadCard from "@/components/leads/LeadCard";
@@ -251,11 +250,6 @@ export default function LeadsPage() {
           <Button size="sm" className="shrink-0" onClick={() => navigate("/novo-lead")}>
             <Plus className="mr-1 h-4 w-4" />Lead
           </Button>
-          {isAdmin && (
-            <Button size="sm" variant="outline" className="shrink-0 hidden sm:inline-flex" onClick={() => setNewColOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />Coluna
-            </Button>
-          )}
         </div>
       </div>
 
@@ -292,35 +286,6 @@ export default function LeadsPage() {
           const statusLeads = getLeadsByStatus(status.key);
           return (
             <div key={status.key}>
-              {isAdmin && (
-                <div className="flex items-center gap-2 mb-2">
-                  {renamingKey === status.key ? (
-                    <div className="flex items-center gap-1 flex-1">
-                      <Input
-                        ref={renameInputRef}
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveRename();
-                          if (e.key === "Escape") cancelRename();
-                        }}
-                        className="h-7 text-sm"
-                      />
-                      <button onClick={saveRename} className="text-emerald-500 shrink-0"><Check className="h-4 w-4" /></button>
-                      <button onClick={cancelRename} className="text-muted-foreground shrink-0"><X className="h-4 w-4" /></button>
-                    </div>
-                  ) : (
-                    <>
-                      <button onClick={() => startRename(status)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
-                        <Pencil className="h-3 w-3" /> Renomear
-                      </button>
-                      <button onClick={() => handleDeleteStatus(status.key)} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1">
-                        <Trash2 className="h-3 w-3" /> Excluir
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
               {statusLeads.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhum lead nesta coluna</p>
               )}
@@ -366,40 +331,7 @@ export default function LeadsPage() {
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col">
                 <div className="flex items-center gap-2 mb-2 px-1">
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
-                  {renamingKey === status.key ? (
-                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                      <Input
-                        ref={renameInputRef}
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveRename();
-                          if (e.key === "Escape") cancelRename();
-                        }}
-                        className="h-6 text-sm py-0 px-1"
-                      />
-                      <button onClick={saveRename} className="text-emerald-500 hover:text-emerald-400 shrink-0">
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button onClick={cancelRename} className="text-muted-foreground hover:text-foreground shrink-0">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
-                      {isAdmin && (
-                        <button onClick={() => startRename(status)} className="text-muted-foreground hover:text-foreground">
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      )}
-                      {isAdmin && (
-                        <button onClick={() => handleDeleteStatus(status.key)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      )}
-                    </>
-                  )}
+                  <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
                     {statusLeads.length}
                   </span>
@@ -489,33 +421,6 @@ export default function LeadsPage() {
         onNoteAdded={fetchAll}
       />
 
-      <Dialog open={newColOpen} onOpenChange={setNewColOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Nova Coluna</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome da Coluna</Label>
-              <Input value={newColLabel} onChange={(e) => setNewColLabel(e.target.value)} placeholder="Ex: Em Negociação" />
-            </div>
-            <div className="space-y-2">
-              <Label>Cor</Label>
-              <Select value={newColColor} onValueChange={setNewColColor}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.keys(colorMap).map((c) => (
-                    <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button className="w-full" onClick={handleCreateStatus} disabled={savingCol || !newColLabel.trim()}>
-              {savingCol ? "Criando..." : "Criar Coluna"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </AppLayout>
   );
 }
