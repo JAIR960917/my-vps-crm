@@ -1,6 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -68,8 +68,22 @@ export default function AppSidebar({ onNavigate }: Props) {
           ))}
       </nav>
 
-      <div className="border-t border-sidebar-border px-3 py-4">
-        <div className="mb-3 px-3 text-xs text-sidebar-foreground/60 truncate">
+      <div className="border-t border-sidebar-border px-3 py-4 space-y-2">
+        <button
+          onClick={() => {
+            const html = document.documentElement;
+            const isDark = html.classList.contains("dark");
+            html.classList.toggle("dark", !isDark);
+            localStorage.setItem("theme", isDark ? "light" : "dark");
+          }}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/50 transition-colors"
+        >
+          <Sun className="h-4 w-4 hidden dark:block" />
+          <Moon className="h-4 w-4 dark:hidden" />
+          <span className="dark:hidden">Modo Escuro</span>
+          <span className="hidden dark:inline">Modo Claro</span>
+        </button>
+        <div className="px-3 text-xs text-sidebar-foreground/60 truncate">
           {user?.email}
         </div>
         <button
