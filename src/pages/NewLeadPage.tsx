@@ -89,7 +89,7 @@ export default function NewLeadPage() {
           supabase.from("companies").select("id, name").order("name"),
           supabase.rpc("get_profile_names"),
         ]);
-        if (flds) setFields(flds as FormField[]);
+        if (flds) setFields(flds as unknown as FormField[]);
         if (sts) setStatuses(sts as CrmStatus[]);
         if (comps) setCompanies(comps as Company[]);
         if (sts && sts.length > 0) setFormStatus(searchParams.get("status") || sts[0].key);
@@ -216,6 +216,7 @@ export default function NewLeadPage() {
       }
     }
     return defaultStatus;
+  };
 
   const handleSubmit = async () => {
     setSaving(true);
