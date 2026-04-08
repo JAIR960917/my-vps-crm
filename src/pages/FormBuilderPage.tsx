@@ -498,7 +498,6 @@ export default function FormBuilderPage() {
             <Button className="w-full" onClick={handleSave} disabled={saving || !label.trim()}>
               {saving ? "Salvando..." : editingField ? "Atualizar" : "Criar"}
             </Button>
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
