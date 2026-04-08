@@ -139,6 +139,33 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_statuses: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          key: string
+          label: string
+          position: number
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          key: string
+          label: string
+          position?: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          key?: string
+          label?: string
+          position?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_id: string | null
