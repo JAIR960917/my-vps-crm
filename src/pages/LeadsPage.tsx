@@ -71,26 +71,69 @@ export default function LeadsPage() {
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
 
+  const loadFromCache = useCallback(() => {
+    try {
+      setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
+      setLeads(JSON.parse(localStorage.getItem("crm_cache_leads") || "[]"));
+      setProfiles(JSON.parse(localStorage.getItem("crm_cache_profiles") || "[]"));
+      setStatuses(JSON.parse(localStorage.getItem("crm_cache_statuses_full") || "[]"));
+      setCompanies(JSON.parse(localStorage.getItem("crm_cache_companies") || "[]"));
+      setCurrentUserName(localStorage.getItem("crm_cache_username") || "");
+    } catch {}
+  }, []);
+
   const fetchAll = async () => {
-    const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }] = await Promise.all([
-      supabase.from("crm_columns").select("*").order("position"),
-      supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
-      supabase.rpc("get_profile_names"),
-      supabase.from("crm_statuses").select("*").order("position"),
-      supabase.from("companies").select("id, name").order("name"),
-    ]);
-    setColumns(cols || []);
-    setLeads((lds || []) as Lead[]);
-    setProfiles(profs || []);
-    setStatuses((sts || []) as CrmStatus[]);
-    setCompanies((comps || []) as Company[]);
-    // Set current user name
-    const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
-    setCurrentUserName(me?.full_name || user?.email || "");
+    // Always load cache first for instant display
+    loadFromCache();
+
+    if (!navigator.onLine) return;
+
+    try {
+      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }] = await Promise.all([
+        supabase.from("crm_columns").select("*").order("position"),
+        supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
+        supabase.rpc("get_profile_names"),
+        supabase.from("crm_statuses").select("*").order("position"),
+        supabase.from("companies").select("id, name").order("name"),
+      ]);
+      setColumns(cols || []);
+      setLeads((lds || []) as Lead[]);
+      setProfiles(profs || []);
+      setStatuses((sts || []) as CrmStatus[]);
+      setCompanies((comps || []) as Company[]);
+      const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
+      setCurrentUserName(me?.full_name || user?.email || "");
+
+      // Cache for offline
+      try {
+        localStorage.setItem("crm_cache_columns", JSON.stringify(cols || []));
+        localStorage.setItem("crm_cache_leads", JSON.stringify(lds || []));
+        localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
+        localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
+        localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
+        const me2 = (profs || []).find((p: Profile) => p.user_id === user?.id);
+        localStorage.setItem("crm_cache_username", me2?.full_name || user?.email || "");
+      } catch {}
+    } catch {
+      // Network failed, cache already loaded
+    }
   };
 
   useEffect(() => {
     fetchAll();
+  }, []);
+
+  // Sync offline queue when coming back online
+  useEffect(() => {
+    const handleOnline = async () => {
+      const synced = await syncOfflineQueue();
+      if (synced > 0) {
+        toast.success(`${synced} lead(s) sincronizado(s)!`);
+      }
+      fetchAll(); // Refresh data
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
   }, []);
 
   // Set default mobile tab when statuses load
