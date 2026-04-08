@@ -1,0 +1,1 @@
+ALTER TABLE public.crm_form_fields ADD COLUMN show_on_card BOOLEAN NOT NULL DEFAULT false;

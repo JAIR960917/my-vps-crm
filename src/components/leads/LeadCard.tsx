@@ -10,6 +10,7 @@ type FormFieldInfo = {
   label: string;
   is_name_field?: boolean;
   is_phone_field?: boolean;
+  show_on_card?: boolean;
 };
 
 type LeadCardProps = {
@@ -113,7 +114,20 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
         </div>
       )}
 
-      {/* Assigned user */}
+      {/* Fields marked as show_on_card */}
+      {formFields
+        .filter((f) => f.show_on_card && !nameFieldIds.has(f.id) && !phoneFieldIds.has(f.id))
+        .map((f) => {
+          const value = data[`field_${f.id}`];
+          if (value === undefined || value === null || value === "") return null;
+          return (
+            <div key={f.id} className="mt-1.5">
+              <p className="text-[11px] text-muted-foreground leading-tight">{f.label}</p>
+              <p className="text-xs font-medium text-foreground truncate">{String(value)}</p>
+            </div>
+          );
+        })}
+
       {assignedProfile && (
         <div className="mt-2 pt-2 border-t">
           <p className="text-[11px] text-muted-foreground leading-tight">Pessoa responsável</p>

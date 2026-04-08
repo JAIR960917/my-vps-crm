@@ -87,7 +87,7 @@ export default function LeadsPage() {
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
         supabase.from("companies").select("id, name").order("name"),
-        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field").order("position"),
+        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card").order("position"),
       ]);
       setColumns(cols || []);
       setLeads((lds || []) as Lead[]);
