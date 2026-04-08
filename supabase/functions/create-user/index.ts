@@ -51,8 +51,23 @@ Deno.serve(async (req) => {
 
   const { email, password, full_name, role } = await req.json();
 
+  const validRoles = ["admin", "vendedor", "gerente"];
   if (!email || !password || !role) {
     return new Response(JSON.stringify({ error: "Email, senha e papel são obrigatórios" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (!validRoles.includes(role)) {
+    return new Response(JSON.stringify({ error: "Papel inválido" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (typeof email !== "string" || email.length > 254 || typeof password !== "string" || password.length < 8 || password.length > 128) {
+    return new Response(JSON.stringify({ error: "Email ou senha inválidos" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
