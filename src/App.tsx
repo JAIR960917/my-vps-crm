@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { SystemSettingsProvider } from "@/contexts/SystemSettingsContext";
 import Login from "./pages/Login";
 import LeadsPage from "./pages/LeadsPage";
 import UsersPage from "./pages/UsersPage";
@@ -11,6 +12,7 @@ import ColumnsPage from "./pages/ColumnsPage";
 import CompaniesPage from "./pages/CompaniesPage";
 import FormBuilderPage from "./pages/FormBuilderPage";
 import NewLeadPage from "./pages/NewLeadPage";
+import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +41,7 @@ const AppRoutes = () => {
       <Route path="/colunas" element={<ProtectedRoute><ColumnsPage /></ProtectedRoute>} />
       <Route path="/formulario" element={<ProtectedRoute><FormBuilderPage /></ProtectedRoute>} />
       <Route path="/novo-lead" element={<ProtectedRoute><NewLeadPage /></ProtectedRoute>} />
+      <Route path="/configuracoes" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -51,7 +54,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <SystemSettingsProvider>
+            <AppRoutes />
+          </SystemSettingsProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

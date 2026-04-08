@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -18,6 +19,7 @@ const navItems: NavItem[] = [
   { path: "/empresas", label: "Empresas", icon: Building2, roles: ["admin"] },
   { path: "/colunas", label: "Colunas CRM", icon: Columns3, roles: ["admin"] },
   { path: "/formulario", label: "Formulário", icon: FileText, roles: ["admin"] },
+  { path: "/configuracoes", label: "Configurações", icon: Settings, roles: ["admin"] },
 ];
 
 interface Props {
@@ -26,6 +28,7 @@ interface Props {
 
 export default function AppSidebar({ onNavigate }: Props) {
   const { user, isAdmin, isGerente, signOut } = useAuth();
+  const { settings } = useSystemSettings();
   const { canInstall, install } = usePwaInstall();
   const [signingOut, setSigningOut] = useState(false);
   const location = useLocation();
@@ -58,10 +61,14 @@ export default function AppSidebar({ onNavigate }: Props) {
   return (
     <aside className="flex h-screen w-60 flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-5 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
-          <LayoutDashboard className="h-4 w-4 text-sidebar-primary-foreground" />
-        </div>
-        <span className="text-lg font-bold text-sidebar-primary-foreground">Ótica Joonker</span>
+        {settings.logo_url ? (
+          <img src={settings.logo_url} alt="Logo" className="h-8 w-8 rounded-lg object-contain" />
+        ) : (
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
+            <LayoutDashboard className="h-4 w-4 text-sidebar-primary-foreground" />
+          </div>
+        )}
+        <span className="text-lg font-bold text-sidebar-primary-foreground truncate">{settings.system_name}</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">
