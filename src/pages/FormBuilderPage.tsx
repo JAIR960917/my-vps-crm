@@ -80,7 +80,7 @@ export default function FormBuilderPage() {
       .from("crm_form_fields")
       .select("*")
       .order("position");
-    setFields((data || []) as FormField[]);
+    setFields((data || []) as unknown as FormField[]);
   };
 
   useEffect(() => {
