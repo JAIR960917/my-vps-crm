@@ -23,6 +23,7 @@ type Profile = { user_id: string; full_name: string; email?: string };
 type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
+type Company = { id: string; name: string };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -39,6 +40,8 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [currentUserName, setCurrentUserName] = useState("");
   const [open, setOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -55,16 +58,21 @@ export default function LeadsPage() {
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = async () => {
-    const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }] = await Promise.all([
+    const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }] = await Promise.all([
       supabase.from("crm_columns").select("*").order("position"),
       supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
       supabase.rpc("get_profile_names"),
       supabase.from("crm_statuses").select("*").order("position"),
+      supabase.from("companies").select("id, name").order("name"),
     ]);
     setColumns(cols || []);
     setLeads((lds || []) as Lead[]);
     setProfiles(profs || []);
     setStatuses((sts || []) as CrmStatus[]);
+    setCompanies((comps || []) as Company[]);
+    // Set current user name
+    const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
+    setCurrentUserName(me?.full_name || user?.email || "");
   };
 
   useEffect(() => { fetchAll(); }, []);
@@ -240,9 +248,8 @@ export default function LeadsPage() {
                                 onDelete={() => handleDelete(lead.id)}
                                 onHistory={() => {
                                   const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
-                                  const primaryCol = columns[0];
                                   setHistoryLeadId(lead.id);
-                                  setHistoryLeadName(primaryCol ? (data[primaryCol.field_key] || "Lead") : "Lead");
+                                  setHistoryLeadName(data.nome_lead || (columns[0] ? data[columns[0].field_key] : null) || "Lead");
                                   setHistoryOpen(true);
                                 }}
                               />
@@ -272,6 +279,8 @@ export default function LeadsPage() {
         onOpenChange={setOpen}
         columns={columns}
         profiles={profiles}
+        companies={companies}
+        currentUserName={currentUserName}
         formData={formData}
         setFormData={setFormData}
         formStatus={formStatus}

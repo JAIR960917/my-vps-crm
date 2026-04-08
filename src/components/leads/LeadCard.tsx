@@ -16,23 +16,20 @@ type LeadCardProps = {
 export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onDelete, onHistory }: LeadCardProps) {
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
-  const primaryCol = columns[0];
-  const secondaryCol = columns[1];
+  // Use new form fields if available, fallback to dynamic columns
+  const displayName = data.nome_lead || (columns[0] && data[columns[0].field_key]) || "Sem nome";
+  const displaySecondary = data.telefone || (columns[1] && data[columns[1].field_key]) || "—";
 
   return (
     <div className="rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          {primaryCol && (
-            <p className="font-semibold text-sm text-foreground truncate">
-              {data[primaryCol.field_key] || "Sem nome"}
-            </p>
-          )}
-          {secondaryCol && (
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {data[secondaryCol.field_key] || "—"}
-            </p>
-          )}
+          <p className="font-semibold text-sm text-foreground truncate">
+            {displayName}
+          </p>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">
+            {displaySecondary}
+          </p>
         </div>
         <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>
@@ -49,12 +46,15 @@ export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onD
         </div>
       </div>
 
-      {columns.slice(2, 4).map((col) =>
-        data[col.field_key] ? (
-          <p key={col.field_key} className="text-xs text-muted-foreground mt-1 truncate">
-            <span className="font-medium">{col.name}:</span> {data[col.field_key]}
-          </p>
-        ) : null
+      {data.forma_captacao && (
+        <p className="text-xs text-muted-foreground mt-1 truncate">
+          <span className="font-medium">Captação:</span> {data.forma_captacao}
+        </p>
+      )}
+      {data.cidade_uf && (
+        <p className="text-xs text-muted-foreground mt-1 truncate">
+          <span className="font-medium">Cidade:</span> {data.cidade_uf}
+        </p>
       )}
 
       {assignedProfile && (
