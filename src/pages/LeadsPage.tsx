@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Pencil, Check, X } from "lucide-react";
 import LeadCard from "@/components/leads/LeadCard";
 import LeadFormDialog from "@/components/leads/LeadFormDialog";
 import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
@@ -19,23 +20,17 @@ type Lead = {
   created_by: string; status: string; created_at: string;
 };
 type Profile = { user_id: string; full_name: string; email?: string };
+type CrmStatus = {
+  id: string; key: string; label: string; position: number; color: string;
+};
 
-const STATUS_OPTIONS = ["novo", "em_contato", "qualificado", "proposta", "fechado", "perdido"];
-const statusLabels: Record<string, string> = {
-  novo: "Novo", em_contato: "Em Contato", qualificado: "Qualificado",
-  proposta: "Proposta", fechado: "Fechado", perdido: "Perdido",
-};
-const statusColors: Record<string, string> = {
-  novo: "bg-blue-500/15 text-blue-700 border-blue-300",
-  em_contato: "bg-amber-500/15 text-amber-700 border-amber-300",
-  qualificado: "bg-violet-500/15 text-violet-700 border-violet-300",
-  proposta: "bg-cyan-500/15 text-cyan-700 border-cyan-300",
-  fechado: "bg-emerald-500/15 text-emerald-700 border-emerald-300",
-  perdido: "bg-red-500/15 text-red-700 border-red-300",
-};
-const columnHeaderColors: Record<string, string> = {
-  novo: "bg-blue-500", em_contato: "bg-amber-500", qualificado: "bg-violet-500",
-  proposta: "bg-cyan-500", fechado: "bg-emerald-500", perdido: "bg-red-500",
+const colorMap: Record<string, { header: string; badge: string }> = {
+  blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
+  amber:   { header: "bg-amber-500",   badge: "bg-amber-500/15 text-amber-700 border-amber-300" },
+  violet:  { header: "bg-violet-500",  badge: "bg-violet-500/15 text-violet-700 border-violet-300" },
+  cyan:    { header: "bg-cyan-500",    badge: "bg-cyan-500/15 text-cyan-700 border-cyan-300" },
+  emerald: { header: "bg-emerald-500", badge: "bg-emerald-500/15 text-emerald-700 border-emerald-300" },
+  red:     { header: "bg-red-500",     badge: "bg-red-500/15 text-red-700 border-red-300" },
 };
 
 export default function LeadsPage() {
@@ -43,6 +38,7 @@ export default function LeadsPage() {
   const [columns, setColumns] = useState<CrmColumn[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [open, setOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -53,23 +49,34 @@ export default function LeadsPage() {
   const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
   const [historyLeadName, setHistoryLeadName] = useState("");
 
+  // Inline rename state
+  const [renamingKey, setRenamingKey] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
   const fetchAll = async () => {
-    const [{ data: cols }, { data: lds }, { data: profs }] = await Promise.all([
+    const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }] = await Promise.all([
       supabase.from("crm_columns").select("*").order("position"),
       supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
       supabase.rpc("get_profile_names"),
+      supabase.from("crm_statuses").select("*").order("position"),
     ]);
     setColumns(cols || []);
     setLeads((lds || []) as Lead[]);
     setProfiles(profs || []);
+    setStatuses((sts || []) as CrmStatus[]);
   };
 
   useEffect(() => { fetchAll(); }, []);
 
+  // Derive labels and options from DB statuses
+  const statusOptions = statuses.map(s => s.key);
+  const statusLabels = Object.fromEntries(statuses.map(s => [s.key, s.label]));
+
   const openCreate = (status?: string) => {
     setEditingLead(null);
     setFormData({});
-    setFormStatus(status || "novo");
+    setFormStatus(status || statusOptions[0] || "novo");
     setFormAssigned("");
     setOpen(true);
   };
@@ -125,6 +132,28 @@ export default function LeadsPage() {
     }
   };
 
+  const startRename = (status: CrmStatus) => {
+    setRenamingKey(status.key);
+    setRenameValue(status.label);
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  };
+
+  const saveRename = async () => {
+    if (!renamingKey || !renameValue.trim()) return;
+    const { error } = await supabase
+      .from("crm_statuses")
+      .update({ label: renameValue.trim() })
+      .eq("key", renamingKey);
+    if (error) toast.error("Erro ao renomear");
+    else {
+      toast.success("Coluna renomeada");
+      fetchAll();
+    }
+    setRenamingKey(null);
+  };
+
+  const cancelRename = () => setRenamingKey(null);
+
   const getLeadsByStatus = (status: string) => leads.filter((l) => l.status === status);
 
   return (
@@ -143,19 +172,48 @@ export default function LeadsPage() {
 
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0" style={{ minHeight: "calc(100vh - 200px)" }}>
-          {STATUS_OPTIONS.map((status) => {
-            const statusLeads = getLeadsByStatus(status);
+          {statuses.map((status) => {
+            const statusLeads = getLeadsByStatus(status.key);
+            const colors = colorMap[status.color] || colorMap.blue;
             return (
-              <div key={status} className="flex-shrink-0 w-[240px] sm:w-[280px] flex flex-col">
+              <div key={status.key} className="flex-shrink-0 w-[240px] sm:w-[280px] flex flex-col">
                 <div className="flex items-center gap-2 mb-2 px-1">
-                  <div className={`h-2.5 w-2.5 rounded-full ${columnHeaderColors[status]}`} />
-                  <h3 className="font-semibold text-sm text-foreground">{statusLabels[status]}</h3>
-                  <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[status]}`}>
+                  <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
+                  {renamingKey === status.key ? (
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <Input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveRename();
+                          if (e.key === "Escape") cancelRename();
+                        }}
+                        className="h-6 text-sm py-0 px-1"
+                      />
+                      <button onClick={saveRename} className="text-emerald-500 hover:text-emerald-400 shrink-0">
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button onClick={cancelRename} className="text-muted-foreground hover:text-foreground shrink-0">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
+                      {isAdmin && (
+                        <button onClick={() => startRename(status)} className="text-muted-foreground hover:text-foreground">
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
                     {statusLeads.length}
                   </span>
                 </div>
 
-                <Droppable droppableId={status}>
+                <Droppable droppableId={status.key}>
                   {(provided, snapshot) => (
                     <div
                       ref={provided.innerRef}
@@ -195,7 +253,7 @@ export default function LeadsPage() {
                       {provided.placeholder}
 
                       <button
-                        onClick={() => openCreate(status)}
+                        onClick={() => openCreate(status.key)}
                         className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors"
                       >
                         + Adicionar lead
@@ -223,7 +281,7 @@ export default function LeadsPage() {
         saving={saving}
         isEditing={!!editingLead}
         onSubmit={handleSave}
-        statusOptions={STATUS_OPTIONS}
+        statusOptions={statusOptions}
         statusLabels={statusLabels}
       />
 
