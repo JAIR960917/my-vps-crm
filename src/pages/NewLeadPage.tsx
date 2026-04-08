@@ -49,42 +49,62 @@ export default function NewLeadPage() {
     return () => { window.removeEventListener("online", onLine); window.removeEventListener("offline", offLine); };
   }, []);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const [{ data: flds }, { data: sts }, { data: comps }, { data: profs }] = await Promise.all([
-        supabase.from("crm_form_fields").select("*").order("position"),
-        supabase.from("crm_statuses").select("*").order("position"),
-        supabase.from("companies").select("id, name").order("name"),
-        supabase.rpc("get_profile_names"),
-      ]);
-      setFields((flds || []) as FormField[]);
-      setStatuses((sts || []) as CrmStatus[]);
-      setCompanies((comps || []) as Company[]);
-      if (sts && sts.length > 0) setFormStatus(searchParams.get("status") || sts[0].key);
-      const me = (profs || []).find((p: any) => p.user_id === user?.id);
-      setCurrentUserName(me?.full_name || user?.email || "");
+  // Load from cache helper
+  const loadFromCache = useCallback(() => {
+    try {
+      const cachedFields = JSON.parse(localStorage.getItem("crm_cache_fields") || "[]");
+      const cachedStatuses = JSON.parse(localStorage.getItem("crm_cache_statuses") || "[]");
+      const cachedCompanies = JSON.parse(localStorage.getItem("crm_cache_companies") || "[]");
+      const cachedUsername = localStorage.getItem("crm_cache_username") || "";
+      setFields(cachedFields);
+      setStatuses(cachedStatuses);
+      setCompanies(cachedCompanies);
+      setCurrentUserName(cachedUsername);
+      if (cachedStatuses.length > 0 && !formStatus) {
+        setFormStatus(searchParams.get("status") || cachedStatuses[0].key);
+      }
+      return cachedFields.length > 0 || cachedStatuses.length > 0;
+    } catch {
+      return false;
+    }
+  }, [searchParams, formStatus]);
 
-      // Cache for offline
+  useEffect(() => {
+    // Always load cache first for instant display
+    loadFromCache();
+
+    // If online, fetch fresh data
+    if (!navigator.onLine) return;
+
+    const fetchData = async () => {
       try {
-        localStorage.setItem("crm_cache_fields", JSON.stringify(flds || []));
-        localStorage.setItem("crm_cache_statuses", JSON.stringify(sts || []));
-        localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
-        localStorage.setItem("crm_cache_username", me?.full_name || user?.email || "");
-      } catch {}
+        const [{ data: flds }, { data: sts }, { data: comps }, { data: profs }] = await Promise.all([
+          supabase.from("crm_form_fields").select("*").order("position"),
+          supabase.from("crm_statuses").select("*").order("position"),
+          supabase.from("companies").select("id, name").order("name"),
+          supabase.rpc("get_profile_names"),
+        ]);
+        if (flds) setFields(flds as FormField[]);
+        if (sts) setStatuses(sts as CrmStatus[]);
+        if (comps) setCompanies(comps as Company[]);
+        if (sts && sts.length > 0) setFormStatus(searchParams.get("status") || sts[0].key);
+        const me = (profs || []).find((p: any) => p.user_id === user?.id);
+        setCurrentUserName(me?.full_name || user?.email || "");
+
+        // Update cache
+        try {
+          localStorage.setItem("crm_cache_fields", JSON.stringify(flds || []));
+          localStorage.setItem("crm_cache_statuses", JSON.stringify(sts || []));
+          localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
+          localStorage.setItem("crm_cache_username", me?.full_name || user?.email || "");
+        } catch {}
+      } catch {
+        // Network failed, cache already loaded above
+      }
     };
 
-    fetchData().catch(() => {
-      // Offline: load from cache
-      try {
-        setFields(JSON.parse(localStorage.getItem("crm_cache_fields") || "[]"));
-        setStatuses(JSON.parse(localStorage.getItem("crm_cache_statuses") || "[]"));
-        setCompanies(JSON.parse(localStorage.getItem("crm_cache_companies") || "[]"));
-        setCurrentUserName(localStorage.getItem("crm_cache_username") || "");
-        const cached = JSON.parse(localStorage.getItem("crm_cache_statuses") || "[]");
-        if (cached.length > 0) setFormStatus(cached[0].key);
-      } catch {}
-    });
-  }, [user]);
+    fetchData();
+  }, [user, loadFromCache]);
 
   // Sync offline queue when online
   useEffect(() => {
