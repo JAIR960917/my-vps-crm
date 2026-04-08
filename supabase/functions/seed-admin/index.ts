@@ -15,14 +15,24 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const email = "jazevedosfilho@gmail.com";
-  const password = "12457856";
+  // Accept credentials from request body
+  const { email, password, full_name } = await req.json();
 
-  // Check if admin already exists
-  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-  const existing = existingUsers?.users?.find((u) => u.email === email);
+  if (!email || !password) {
+    return new Response(JSON.stringify({ error: "Email e senha são obrigatórios" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
-  if (existing) {
+  // Check if any admin already exists
+  const { data: existingAdmins } = await supabaseAdmin
+    .from("user_roles")
+    .select("id")
+    .eq("role", "admin")
+    .limit(1);
+
+  if (existingAdmins && existingAdmins.length > 0) {
     return new Response(JSON.stringify({ message: "Admin already exists" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -33,7 +43,7 @@ Deno.serve(async (req) => {
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: "Admin Principal" },
+    user_metadata: { full_name: full_name || "Admin Principal" },
   });
 
   if (error) {
