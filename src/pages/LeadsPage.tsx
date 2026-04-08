@@ -400,7 +400,8 @@ export default function LeadsPage() {
                     onHistory={() => {
                       const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
                       setHistoryLeadId(lead.id);
-                      setHistoryLeadName(data.nome_lead || (columns[0] ? data[columns[0].field_key] : null) || "Lead");
+                      const nf = formFields.find(f => f.is_name_field);
+                      setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                       setHistoryOpen(true);
                     }}
                   />
@@ -496,7 +497,8 @@ export default function LeadsPage() {
                                 onHistory={() => {
                                   const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
                                   setHistoryLeadId(lead.id);
-                                  setHistoryLeadName(data.nome_lead || (columns[0] ? data[columns[0].field_key] : null) || "Lead");
+                                  const nf = formFields.find(f => f.is_name_field);
+                                  setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                                   setHistoryOpen(true);
                                 }}
                               />
