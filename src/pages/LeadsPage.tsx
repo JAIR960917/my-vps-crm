@@ -25,7 +25,7 @@ type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
 type Company = { id: string; name: string };
-type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean };
+type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean; status_mapping?: Record<string, string> | null };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -87,7 +87,7 @@ export default function LeadsPage() {
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
         supabase.from("companies").select("id, name").order("name"),
-        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card").order("position"),
+        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping").order("position"),
       ]);
       setColumns(cols || []);
       setLeads((lds || []) as Lead[]);
