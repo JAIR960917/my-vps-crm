@@ -14,6 +14,7 @@ import FormBuilderPage from "./pages/FormBuilderPage";
 import NewLeadPage from "./pages/NewLeadPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProfilePage from "./pages/ProfilePage";
+import InstallPage from "./pages/InstallPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const AppRoutes = () => {
       <Route path="/novo-lead" element={<ProtectedRoute><NewLeadPage /></ProtectedRoute>} />
       <Route path="/configuracoes" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      <Route path="/instalar" element={<InstallPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
