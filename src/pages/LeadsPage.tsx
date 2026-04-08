@@ -309,11 +309,6 @@ export default function LeadsPage() {
     setDeleteConfirmId(null);
   };
 
-  const oldHandleDelete = async (id: string) => {
-    const { error } = await supabase.from("crm_leads").delete().eq("id", id);
-    if (error) toast.error("Erro ao remover");
-    else { toast.success("Lead removido"); fetchAll(); }
-  };
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
