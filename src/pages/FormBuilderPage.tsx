@@ -524,6 +524,74 @@ export default function FormBuilderPage() {
               </div>
             )}
 
+            {/* Date-based status mapping */}
+            {fieldType === "date" && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Switch checked={isDateStatusField} onCheckedChange={setIsDateStatusField} />
+                  <Label>Definir coluna automaticamente pelo tempo desde a data</Label>
+                </div>
+                {isDateStatusField && (
+                  <div className="space-y-3 p-3 border rounded-md bg-muted/30">
+                    <p className="text-xs text-muted-foreground">
+                      O sistema calcula quanto tempo faz desde a data informada e coloca o lead na coluna correspondente.
+                    </p>
+                    {dateStatusRanges.ranges.map((range, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-sm whitespace-nowrap">Até {range.max_years} ano{range.max_years > 1 ? "s" : ""}</span>
+                        <Select
+                          value={range.status_key || "__none__"}
+                          onValueChange={(v) => {
+                            const newRanges = [...dateStatusRanges.ranges];
+                            newRanges[i] = { ...newRanges[i], status_key: v === "__none__" ? "" : v };
+                            setDateStatusRanges(prev => ({ ...prev, ranges: newRanges }));
+                          }}
+                        >
+                          <SelectTrigger className="flex-1"><SelectValue placeholder="Coluna" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                            {statuses.map(s => (
+                              <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm whitespace-nowrap">Mais de {dateStatusRanges.ranges[dateStatusRanges.ranges.length - 1]?.max_years || 3} anos</span>
+                      <Select
+                        value={dateStatusRanges.above_all || "__none__"}
+                        onValueChange={(v) => setDateStatusRanges(prev => ({ ...prev, above_all: v === "__none__" ? "" : v }))}
+                      >
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Coluna" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                          {statuses.map(s => (
+                            <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm whitespace-nowrap">Sem resposta</span>
+                      <Select
+                        value={dateStatusRanges.no_answer || "__none__"}
+                        onValueChange={(v) => setDateStatusRanges(prev => ({ ...prev, no_answer: v === "__none__" ? "" : v }))}
+                      >
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Coluna" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                          {statuses.map(s => (
+                            <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <Button className="w-full" onClick={handleSave} disabled={saving || !label.trim()}>
               {saving ? "Salvando..." : editingField ? "Atualizar" : "Criar"}
             </Button>
