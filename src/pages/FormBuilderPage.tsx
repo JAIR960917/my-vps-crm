@@ -25,7 +25,10 @@ type FormField = {
   is_name_field: boolean;
   is_phone_field: boolean;
   show_on_card: boolean;
+  status_mapping: Record<string, string> | null;
 };
+
+type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
 
 const FIELD_TYPES = [
   { value: "text", label: "Texto" },
@@ -54,6 +57,9 @@ export default function FormBuilderPage() {
   const [parentFieldId, setParentFieldId] = useState<string>("__none__");
   const [parentTriggerValues, setParentTriggerValues] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [statuses, setStatuses] = useState<CrmStatus[]>([]);
+  const [statusMapping, setStatusMapping] = useState<Record<string, string>>({});
+  const [isStatusField, setIsStatusField] = useState(false);
 
   const fetchFields = async () => {
     const { data } = await supabase
@@ -63,7 +69,10 @@ export default function FormBuilderPage() {
     setFields((data || []) as FormField[]);
   };
 
-  useEffect(() => { fetchFields(); }, []);
+  useEffect(() => {
+    fetchFields();
+    supabase.from("crm_statuses").select("*").order("position").then(({ data }) => setStatuses((data || []) as CrmStatus[]));
+  }, []);
 
   const resetForm = () => {
     setLabel("");
@@ -76,6 +85,8 @@ export default function FormBuilderPage() {
     setParentFieldId("__none__");
     setParentTriggerValues([]);
     setEditingField(null);
+    setIsStatusField(false);
+    setStatusMapping({});
   };
 
   const openCreate = (parentId?: string, triggerVal?: string) => {
@@ -110,6 +121,8 @@ export default function FormBuilderPage() {
     setShowOnCard(field.show_on_card);
     setParentFieldId(field.parent_field_id || "__none__");
     setParentTriggerValues(parseTriggerValues(field.parent_trigger_value));
+    setIsStatusField(!!field.status_mapping);
+    setStatusMapping(field.status_mapping || {});
     setDialogOpen(true);
   };
 
@@ -131,6 +144,7 @@ export default function FormBuilderPage() {
       show_on_card: showOnCard,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
       parent_trigger_value: parentFieldId === "__none__" ? null : (parentTriggerValues.length > 0 ? JSON.stringify(parentTriggerValues) : null),
+      status_mapping: isStatusField && Object.keys(statusMapping).length > 0 ? statusMapping : null,
     };
 
     if (editingField) {
