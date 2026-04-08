@@ -29,6 +29,21 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+const AppRoutes = () => {
+  return (
+    <Routes>
+      <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
+      <Route path="/usuarios" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
+      <Route path="/empresas" element={<ProtectedRoute><CompaniesPage /></ProtectedRoute>} />
+      <Route path="/colunas" element={<ProtectedRoute><ColumnsPage /></ProtectedRoute>} />
+      <Route path="/formulario" element={<ProtectedRoute><FormBuilderPage /></ProtectedRoute>} />
+      <Route path="/novo-lead" element={<ProtectedRoute><NewLeadPage /></ProtectedRoute>} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -36,16 +51,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-            <Route path="/" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
-            <Route path="/usuarios" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-            <Route path="/empresas" element={<ProtectedRoute><CompaniesPage /></ProtectedRoute>} />
-            <Route path="/colunas" element={<ProtectedRoute><ColumnsPage /></ProtectedRoute>} />
-            <Route path="/formulario" element={<ProtectedRoute><FormBuilderPage /></ProtectedRoute>} />
-            <Route path="/novo-lead" element={<ProtectedRoute><NewLeadPage /></ProtectedRoute>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppRoutes />
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
