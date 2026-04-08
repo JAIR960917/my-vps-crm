@@ -175,7 +175,7 @@ export default function FormBuilderPage() {
 
   const renderField = (field: FormField, depth: number = 0) => {
     const children = getChildren(field.id);
-    const hasOptions = field.field_type === "select" && field.options && field.options.length > 0;
+    const hasOptions = ["select", "checkbox_group"].includes(field.field_type) && field.options && field.options.length > 0;
 
     return (
       <div key={field.id}>
@@ -344,7 +344,7 @@ export default function FormBuilderPage() {
                 <SelectTrigger><SelectValue placeholder="Nenhuma (pergunta raiz)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Nenhuma (pergunta raiz)</SelectItem>
-                  {selectFields
+                  {parentCandidates
                     .filter((f) => f.id !== editingField?.id)
                     .map((f) => (
                       <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>
