@@ -84,6 +84,7 @@ export default function LeadsPage() {
       setProfiles(JSON.parse(localStorage.getItem("crm_cache_profiles") || "[]"));
       setStatuses(JSON.parse(localStorage.getItem("crm_cache_statuses_full") || "[]"));
       setCompanies(JSON.parse(localStorage.getItem("crm_cache_companies") || "[]"));
+      setFormFields(JSON.parse(localStorage.getItem("crm_cache_formfields") || "[]"));
       setCurrentUserName(localStorage.getItem("crm_cache_username") || "");
     } catch {}
   }, []);
