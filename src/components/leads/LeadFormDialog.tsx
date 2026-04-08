@@ -73,13 +73,17 @@ export default function LeadFormDialog({
     if (!isFieldVisible(parent)) return false;
     if (!field.parent_trigger_value) return true;
     const parentValue = formData[`field_${parent.id}`];
-    // Support both JSON array and single string
+    // Support both JSON array and single string for trigger values
     let triggerValues: string[];
     try {
       const parsed = JSON.parse(field.parent_trigger_value);
       triggerValues = Array.isArray(parsed) ? parsed : [field.parent_trigger_value];
     } catch {
       triggerValues = [field.parent_trigger_value];
+    }
+    // parentValue can be a string (select) or array (checkbox_group)
+    if (Array.isArray(parentValue)) {
+      return parentValue.some((v: string) => triggerValues.includes(v));
     }
     return triggerValues.includes(parentValue);
   };
