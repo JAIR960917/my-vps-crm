@@ -46,12 +46,15 @@ export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onD
         </div>
       </div>
 
-      {columns.slice(2, 4).map((col) =>
-        data[col.field_key] ? (
-          <p key={col.field_key} className="text-xs text-muted-foreground mt-1 truncate">
-            <span className="font-medium">{col.name}:</span> {data[col.field_key]}
-          </p>
-        ) : null
+      {data.forma_captacao && (
+        <p className="text-xs text-muted-foreground mt-1 truncate">
+          <span className="font-medium">Captação:</span> {data.forma_captacao}
+        </p>
+      )}
+      {data.cidade_uf && (
+        <p className="text-xs text-muted-foreground mt-1 truncate">
+          <span className="font-medium">Cidade:</span> {data.cidade_uf}
+        </p>
       )}
 
       {assignedProfile && (
