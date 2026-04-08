@@ -66,6 +66,10 @@ export default function LeadsPage() {
   // Mobile: active tab for status columns
   const [mobileTab, setMobileTab] = useState<string>("");
 
+  // Offline sync tracking
+  const [offlineIds, setOfflineIds] = useState<Set<string>>(new Set());
+  const [recentlySyncedIds, setRecentlySyncedIds] = useState<Set<string>>(new Set());
+
   // Inline rename state
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");

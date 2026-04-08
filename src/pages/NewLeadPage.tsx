@@ -109,8 +109,8 @@ export default function NewLeadPage() {
   // Sync offline queue when online
   useEffect(() => {
     if (isOnline) {
-      syncOfflineQueue().then((synced) => {
-        if (synced > 0) toast.success(`${synced} lead(s) sincronizado(s)!`);
+      syncOfflineQueue().then((syncedIds) => {
+        if (syncedIds.length > 0) toast.success(`${syncedIds.length} lead(s) sincronizado(s)!`);
       });
     }
   }, [isOnline]);
