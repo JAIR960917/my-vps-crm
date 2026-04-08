@@ -11,6 +11,16 @@ function isIOS() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 }
 
+function isSafariOnIOS() {
+  if (!isIOS()) return false;
+
+  const ua = navigator.userAgent;
+  const isSafari = /Safari/i.test(ua);
+  const excludedBrowsers = /CriOS|FxiOS|EdgiOS|OPiOS|OPT|DuckDuckGo|YaBrowser|UCBrowser|MiuiBrowser|SamsungBrowser|Instagram|FBAN|FBAV|Line|MicroMessenger|WhatsApp/i;
+
+  return isSafari && !excludedBrowsers.test(ua);
+}
+
 function isInStandaloneMode() {
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -21,6 +31,7 @@ function isInStandaloneMode() {
 export function usePwaInstall() {
   const [canInstall, setCanInstall] = useState(false);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const isiOSSafari = isSafariOnIOS();
 
   useEffect(() => {
     // If already in standalone, no install needed
@@ -80,5 +91,13 @@ export function usePwaInstall() {
     localStorage.setItem("ios-install-dismissed", "1");
   };
 
-  return { canInstall, install, showIOSGuide, dismissIOSGuide, isIOS: isIOS() };
+  return {
+    canInstall,
+    install,
+    showIOSGuide,
+    dismissIOSGuide,
+    isIOS: isIOS(),
+    isIOSSafari: isiOSSafari,
+    isIOSExternalBrowser: isIOS() && !isiOSSafari,
+  };
 }
