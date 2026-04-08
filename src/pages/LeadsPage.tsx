@@ -322,7 +322,6 @@ export default function LeadsPage() {
       <LeadFormDialog
         open={open}
         onOpenChange={setOpen}
-        columns={columns}
         profiles={profiles}
         companies={companies}
         currentUserName={currentUserName}

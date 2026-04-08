@@ -9,6 +9,7 @@ import LeadsPage from "./pages/LeadsPage";
 import UsersPage from "./pages/UsersPage";
 import ColumnsPage from "./pages/ColumnsPage";
 import CompaniesPage from "./pages/CompaniesPage";
+import FormBuilderPage from "./pages/FormBuilderPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/usuarios" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
             <Route path="/empresas" element={<ProtectedRoute><CompaniesPage /></ProtectedRoute>} />
             <Route path="/colunas" element={<ProtectedRoute><ColumnsPage /></ProtectedRoute>} />
+            <Route path="/formulario" element={<ProtectedRoute><FormBuilderPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

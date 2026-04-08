@@ -1,6 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2 } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -15,6 +15,7 @@ const navItems: NavItem[] = [
   { path: "/usuarios", label: "Usuários", icon: Users, roles: ["admin", "gerente"] },
   { path: "/empresas", label: "Empresas", icon: Building2, roles: ["admin"] },
   { path: "/colunas", label: "Colunas CRM", icon: Columns3, roles: ["admin"] },
+  { path: "/formulario", label: "Formulário", icon: FileText, roles: ["admin"] },
 ];
 
 interface Props {
