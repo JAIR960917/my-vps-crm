@@ -414,7 +414,23 @@ export default function NewLeadPage() {
             </Button>
           )}
           {step < totalSteps - 1 ? (
-            <Button className="flex-1" onClick={() => setStep(step + 1)} disabled={step === 0 && !formStatus}>
+            <Button className="flex-1" onClick={() => {
+              // Validate required fields on current page
+              if (step > 0) {
+                const missing = currentPageFields.filter(f => {
+                  if (!f.is_required) return false;
+                  const val = formData[`field_${f.id}`];
+                  if (val === undefined || val === null || val === "") return true;
+                  if (Array.isArray(val) && val.length === 0) return true;
+                  return false;
+                });
+                if (missing.length > 0) {
+                  toast.error(`Preencha o campo obrigatório: ${missing[0].label}`);
+                  return;
+                }
+              }
+              setStep(step + 1);
+            }} disabled={step === 0 && !formStatus}>
               Próximo <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           ) : (
