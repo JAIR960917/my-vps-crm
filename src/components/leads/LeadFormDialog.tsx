@@ -20,6 +20,7 @@ type FormField = {
   is_required: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
+  status_mapping: Record<string, string> | null;
 };
 
 type Props = {
@@ -163,6 +164,8 @@ export default function LeadFormDialog({
     );
   };
 
+  const hasMappingField = fields.some(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
@@ -181,18 +184,25 @@ export default function LeadFormDialog({
             <Input value={currentUserName || "—"} readOnly className="bg-muted" />
           </div>
 
-          {/* Status column selection */}
-          <div className="space-y-2">
-            <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
-            <Select value={formStatus} onValueChange={setFormStatus}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((s) => (
-                  <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Status column selection - hide when auto-mapping on create */}
+          {(isEditing || !hasMappingField) && (
+            <div className="space-y-2">
+              <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
+              <Select value={formStatus} onValueChange={setFormStatus}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((s) => (
+                    <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {!isEditing && hasMappingField && (
+            <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+              ℹ️ A coluna será definida automaticamente com base nas respostas.
+            </p>
+          )}
 
           {isEditing && (
             <div className="space-y-2">

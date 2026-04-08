@@ -25,7 +25,7 @@ type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
 type Company = { id: string; name: string };
-type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean };
+type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean; status_mapping?: Record<string, string> | null };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -87,7 +87,7 @@ export default function LeadsPage() {
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
         supabase.from("companies").select("id, name").order("name"),
-        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card").order("position"),
+        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping").order("position"),
       ]);
       setColumns(cols || []);
       setLeads((lds || []) as Lead[]);
@@ -186,6 +186,24 @@ export default function LeadsPage() {
     setOpen(true);
   };
 
+  const resolveStatus = (data: Record<string, any>): string => {
+    const mappingField = formFields.find(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
+    if (!mappingField) return formStatus;
+    const fieldKey = `field_${mappingField.id}`;
+    const answer = data[fieldKey];
+    if (!answer || (typeof answer === "string" && !answer.trim())) {
+      return statuses.length > 0 ? statuses[0].key : formStatus;
+    }
+    const mapping = mappingField.status_mapping!;
+    if (typeof answer === "string" && mapping[answer]) return mapping[answer];
+    if (Array.isArray(answer)) {
+      for (const v of answer) {
+        if (mapping[v]) return mapping[v];
+      }
+    }
+    return statuses.length > 0 ? statuses[0].key : formStatus;
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -196,8 +214,9 @@ export default function LeadsPage() {
       if (error) toast.error("Erro ao atualizar");
       else toast.success("Lead atualizado");
     } else {
+      const resolvedStatus = resolveStatus(formData);
       const { error } = await supabase.from("crm_leads").insert({
-        data: formData, status: formStatus,
+        data: formData, status: resolvedStatus,
         assigned_to: formAssigned || null, created_by: user!.id,
       });
       if (error) toast.error("Erro ao criar lead");
