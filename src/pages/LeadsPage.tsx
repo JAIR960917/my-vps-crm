@@ -210,7 +210,7 @@ export default function LeadsPage() {
             {leads.length} lead{leads.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button size="sm" className="shrink-0" onClick={() => openCreate()}>
+        <Button size="sm" className="shrink-0" onClick={() => navigate("/novo-lead")}>
           <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo </span>Lead
         </Button>
         {isAdmin && (
