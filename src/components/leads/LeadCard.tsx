@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, User, MessageSquare, CloudOff, CheckCircle2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-type Profile = { user_id: string; full_name: string; email?: string };
+type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 
 type FormFieldInfo = {
   id: string;
@@ -132,9 +133,12 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
         <div className="mt-2 pt-2 border-t">
           <p className="text-[11px] text-muted-foreground leading-tight">Pessoa responsável</p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
-              <User className="h-3 w-3 text-primary" />
-            </div>
+            <Avatar className="h-5 w-5 text-[9px]">
+              <AvatarImage src={assignedProfile.avatar_url ?? undefined} />
+              <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
+                {(assignedProfile.full_name || "?").slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
             <span className="text-xs font-medium text-foreground truncate">
               {assignedProfile.full_name || assignedProfile.email}
             </span>

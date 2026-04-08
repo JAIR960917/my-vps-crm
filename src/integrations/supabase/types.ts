@@ -317,6 +317,7 @@ export type Database = {
       get_profile_names: {
         Args: never
         Returns: {
+          avatar_url: string
           full_name: string
           user_id: string
         }[]
