@@ -11,6 +11,7 @@ import { Plus } from "lucide-react";
 import LeadCard from "@/components/leads/LeadCard";
 import LeadFormDialog from "@/components/leads/LeadFormDialog";
 import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
@@ -55,6 +56,7 @@ export default function LeadsPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
   const [historyLeadName, setHistoryLeadName] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   // Mobile: active tab for status columns
   const [mobileTab, setMobileTab] = useState<string>("");
 
@@ -296,10 +298,17 @@ export default function LeadsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from("crm_leads").delete().eq("id", id);
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmId) return;
+    const { error } = await supabase.from("crm_leads").delete().eq("id", deleteConfirmId);
     if (error) toast.error("Erro ao remover");
     else { toast.success("Lead removido"); fetchAll(); }
+    setDeleteConfirmId(null);
   };
+
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
@@ -507,6 +516,23 @@ export default function LeadsPage() {
         profiles={profiles}
         onNoteAdded={fetchAll}
       />
+
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir lead permanentemente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O lead e todas as suas informações serão removidos permanentemente do sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </AppLayout>
   );
