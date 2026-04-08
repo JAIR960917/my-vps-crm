@@ -128,7 +128,18 @@ export default function NewLeadPage() {
     if (!parent) return false;
     if (!isFieldVisible(parent)) return false;
     if (!field.parent_trigger_value) return true;
-    return formData[`field_${parent.id}`] === field.parent_trigger_value;
+    const parentValue = formData[`field_${parent.id}`];
+    let triggerValues: string[];
+    try {
+      const parsed = JSON.parse(field.parent_trigger_value);
+      triggerValues = Array.isArray(parsed) ? parsed : [field.parent_trigger_value];
+    } catch {
+      triggerValues = [field.parent_trigger_value];
+    }
+    if (Array.isArray(parentValue)) {
+      return parentValue.some((v: string) => triggerValues.includes(v));
+    }
+    return triggerValues.includes(parentValue);
   }, [fields, formData]);
 
   // Get visible root fields and their visible children flattened
