@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Pencil, Trash2, GripVertical, ChevronRight, CornerDownRight } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 
@@ -49,7 +50,7 @@ export default function FormBuilderPage() {
   const [isNameField, setIsNameField] = useState(false);
   const [isPhoneField, setIsPhoneField] = useState(false);
   const [parentFieldId, setParentFieldId] = useState<string>("__none__");
-  const [parentTriggerValue, setParentTriggerValue] = useState("");
+  const [parentTriggerValues, setParentTriggerValues] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const fetchFields = async () => {
@@ -70,20 +71,29 @@ export default function FormBuilderPage() {
     setIsNameField(false);
     setIsPhoneField(false);
     setParentFieldId("__none__");
-    setParentTriggerValue("");
+    setParentTriggerValues([]);
     setEditingField(null);
   };
 
   const openCreate = (parentId?: string, triggerVal?: string) => {
     resetForm();
     if (parentId) {
-      // Use setTimeout to ensure state is reset before setting parent
       setTimeout(() => {
         setParentFieldId(parentId);
-        setParentTriggerValue(triggerVal || "");
+        setParentTriggerValues(triggerVal ? [triggerVal] : []);
       }, 0);
     }
     setDialogOpen(true);
+  };
+
+  // Parse stored trigger value(s) - supports both old single string and new JSON array
+  const parseTriggerValues = (val: string | null): string[] => {
+    if (!val) return [];
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+    return val ? [val] : [];
   };
 
   const openEdit = (field: FormField) => {
@@ -95,7 +105,7 @@ export default function FormBuilderPage() {
     setIsNameField(field.is_name_field);
     setIsPhoneField(field.is_phone_field);
     setParentFieldId(field.parent_field_id || "__none__");
-    setParentTriggerValue(field.parent_trigger_value || "");
+    setParentTriggerValues(parseTriggerValues(field.parent_trigger_value));
     setDialogOpen(true);
   };
 
@@ -115,7 +125,7 @@ export default function FormBuilderPage() {
       is_name_field: isNameField,
       is_phone_field: isPhoneField,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
-      parent_trigger_value: parentFieldId === "__none__" ? null : parentTriggerValue || null,
+      parent_trigger_value: parentFieldId === "__none__" ? null : (parentTriggerValues.length > 0 ? JSON.stringify(parentTriggerValues) : null),
     };
 
     if (editingField) {
@@ -222,11 +232,14 @@ export default function FormBuilderPage() {
                   📞 Telefone
                 </span>
               )}
-              {field.parent_trigger_value && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                  Quando: "{field.parent_trigger_value}"
-                </span>
-              )}
+              {field.parent_trigger_value && (() => {
+                const vals = parseTriggerValues(field.parent_trigger_value);
+                return (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                    Quando: {vals.map(v => `"${v}"`).join(", ")}
+                  </span>
+                );
+              })()}
               {field.options && field.options.length > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {field.options.length} opções
@@ -259,7 +272,10 @@ export default function FormBuilderPage() {
 
         {/* Render children grouped by trigger value */}
         {hasOptions && field.options!.map((opt) => {
-          const optChildren = children.filter((c) => c.parent_trigger_value === opt);
+          const optChildren = children.filter((c) => {
+            const triggerVals = parseTriggerValues(c.parent_trigger_value);
+            return triggerVals.includes(opt);
+          });
           if (optChildren.length === 0) return null;
           return (
             <div key={opt}>
@@ -373,7 +389,7 @@ export default function FormBuilderPage() {
             {/* Conditional parent */}
             <div className="space-y-2">
               <Label>Condicional (aparece dentro de outra pergunta)</Label>
-              <Select value={parentFieldId} onValueChange={(v) => { setParentFieldId(v); setParentTriggerValue(""); }}>
+              <Select value={parentFieldId} onValueChange={(v) => { setParentFieldId(v); setParentTriggerValues([]); }}>
                 <SelectTrigger><SelectValue placeholder="Nenhuma (pergunta raiz)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Nenhuma (pergunta raiz)</SelectItem>
@@ -388,15 +404,31 @@ export default function FormBuilderPage() {
 
             {parentFieldId !== "__none__" && (
               <div className="space-y-2">
-                <Label>Aparece quando a resposta for</Label>
-                <Select value={parentTriggerValue} onValueChange={setParentTriggerValue}>
-                  <SelectTrigger><SelectValue placeholder="Qualquer resposta" /></SelectTrigger>
-                  <SelectContent>
-                    {getParentOptions(parentFieldId).map((opt) => (
-                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Aparece quando a resposta for (selecione uma ou mais)</Label>
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border rounded-md bg-muted/30">
+                  {getParentOptions(parentFieldId).map((opt) => {
+                    const checked = parentTriggerValues.includes(opt);
+                    return (
+                      <label
+                        key={opt}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm cursor-pointer transition-colors ${
+                          checked ? "bg-primary/10 border-primary text-primary" : "bg-background border-border text-foreground hover:bg-muted"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => {
+                            setParentTriggerValues(prev =>
+                              prev.includes(opt) ? prev.filter(v => v !== opt) : [...prev, opt]
+                            );
+                          }}
+                          className="h-3.5 w-3.5"
+                        />
+                        {opt}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

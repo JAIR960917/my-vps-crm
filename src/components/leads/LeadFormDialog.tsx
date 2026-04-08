@@ -73,7 +73,15 @@ export default function LeadFormDialog({
     if (!isFieldVisible(parent)) return false;
     if (!field.parent_trigger_value) return true;
     const parentValue = formData[`field_${parent.id}`];
-    return parentValue === field.parent_trigger_value;
+    // Support both JSON array and single string
+    let triggerValues: string[];
+    try {
+      const parsed = JSON.parse(field.parent_trigger_value);
+      triggerValues = Array.isArray(parsed) ? parsed : [field.parent_trigger_value];
+    } catch {
+      triggerValues = [field.parent_trigger_value];
+    }
+    return triggerValues.includes(parentValue);
   };
 
   const renderFormField = (field: FormField) => {
