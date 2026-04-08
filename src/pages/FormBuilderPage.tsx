@@ -71,8 +71,11 @@ export default function FormBuilderPage() {
   const openCreate = (parentId?: string, triggerVal?: string) => {
     resetForm();
     if (parentId) {
-      setParentFieldId(parentId);
-      setParentTriggerValue(triggerVal || "");
+      // Use setTimeout to ensure state is reset before setting parent
+      setTimeout(() => {
+        setParentFieldId(parentId);
+        setParentTriggerValue(triggerVal || "");
+      }, 0);
     }
     setDialogOpen(true);
   };
@@ -162,8 +165,8 @@ export default function FormBuilderPage() {
   const getChildren = (parentId: string) =>
     fields.filter((f) => f.parent_field_id === parentId).sort((a, b) => a.position - b.position);
 
-  // Get possible parent fields (only select types that have options)
-  const selectFields = fields.filter((f) => f.field_type === "select" && f.options && f.options.length > 0);
+  // Get possible parent fields (select or checkbox_group with options)
+  const parentCandidates = fields.filter((f) => ["select", "checkbox_group"].includes(f.field_type) && f.options && f.options.length > 0);
 
   // Get parent trigger options
   const getParentOptions = (parentId: string): string[] => {
@@ -175,7 +178,7 @@ export default function FormBuilderPage() {
 
   const renderField = (field: FormField, depth: number = 0) => {
     const children = getChildren(field.id);
-    const hasOptions = field.field_type === "select" && field.options && field.options.length > 0;
+    const hasOptions = ["select", "checkbox_group"].includes(field.field_type) && field.options && field.options.length > 0;
 
     return (
       <div key={field.id}>
@@ -344,7 +347,7 @@ export default function FormBuilderPage() {
                 <SelectTrigger><SelectValue placeholder="Nenhuma (pergunta raiz)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Nenhuma (pergunta raiz)</SelectItem>
-                  {selectFields
+                  {parentCandidates
                     .filter((f) => f.id !== editingField?.id)
                     .map((f) => (
                       <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>

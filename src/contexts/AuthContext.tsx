@@ -22,35 +22,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
+    // Timeout to prevent infinite loading (e.g. offline)
+    const timeout = setTimeout(() => {
+      if (mounted && loading) setLoading(false);
+    }, 5000);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!mounted) return;
         setSession(session);
         if (session?.user) {
           const { data } = await supabase
             .from("user_roles")
             .select("role")
             .eq("user_id", session.user.id);
-          setRoles((data || []).map((r) => r.role as AppRole));
+          if (mounted) setRoles((data || []).map((r) => r.role as AppRole));
         } else {
           setRoles([]);
         }
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     );
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
       setSession(session);
       if (session?.user) {
         const { data } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", session.user.id);
-        setRoles((data || []).map((r) => r.role as AppRole));
+        if (mounted) setRoles((data || []).map((r) => r.role as AppRole));
       }
-      setLoading(false);
+      if (mounted) setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
