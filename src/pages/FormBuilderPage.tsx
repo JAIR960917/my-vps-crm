@@ -231,11 +231,14 @@ export default function FormBuilderPage() {
                   📞 Telefone
                 </span>
               )}
-              {field.parent_trigger_value && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                  Quando: "{field.parent_trigger_value}"
-                </span>
-              )}
+              {field.parent_trigger_value && (() => {
+                const vals = parseTriggerValues(field.parent_trigger_value);
+                return (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                    Quando: {vals.map(v => `"${v}"`).join(", ")}
+                  </span>
+                );
+              })()}
               {field.options && field.options.length > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {field.options.length} opções
@@ -268,7 +271,10 @@ export default function FormBuilderPage() {
 
         {/* Render children grouped by trigger value */}
         {hasOptions && field.options!.map((opt) => {
-          const optChildren = children.filter((c) => c.parent_trigger_value === opt);
+          const optChildren = children.filter((c) => {
+            const triggerVals = parseTriggerValues(c.parent_trigger_value);
+            return triggerVals.includes(opt);
+          });
           if (optChildren.length === 0) return null;
           return (
             <div key={opt}>
