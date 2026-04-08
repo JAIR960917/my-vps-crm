@@ -42,12 +42,18 @@ function applyCSS(s: Settings) {
   root.style.setProperty("--sidebar-primary", s.primary_color);
   root.style.setProperty("--sidebar-ring", s.primary_color);
 
-  // Only apply dark overrides when in dark mode
   if (root.classList.contains("dark")) {
+    // Apply dark overrides
     root.style.setProperty("--background", s.background_color);
     root.style.setProperty("--foreground", s.text_color);
     root.style.setProperty("--card-foreground", s.text_color);
     root.style.setProperty("--popover-foreground", s.text_color);
+  } else {
+    // Remove inline overrides so light-mode CSS variables from index.css take effect
+    root.style.removeProperty("--background");
+    root.style.removeProperty("--foreground");
+    root.style.removeProperty("--card-foreground");
+    root.style.removeProperty("--popover-foreground");
   }
 
   // Update favicon dynamically
@@ -61,7 +67,6 @@ function applyCSS(s: Settings) {
     link.type = "image/png";
     link.href = s.logo_url;
 
-    // Also update apple-touch-icon
     let appleLink = document.querySelector<HTMLLinkElement>("link[rel='apple-touch-icon']");
     if (appleLink) {
       appleLink.href = s.logo_url;
