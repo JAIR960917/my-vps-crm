@@ -21,6 +21,8 @@ type FormField = {
   is_required: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
+  is_name_field: boolean;
+  is_phone_field: boolean;
 };
 
 const FIELD_TYPES = [
@@ -44,6 +46,8 @@ export default function FormBuilderPage() {
   const [fieldType, setFieldType] = useState("text");
   const [options, setOptions] = useState("");
   const [isRequired, setIsRequired] = useState(false);
+  const [isNameField, setIsNameField] = useState(false);
+  const [isPhoneField, setIsPhoneField] = useState(false);
   const [parentFieldId, setParentFieldId] = useState<string>("__none__");
   const [parentTriggerValue, setParentTriggerValue] = useState("");
   const [saving, setSaving] = useState(false);
@@ -63,6 +67,8 @@ export default function FormBuilderPage() {
     setFieldType("text");
     setOptions("");
     setIsRequired(false);
+    setIsNameField(false);
+    setIsPhoneField(false);
     setParentFieldId("__none__");
     setParentTriggerValue("");
     setEditingField(null);
@@ -86,6 +92,8 @@ export default function FormBuilderPage() {
     setFieldType(field.field_type);
     setOptions(field.options ? field.options.join(", ") : "");
     setIsRequired(field.is_required);
+    setIsNameField(field.is_name_field);
+    setIsPhoneField(field.is_phone_field);
     setParentFieldId(field.parent_field_id || "__none__");
     setParentTriggerValue(field.parent_trigger_value || "");
     setDialogOpen(true);
@@ -104,6 +112,8 @@ export default function FormBuilderPage() {
       field_type: fieldType,
       options: parsedOptions,
       is_required: isRequired,
+      is_name_field: isNameField,
+      is_phone_field: isPhoneField,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
       parent_trigger_value: parentFieldId === "__none__" ? null : parentTriggerValue || null,
     };
@@ -202,6 +212,16 @@ export default function FormBuilderPage() {
               <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                 {typeLabel(field.field_type)}
               </span>
+              {field.is_name_field && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                  📛 Nome
+                </span>
+              )}
+              {field.is_phone_field && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                  📞 Telefone
+                </span>
+              )}
               {field.parent_trigger_value && (
                 <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                   Quando: "{field.parent_trigger_value}"
@@ -338,6 +358,16 @@ export default function FormBuilderPage() {
             <div className="flex items-center gap-2">
               <Switch checked={isRequired} onCheckedChange={setIsRequired} />
               <Label>Obrigatório</Label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch checked={isNameField} onCheckedChange={(v) => { setIsNameField(v); if (v) setIsPhoneField(false); }} />
+              <Label>Este campo é o nome do cliente</Label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch checked={isPhoneField} onCheckedChange={(v) => { setIsPhoneField(v); if (v) setIsNameField(false); }} />
+              <Label>Este campo é o telefone</Label>
             </div>
 
             {/* Conditional parent */}

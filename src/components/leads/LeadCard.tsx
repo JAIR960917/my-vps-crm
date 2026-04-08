@@ -5,9 +5,17 @@ import { ptBR } from "date-fns/locale";
 
 type Profile = { user_id: string; full_name: string; email?: string };
 
+type FormFieldInfo = {
+  id: string;
+  label: string;
+  is_name_field?: boolean;
+  is_phone_field?: boolean;
+};
+
 type LeadCardProps = {
   lead: { id: string; data: Record<string, any>; assigned_to: string | null; status: string; created_at: string };
   columns: { field_key: string; name: string }[];
+  formFields: FormFieldInfo[];
   profiles: Profile[];
   isAdmin: boolean;
   onEdit: () => void;
@@ -16,17 +24,26 @@ type LeadCardProps = {
   syncStatus?: "offline" | "synced" | null;
 };
 
-export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onDelete, onHistory, syncStatus }: LeadCardProps) {
+export default function LeadCard({ lead, columns, formFields, profiles, isAdmin, onEdit, onDelete, onHistory, syncStatus }: LeadCardProps) {
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
 
-  // First column value as the main name, fallback
-  const displayName = (columns[0] && data[columns[0].field_key]) || data.nome_lead || "Sem nome";
+  // Find name and phone from form field flags
+  const nameField = formFields.find((f) => f.is_name_field);
+  const phoneField = formFields.find((f) => f.is_phone_field);
+
+  const displayName = (nameField ? data[`field_${nameField.id}`] : null)
+    || data.nome_lead
+    || (columns[0] && data[columns[0].field_key])
+    || "Sem nome";
+
+  const displayPhone = (phoneField ? data[`field_${phoneField.id}`] : null)
+    || data.telefone
+    || null;
 
   const isOffline = syncStatus === "offline";
   const isSynced = syncStatus === "synced";
 
-  // Format created_at date
   let createdDate = "";
   try {
     createdDate = format(new Date(lead.created_at), "d 'de' MMMM", { locale: ptBR });
@@ -34,11 +51,18 @@ export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onD
     createdDate = "";
   }
 
+  // Other fields to display (exclude name and phone fields)
+  const nameFieldId = nameField?.id;
+  const phoneFieldId = phoneField?.id;
+  const otherFields = formFields.filter(
+    (f) => f.id !== nameFieldId && f.id !== phoneFieldId
+  );
+
   return (
     <div className={`rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group ${
       isOffline ? "border-amber-500/50 bg-amber-500/5" : isSynced ? "border-emerald-500/50 bg-emerald-500/5" : ""
     }`}>
-      {/* Header: name + date + actions */}
+      {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
           {syncStatus && (
@@ -81,13 +105,21 @@ export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onD
         <p className="text-xs text-emerald-500 mt-1 font-medium">Sincronizado ✓</p>
       )}
 
-      {/* Dynamic fields from columns (skip first one since it's the title) */}
-      {columns.slice(1).map((col) => {
-        const value = data[col.field_key];
+      {/* Phone */}
+      {displayPhone && (
+        <div className="mt-1.5">
+          <p className="text-[11px] text-muted-foreground leading-tight">Telefone</p>
+          <p className="text-xs font-medium text-foreground">{displayPhone}</p>
+        </div>
+      )}
+
+      {/* Other dynamic fields */}
+      {otherFields.map((f) => {
+        const value = data[`field_${f.id}`];
         if (value === undefined || value === null || value === "") return null;
         return (
-          <div key={col.field_key} className="mt-1.5">
-            <p className="text-[11px] text-muted-foreground leading-tight">{col.name}</p>
+          <div key={f.id} className="mt-1.5">
+            <p className="text-[11px] text-muted-foreground leading-tight">{f.label}</p>
             <p className="text-xs font-medium text-foreground truncate">{String(value)}</p>
           </div>
         );

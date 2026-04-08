@@ -29,6 +29,7 @@ type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
 type Company = { id: string; name: string };
+type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -47,6 +48,7 @@ export default function LeadsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [formFields, setFormFields] = useState<FormFieldInfo[]>([]);
   const [currentUserName, setCurrentUserName] = useState("");
   const [open, setOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -82,6 +84,7 @@ export default function LeadsPage() {
       setProfiles(JSON.parse(localStorage.getItem("crm_cache_profiles") || "[]"));
       setStatuses(JSON.parse(localStorage.getItem("crm_cache_statuses_full") || "[]"));
       setCompanies(JSON.parse(localStorage.getItem("crm_cache_companies") || "[]"));
+      setFormFields(JSON.parse(localStorage.getItem("crm_cache_formfields") || "[]"));
       setCurrentUserName(localStorage.getItem("crm_cache_username") || "");
     } catch {}
   }, []);
@@ -93,18 +96,20 @@ export default function LeadsPage() {
     if (!navigator.onLine) return;
 
     try {
-      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }] = await Promise.all([
+      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }, { data: ff }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
         supabase.from("companies").select("id, name").order("name"),
+        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field").order("position"),
       ]);
       setColumns(cols || []);
       setLeads((lds || []) as Lead[]);
       setProfiles(profs || []);
       setStatuses((sts || []) as CrmStatus[]);
       setCompanies((comps || []) as Company[]);
+      setFormFields((ff || []) as FormFieldInfo[]);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
 
@@ -115,6 +120,7 @@ export default function LeadsPage() {
         localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
         localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
+        localStorage.setItem("crm_cache_formfields", JSON.stringify(ff || []));
         const me2 = (profs || []).find((p: Profile) => p.user_id === user?.id);
         localStorage.setItem("crm_cache_username", me2?.full_name || user?.email || "");
       } catch {}
@@ -385,6 +391,7 @@ export default function LeadsPage() {
                   <LeadCard
                     lead={lead}
                     columns={columns}
+                    formFields={formFields}
                     profiles={profiles}
                     isAdmin={isAdmin}
                     syncStatus={getSyncStatus(lead.id)}
@@ -393,7 +400,8 @@ export default function LeadsPage() {
                     onHistory={() => {
                       const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
                       setHistoryLeadId(lead.id);
-                      setHistoryLeadName(data.nome_lead || (columns[0] ? data[columns[0].field_key] : null) || "Lead");
+                      const nf = formFields.find(f => f.is_name_field);
+                      setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                       setHistoryOpen(true);
                     }}
                   />
@@ -480,6 +488,7 @@ export default function LeadsPage() {
                               <LeadCard
                                 lead={lead}
                                 columns={columns}
+                                formFields={formFields}
                                 profiles={profiles}
                                 isAdmin={isAdmin}
                                 syncStatus={getSyncStatus(lead.id)}
@@ -488,7 +497,8 @@ export default function LeadsPage() {
                                 onHistory={() => {
                                   const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
                                   setHistoryLeadId(lead.id);
-                                  setHistoryLeadName(data.nome_lead || (columns[0] ? data[columns[0].field_key] : null) || "Lead");
+                                  const nf = formFields.find(f => f.is_name_field);
+                                  setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                                   setHistoryOpen(true);
                                 }}
                               />
