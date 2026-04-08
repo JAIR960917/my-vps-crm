@@ -56,7 +56,7 @@ export default function LeadFormDialog({
         .from("crm_form_fields")
         .select("*")
         .order("position")
-        .then(({ data }) => setFields((data || []) as FormField[]));
+        .then(({ data }) => setFields((data || []) as unknown as FormField[]));
     }
   }, [open]);
 

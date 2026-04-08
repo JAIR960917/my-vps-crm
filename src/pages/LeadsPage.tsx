@@ -94,7 +94,7 @@ export default function LeadsPage() {
       setProfiles(profs || []);
       setStatuses((sts || []) as CrmStatus[]);
       setCompanies((comps || []) as Company[]);
-      setFormFields((ff || []) as FormFieldInfo[]);
+      setFormFields((ff || []) as unknown as FormFieldInfo[]);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
 
