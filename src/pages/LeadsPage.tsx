@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,6 +62,9 @@ export default function LeadsPage() {
   const [newColColor, setNewColColor] = useState("blue");
   const [savingCol, setSavingCol] = useState(false);
 
+  // Mobile: active tab for status columns
+  const [mobileTab, setMobileTab] = useState<string>("");
+
   // Inline rename state
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -85,7 +88,16 @@ export default function LeadsPage() {
     setCurrentUserName(me?.full_name || user?.email || "");
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  // Set default mobile tab when statuses load
+  useEffect(() => {
+    if (statuses.length > 0 && !mobileTab) {
+      setMobileTab(statuses[0].key);
+    }
+  }, [statuses]);
 
   // Derive labels and options from DB statuses
   const statusOptions = statuses.map(s => s.key);
