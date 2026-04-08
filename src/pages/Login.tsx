@@ -15,11 +15,17 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      toast.error("Credenciais inválidas");
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        toast.error("Credenciais inválidas");
+        setLoading(false);
+      }
+      // Don't setLoading(false) on success — keep spinner until redirect
+    } catch {
+      toast.error("Erro de conexão");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
