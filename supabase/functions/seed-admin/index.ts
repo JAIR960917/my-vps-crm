@@ -15,7 +15,6 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Accept credentials from request body
   const { email, password, full_name } = await req.json();
 
   if (!email || !password) {
@@ -25,7 +24,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Check if any admin already exists
+  // Check if any admin already exists — this is the ONLY time this function works
   const { data: existingAdmins } = await supabaseAdmin
     .from("user_roles")
     .select("id")
@@ -33,7 +32,16 @@ Deno.serve(async (req) => {
     .limit(1);
 
   if (existingAdmins && existingAdmins.length > 0) {
-    return new Response(JSON.stringify({ message: "Admin already exists" }), {
+    return new Response(JSON.stringify({ error: "Acesso negado" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Validate input lengths to prevent abuse
+  if (email.length > 254 || password.length < 8 || password.length > 128) {
+    return new Response(JSON.stringify({ error: "Email ou senha inválidos" }), {
+      status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -47,7 +55,7 @@ Deno.serve(async (req) => {
   });
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: "Falha ao criar usuário" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -59,7 +67,7 @@ Deno.serve(async (req) => {
     role: "admin",
   });
 
-  return new Response(JSON.stringify({ message: "Admin created", userId: user.user.id }), {
+  return new Response(JSON.stringify({ message: "Admin criado com sucesso" }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 });
