@@ -77,6 +77,50 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_form_fields: {
+        Row: {
+          created_at: string
+          field_type: string
+          id: string
+          is_required: boolean
+          label: string
+          options: Json | null
+          parent_field_id: string | null
+          parent_trigger_value: string | null
+          position: number
+        }
+        Insert: {
+          created_at?: string
+          field_type?: string
+          id?: string
+          is_required?: boolean
+          label: string
+          options?: Json | null
+          parent_field_id?: string | null
+          parent_trigger_value?: string | null
+          position?: number
+        }
+        Update: {
+          created_at?: string
+          field_type?: string
+          id?: string
+          is_required?: boolean
+          label?: string
+          options?: Json | null
+          parent_field_id?: string | null
+          parent_trigger_value?: string | null
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_form_fields_parent_field_id_fkey"
+            columns: ["parent_field_id"]
+            isOneToOne: false
+            referencedRelation: "crm_form_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_lead_notes: {
         Row: {
           content: string
