@@ -19,13 +19,36 @@ export function usePwaInstall() {
 
     window.addEventListener("beforeinstallprompt", handler);
 
-    // Check if already installed
-    const mediaQuery = window.matchMedia("(display-mode: standalone)");
-    if (mediaQuery.matches) {
+    // If app is running in standalone mode, hide the button
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as any).standalone === true;
+
+    if (isStandalone) {
       setCanInstall(false);
     }
 
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    // Listen for app being installed — hide button
+    const onInstalled = () => {
+      setCanInstall(false);
+      deferredPrompt = null;
+    };
+    window.addEventListener("appinstalled", onInstalled);
+
+    // Listen for display-mode changes (uninstall returns to browser)
+    const mq = window.matchMedia("(display-mode: standalone)");
+    const onDisplayChange = (e: MediaQueryListEvent) => {
+      if (!e.matches && deferredPrompt) {
+        setCanInstall(true);
+      }
+    };
+    mq.addEventListener("change", onDisplayChange);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", onInstalled);
+      mq.removeEventListener("change", onDisplayChange);
+    };
   }, []);
 
   const install = async () => {
