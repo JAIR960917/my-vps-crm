@@ -3,17 +3,31 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, LogOut, Columns3, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
+type NavItem = {
+  path: string;
+  label: string;
+  icon: any;
+  roles?: ("admin" | "gerente")[];
+};
+
+const navItems: NavItem[] = [
   { path: "/", label: "Leads", icon: LayoutDashboard },
-  { path: "/usuarios", label: "Usuários", icon: Users, adminOnly: true },
-  { path: "/empresas", label: "Empresas", icon: Building2, adminOnly: true },
-  { path: "/colunas", label: "Colunas CRM", icon: Columns3, adminOnly: true },
+  { path: "/usuarios", label: "Usuários", icon: Users, roles: ["admin", "gerente"] },
+  { path: "/empresas", label: "Empresas", icon: Building2, roles: ["admin"] },
+  { path: "/colunas", label: "Colunas CRM", icon: Columns3, roles: ["admin"] },
 ];
 
 export default function AppSidebar() {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isGerente, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  const canSee = (item: NavItem) => {
+    if (!item.roles) return true;
+    if (isAdmin && item.roles.includes("admin")) return true;
+    if (isGerente && item.roles.includes("gerente")) return true;
+    return false;
+  };
 
   return (
     <aside className="flex h-screen w-60 flex-col bg-sidebar text-sidebar-foreground">
@@ -26,7 +40,7 @@ export default function AppSidebar() {
 
       <nav className="flex-1 space-y-1 px-3 py-2">
         {navItems
-          .filter((item) => !item.adminOnly || isAdmin)
+          .filter(canSee)
           .map((item) => (
             <button
               key={item.path}

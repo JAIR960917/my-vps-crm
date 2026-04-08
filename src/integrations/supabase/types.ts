@@ -200,6 +200,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_my_company_id: { Args: never; Returns: string }
       get_profile_names: {
         Args: never
         Returns: {
@@ -214,6 +215,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_same_company: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "vendedor" | "gerente"

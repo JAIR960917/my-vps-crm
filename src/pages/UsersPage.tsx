@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 
 type Company = { id: string; name: string };
 
@@ -28,7 +28,9 @@ type UserRole = {
 };
 
 export default function UsersPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isGerente } = useAuth();
+  const canManage = isAdmin || isGerente;
+
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [open, setOpen] = useState(false);
@@ -68,7 +70,7 @@ export default function UsersPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!canManage) return;
     setCreating(true);
 
     const { data, error } = await supabase.functions.invoke("create-user", {
@@ -97,8 +99,13 @@ export default function UsersPage() {
     }
   };
 
-  if (!isAdmin) {
-    return <AppLayout><p className="text-muted-foreground">Acesso restrito a administradores.</p></AppLayout>;
+  // Available role options for gerentes (cannot create admins)
+  const roleOptions = isAdmin
+    ? [{ value: "admin", label: "Admin" }, { value: "gerente", label: "Gerente" }, { value: "vendedor", label: "Vendedor" }]
+    : [{ value: "gerente", label: "Gerente" }, { value: "vendedor", label: "Vendedor" }];
+
+  if (!canManage) {
+    return <AppLayout><p className="text-muted-foreground">Acesso restrito a administradores e gerentes.</p></AppLayout>;
   }
 
   return (
@@ -106,7 +113,9 @@ export default function UsersPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Usuários</h1>
-          <p className="text-sm text-muted-foreground">Gerencie os usuários do sistema</p>
+          <p className="text-sm text-muted-foreground">
+            {isGerente && !isAdmin ? "Usuários da sua empresa" : "Gerencie os usuários do sistema"}
+          </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -134,9 +143,9 @@ export default function UsersPage() {
                 <Select value={role} onValueChange={setRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="gerente">Gerente</SelectItem>
-                    <SelectItem value="vendedor">Vendedor</SelectItem>
+                    {roleOptions.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -155,7 +164,7 @@ export default function UsersPage() {
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Papel</TableHead>
-              <TableHead>Empresa</TableHead>
+              {isAdmin && <TableHead>Empresa</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -170,19 +179,21 @@ export default function UsersPage() {
                     ))}
                   </div>
                 </TableCell>
-                <TableCell>
-                  <Select value={p.company_id || "__none__"} onValueChange={(v) => handleAssignCompany(p.user_id, v)}>
-                    <SelectTrigger className="w-40 h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhuma</SelectItem>
-                      {companies.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
+                {isAdmin && (
+                  <TableCell>
+                    <Select value={p.company_id || "__none__"} onValueChange={(v) => handleAssignCompany(p.user_id, v)}>
+                      <SelectTrigger className="w-40 h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nenhuma</SelectItem>
+                        {companies.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
