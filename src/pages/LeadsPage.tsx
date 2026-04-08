@@ -129,24 +129,24 @@ export default function LeadsPage() {
 
   return (
     <AppLayout>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Leads</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold">Leads</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             {leads.length} lead{leads.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={() => openCreate()}>
-          <Plus className="mr-2 h-4 w-4" />Novo Lead
+        <Button size="sm" className="shrink-0" onClick={() => openCreate()}>
+          <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo </span>Lead
         </Button>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "calc(100vh - 180px)" }}>
+        <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0" style={{ minHeight: "calc(100vh - 200px)" }}>
           {STATUS_OPTIONS.map((status) => {
             const statusLeads = getLeadsByStatus(status);
             return (
-              <div key={status} className="flex-shrink-0 w-[280px] flex flex-col">
+              <div key={status} className="flex-shrink-0 w-[240px] sm:w-[280px] flex flex-col">
                 <div className="flex items-center gap-2 mb-2 px-1">
                   <div className={`h-2.5 w-2.5 rounded-full ${columnHeaderColors[status]}`} />
                   <h3 className="font-semibold text-sm text-foreground">{statusLabels[status]}</h3>

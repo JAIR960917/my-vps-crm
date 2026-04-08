@@ -7,10 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, User } from "lucide-react";
 
 type Company = { id: string; name: string };
 
@@ -40,7 +39,6 @@ export default function UsersPage() {
   const [role, setRole] = useState("vendedor");
   const [creating, setCreating] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState("");
 
   const fetchData = async () => {
     const [{ data: p }, { data: r }, { data: c }] = await Promise.all([
@@ -82,10 +80,7 @@ export default function UsersPage() {
     } else {
       toast.success("Usuário criado");
       setOpen(false);
-      setName("");
-      setEmail("");
-      setPassword("");
-      setRole("vendedor");
+      setName(""); setEmail(""); setPassword(""); setRole("vendedor");
       fetchData();
     }
     setCreating(false);
@@ -99,7 +94,6 @@ export default function UsersPage() {
     }
   };
 
-  // Available role options for gerentes (cannot create admins)
   const roleOptions = isAdmin
     ? [{ value: "admin", label: "Admin" }, { value: "gerente", label: "Gerente" }, { value: "vendedor", label: "Vendedor" }]
     : [{ value: "gerente", label: "Gerente" }, { value: "vendedor", label: "Vendedor" }];
@@ -110,21 +104,19 @@ export default function UsersPage() {
 
   return (
     <AppLayout>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Usuários</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold">Usuários</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             {isGerente && !isAdmin ? "Usuários da sua empresa" : "Gerencie os usuários do sistema"}
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" />Novo Usuário</Button>
+            <Button size="sm" className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" />Novo Usuário</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Criar Usuário</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>Criar Usuário</DialogTitle></DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
                 <Label>Nome completo</Label>
@@ -157,30 +149,31 @@ export default function UsersPage() {
         </Dialog>
       </div>
 
-      <div className="rounded-xl border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Papel</TableHead>
-              {isAdmin && <TableHead>Empresa</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      {/* Desktop table */}
+      <div className="hidden sm:block rounded-xl border bg-card overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left p-3 text-sm font-medium text-muted-foreground">Nome</th>
+              <th className="text-left p-3 text-sm font-medium text-muted-foreground">Email</th>
+              <th className="text-left p-3 text-sm font-medium text-muted-foreground">Papel</th>
+              {isAdmin && <th className="text-left p-3 text-sm font-medium text-muted-foreground">Empresa</th>}
+            </tr>
+          </thead>
+          <tbody>
             {profiles.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.full_name || "—"}</TableCell>
-                <TableCell>{p.email}</TableCell>
-                <TableCell>
+              <tr key={p.id} className="border-b last:border-0">
+                <td className="p-3 font-medium">{p.full_name || "—"}</td>
+                <td className="p-3 text-muted-foreground text-sm">{p.email}</td>
+                <td className="p-3">
                   <div className="flex gap-1">
                     {getRoles(p.user_id).map((r) => (
                       <Badge key={r} variant={roleBadgeVariant(r) as any}>{r}</Badge>
                     ))}
                   </div>
-                </TableCell>
+                </td>
                 {isAdmin && (
-                  <TableCell>
+                  <td className="p-3">
                     <Select value={p.company_id || "__none__"} onValueChange={(v) => handleAssignCompany(p.user_id, v)}>
                       <SelectTrigger className="w-40 h-8">
                         <SelectValue />
@@ -192,12 +185,50 @@ export default function UsersPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </TableCell>
+                  </td>
                 )}
-              </TableRow>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-3">
+        {profiles.map((p) => (
+          <div key={p.id} className="rounded-xl border bg-card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <User className="h-4 w-4 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-sm truncate">{p.full_name || "—"}</p>
+                <p className="text-xs text-muted-foreground truncate">{p.email}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              {getRoles(p.user_id).map((r) => (
+                <Badge key={r} variant={roleBadgeVariant(r) as any} className="text-xs">{r}</Badge>
+              ))}
+            </div>
+            {isAdmin && (
+              <Select value={p.company_id || "__none__"} onValueChange={(v) => handleAssignCompany(p.user_id, v)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Nenhuma empresa</SelectItem>
+                  {companies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!isAdmin && p.company_id && (
+              <p className="text-xs text-muted-foreground">Empresa: {getCompanyName(p.company_id)}</p>
+            )}
+          </div>
+        ))}
       </div>
     </AppLayout>
   );

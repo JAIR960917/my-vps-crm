@@ -34,7 +34,7 @@ export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onD
             </p>
           )}
         </div>
-        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>
             <MessageSquare className="h-3.5 w-3.5 text-primary" />
           </Button>
