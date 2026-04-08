@@ -40,6 +40,8 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [currentUserName, setCurrentUserName] = useState("");
   const [open, setOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
