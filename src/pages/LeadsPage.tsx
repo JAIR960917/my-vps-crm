@@ -215,21 +215,23 @@ export default function LeadsPage() {
 
   return (
     <AppLayout>
-      <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2">
-        <div>
+      <div className="mb-3 sm:mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold">Leads</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
             {leads.length} lead{leads.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button size="sm" className="shrink-0" onClick={() => navigate("/novo-lead")}>
-          <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo </span>Lead
-        </Button>
-        {isAdmin && (
-          <Button size="sm" variant="outline" className="shrink-0" onClick={() => setNewColOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" /><span className="hidden sm:inline">Nova </span>Coluna
+        <div className="flex items-center gap-2">
+          <Button size="sm" className="shrink-0" onClick={() => navigate("/novo-lead")}>
+            <Plus className="mr-1 h-4 w-4" />Lead
           </Button>
-        )}
+          {isAdmin && (
+            <Button size="sm" variant="outline" className="shrink-0 hidden sm:inline-flex" onClick={() => setNewColOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" />Coluna
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Mobile: Tab selector */}
