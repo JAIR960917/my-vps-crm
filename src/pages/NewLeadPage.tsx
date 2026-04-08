@@ -13,6 +13,9 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, WifiOff } from "lucide-react";
 import { addToOfflineQueue, syncOfflineQueue, getOfflineQueue } from "@/lib/offlineSync";
 
+type DateStatusRange = { max_years: number; status_key: string };
+type DateStatusConfig = { ranges: DateStatusRange[]; above_all: string; no_answer: string };
+
 type FormField = {
   id: string;
   label: string;
@@ -23,6 +26,7 @@ type FormField = {
   parent_field_id: string | null;
   parent_trigger_value: string | null;
   status_mapping: Record<string, string> | null;
+  date_status_ranges: DateStatusConfig | null;
 };
 
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
@@ -172,9 +176,33 @@ export default function NewLeadPage() {
     : [];
 
   const resolveStatus = (): string => {
+    const defaultStatus = statuses.length > 0 ? statuses[0].key : formStatus;
+
+    // Check date-based mapping first
+    const dateFields = fields.filter(f => f.date_status_ranges && f.field_type === "date");
+    for (const df of dateFields) {
+      const fieldKey = `field_${df.id}`;
+      const dateVal = formData[fieldKey];
+      const config = df.date_status_ranges!;
+      if (!dateVal || (typeof dateVal === "string" && !dateVal.trim())) {
+        if (config.no_answer) return config.no_answer;
+        continue;
+      }
+      const diffMs = Date.now() - new Date(dateVal).getTime();
+      const diffYears = diffMs / (1000 * 60 * 60 * 24 * 365.25);
+      const sortedRanges = [...config.ranges].sort((a, b) => a.max_years - b.max_years);
+      let matched = false;
+      for (const range of sortedRanges) {
+        if (diffYears <= range.max_years && range.status_key) {
+          return range.status_key;
+        }
+      }
+      if (!matched && config.above_all) return config.above_all;
+    }
+
+    // Then check option-based mapping
     const mappingFields = fields.filter(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
-    if (mappingFields.length === 0) return formStatus;
-    // Check deepest fields first (children before parents)
+    if (mappingFields.length === 0 && dateFields.length === 0) return formStatus;
     for (const mf of [...mappingFields].reverse()) {
       const fieldKey = `field_${mf.id}`;
       const answer = formData[fieldKey];
@@ -187,12 +215,8 @@ export default function NewLeadPage() {
         }
       }
     }
-    // No matched answer in any mapping field → check if any mapping field has no answer at all
-    const defaultStatus = statuses.length > 0 ? statuses[0].key : formStatus;
     return defaultStatus;
   };
-
-  const handleSubmit = async () => {
     setSaving(true);
     const resolvedStatus = resolveStatus();
     const leadData = {

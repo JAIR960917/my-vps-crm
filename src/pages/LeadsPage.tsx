@@ -25,7 +25,7 @@ type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
 type Company = { id: string; name: string };
-type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean; status_mapping?: Record<string, string> | null };
+type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean; status_mapping?: Record<string, string> | null; date_status_ranges?: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -87,7 +87,7 @@ export default function LeadsPage() {
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
         supabase.from("companies").select("id, name").order("name"),
-        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping").order("position"),
+        supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
       ]);
       setColumns(cols || []);
       setLeads((lds || []) as Lead[]);
@@ -187,8 +187,30 @@ export default function LeadsPage() {
   };
 
   const resolveStatus = (data: Record<string, any>): string => {
+    const defaultStatus = statuses.length > 0 ? statuses[0].key : formStatus;
+
+    // Check date-based mapping first
+    const dateFields = formFields.filter(f => f.date_status_ranges);
+    for (const df of dateFields) {
+      const fieldKey = `field_${df.id}`;
+      const dateVal = data[fieldKey];
+      const config = df.date_status_ranges!;
+      if (!dateVal || (typeof dateVal === "string" && !dateVal.trim())) {
+        if (config.no_answer) return config.no_answer;
+        continue;
+      }
+      const diffMs = Date.now() - new Date(dateVal).getTime();
+      const diffYears = diffMs / (1000 * 60 * 60 * 24 * 365.25);
+      const sortedRanges = [...config.ranges].sort((a, b) => a.max_years - b.max_years);
+      for (const range of sortedRanges) {
+        if (diffYears <= range.max_years && range.status_key) return range.status_key;
+      }
+      if (config.above_all) return config.above_all;
+    }
+
+    // Then check option-based mapping
     const mappingFields = formFields.filter(f => f.status_mapping && Object.keys(f.status_mapping).length > 0);
-    if (mappingFields.length === 0) return formStatus;
+    if (mappingFields.length === 0 && dateFields.length === 0) return formStatus;
     for (const mf of [...mappingFields].reverse()) {
       const fieldKey = `field_${mf.id}`;
       const answer = data[fieldKey];
@@ -201,7 +223,7 @@ export default function LeadsPage() {
         }
       }
     }
-    return statuses.length > 0 ? statuses[0].key : formStatus;
+    return defaultStatus;
   };
 
   const handleSave = async (e: React.FormEvent) => {
