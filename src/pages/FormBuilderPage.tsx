@@ -162,8 +162,8 @@ export default function FormBuilderPage() {
   const getChildren = (parentId: string) =>
     fields.filter((f) => f.parent_field_id === parentId).sort((a, b) => a.position - b.position);
 
-  // Get possible parent fields (only select types that have options)
-  const selectFields = fields.filter((f) => f.field_type === "select" && f.options && f.options.length > 0);
+  // Get possible parent fields (select or checkbox_group with options)
+  const parentCandidates = fields.filter((f) => ["select", "checkbox_group"].includes(f.field_type) && f.options && f.options.length > 0);
 
   // Get parent trigger options
   const getParentOptions = (parentId: string): string[] => {
