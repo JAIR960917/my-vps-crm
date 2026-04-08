@@ -54,6 +54,11 @@ export default function LeadsPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
   const [historyLeadName, setHistoryLeadName] = useState("");
+  // New status column dialog state
+  const [newColOpen, setNewColOpen] = useState(false);
+  const [newColLabel, setNewColLabel] = useState("");
+  const [newColColor, setNewColColor] = useState("blue");
+  const [savingCol, setSavingCol] = useState(false);
 
   // Inline rename state
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
