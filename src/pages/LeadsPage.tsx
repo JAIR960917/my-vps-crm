@@ -162,33 +162,27 @@ export default function LeadsPage() {
     }
   };
 
-  useEffect(() => {
-    fetchAll();
+  const trySyncOffline = useCallback(async () => {
+    if (!navigator.onLine) return;
+    const queue = getOfflineQueue();
+    if (queue.length === 0) return;
+    const syncedIds = await syncOfflineQueue();
+    if (syncedIds.length > 0) {
+      setRecentlySyncedIds(new Set(syncedIds));
+      toast.success(`${syncedIds.length} lead(s) sincronizado(s)!`);
+      setTimeout(() => setRecentlySyncedIds(new Set()), 5000);
+    }
+    // Update offline ids with remaining queue
+    const remaining = getOfflineQueue();
+    setOfflineIds(new Set(remaining.map(l => l.id)));
+    await fetchAll();
   }, []);
 
-  // Sync offline queue when coming back online
-  useEffect(() => {
-    const handleOnline = async () => {
-      const syncedIds = await syncOfflineQueue();
-      if (syncedIds.length > 0) {
-        setRecentlySyncedIds(new Set(syncedIds));
-        toast.success(`${syncedIds.length} lead(s) sincronizado(s)!`);
-        // Clear synced indicator after 5 seconds
-        setTimeout(() => setRecentlySyncedIds(new Set()), 5000);
-      }
-      setOfflineIds(new Set());
-      fetchAll();
-    };
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
-  }, []);
-
-  // Merge offline leads into displayed leads
-  useEffect(() => {
+  // Merge offline leads into the leads list
+  const mergeOfflineLeads = useCallback(() => {
     const queue = getOfflineQueue();
     const queueIds = new Set(queue.map(l => l.id));
     setOfflineIds(queueIds);
-
     if (queue.length > 0) {
       setLeads(prev => {
         const existingIds = new Set(prev.map(l => l.id));
@@ -202,10 +196,41 @@ export default function LeadsPage() {
             status: l.status,
             created_at: l.created_at,
           }));
+        if (newOfflineLeads.length === 0) return prev;
         return [...prev, ...newOfflineLeads];
       });
     }
-  }, [leads.length === 0 ? 0 : 1]); // Run after initial load
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      await fetchAll();
+      mergeOfflineLeads();
+      // Try to sync any pending offline leads on page load
+      await trySyncOffline();
+    };
+    init();
+  }, []);
+
+  // Sync offline queue when coming back online
+  useEffect(() => {
+    const handleOnline = async () => {
+      await trySyncOffline();
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [trySyncOffline]);
+
+  // Periodically try to sync offline queue (every 30s)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const queue = getOfflineQueue();
+      if (queue.length > 0 && navigator.onLine) {
+        trySyncOffline();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [trySyncOffline]);
 
   // Set default mobile tab when statuses load
   useEffect(() => {
