@@ -347,6 +347,34 @@ export default function LeadsPage() {
         profiles={profiles}
         onNoteAdded={fetchAll}
       />
+
+      <Dialog open={newColOpen} onOpenChange={setNewColOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nova Coluna</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome da Coluna</Label>
+              <Input value={newColLabel} onChange={(e) => setNewColLabel(e.target.value)} placeholder="Ex: Em Negociação" />
+            </div>
+            <div className="space-y-2">
+              <Label>Cor</Label>
+              <Select value={newColColor} onValueChange={setNewColColor}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.keys(colorMap).map((c) => (
+                    <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button className="w-full" onClick={handleCreateStatus} disabled={savingCol || !newColLabel.trim()}>
+              {savingCol ? "Criando..." : "Criar Coluna"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
