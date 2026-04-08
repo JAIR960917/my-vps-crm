@@ -289,6 +289,11 @@ export default function LeadsPage() {
 
   const getLeadsByStatus = (status: string) => leads.filter((l) => l.status === status);
 
+  const getSyncStatus = (leadId: string): "offline" | "synced" | null => {
+    if (offlineIds.has(leadId)) return "offline";
+    if (recentlySyncedIds.has(leadId)) return "synced";
+    return null;
+  };
   return (
     <AppLayout>
       <div className="mb-3 sm:mb-4 flex flex-wrap items-center justify-between gap-2">
