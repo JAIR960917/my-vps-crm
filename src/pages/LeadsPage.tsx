@@ -18,7 +18,7 @@ type Lead = {
   id: string; data: Record<string, any>; assigned_to: string | null;
   created_by: string; status: string; created_at: string;
 };
-type Profile = { user_id: string; full_name: string; email: string };
+type Profile = { user_id: string; full_name: string; email?: string };
 
 const STATUS_OPTIONS = ["novo", "em_contato", "qualificado", "proposta", "fechado", "perdido"];
 const statusLabels: Record<string, string> = {
