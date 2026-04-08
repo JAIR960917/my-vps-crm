@@ -49,7 +49,7 @@ export default function FormBuilderPage() {
   const [isNameField, setIsNameField] = useState(false);
   const [isPhoneField, setIsPhoneField] = useState(false);
   const [parentFieldId, setParentFieldId] = useState<string>("__none__");
-  const [parentTriggerValue, setParentTriggerValue] = useState("");
+  const [parentTriggerValues, setParentTriggerValues] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const fetchFields = async () => {
@@ -70,20 +70,29 @@ export default function FormBuilderPage() {
     setIsNameField(false);
     setIsPhoneField(false);
     setParentFieldId("__none__");
-    setParentTriggerValue("");
+    setParentTriggerValues([]);
     setEditingField(null);
   };
 
   const openCreate = (parentId?: string, triggerVal?: string) => {
     resetForm();
     if (parentId) {
-      // Use setTimeout to ensure state is reset before setting parent
       setTimeout(() => {
         setParentFieldId(parentId);
-        setParentTriggerValue(triggerVal || "");
+        setParentTriggerValues(triggerVal ? [triggerVal] : []);
       }, 0);
     }
     setDialogOpen(true);
+  };
+
+  // Parse stored trigger value(s) - supports both old single string and new JSON array
+  const parseTriggerValues = (val: string | null): string[] => {
+    if (!val) return [];
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+    return val ? [val] : [];
   };
 
   const openEdit = (field: FormField) => {
@@ -95,7 +104,7 @@ export default function FormBuilderPage() {
     setIsNameField(field.is_name_field);
     setIsPhoneField(field.is_phone_field);
     setParentFieldId(field.parent_field_id || "__none__");
-    setParentTriggerValue(field.parent_trigger_value || "");
+    setParentTriggerValues(parseTriggerValues(field.parent_trigger_value));
     setDialogOpen(true);
   };
 
@@ -115,7 +124,7 @@ export default function FormBuilderPage() {
       is_name_field: isNameField,
       is_phone_field: isPhoneField,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
-      parent_trigger_value: parentFieldId === "__none__" ? null : parentTriggerValue || null,
+      parent_trigger_value: parentFieldId === "__none__" ? null : (parentTriggerValues.length > 0 ? JSON.stringify(parentTriggerValues) : null),
     };
 
     if (editingField) {
