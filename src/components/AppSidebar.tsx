@@ -17,7 +17,11 @@ const navItems: NavItem[] = [
   { path: "/colunas", label: "Colunas CRM", icon: Columns3, roles: ["admin"] },
 ];
 
-export default function AppSidebar() {
+interface Props {
+  onNavigate?: () => void;
+}
+
+export default function AppSidebar({ onNavigate }: Props) {
   const { user, isAdmin, isGerente, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -27,6 +31,11 @@ export default function AppSidebar() {
     if (isAdmin && item.roles.includes("admin")) return true;
     if (isGerente && item.roles.includes("gerente")) return true;
     return false;
+  };
+
+  const handleNav = (path: string) => {
+    navigate(path);
+    onNavigate?.();
   };
 
   return (
@@ -44,7 +53,7 @@ export default function AppSidebar() {
           .map((item) => (
             <button
               key={item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => handleNav(item.path)}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 location.pathname === item.path
@@ -63,7 +72,7 @@ export default function AppSidebar() {
           {user?.email}
         </div>
         <button
-          onClick={signOut}
+          onClick={() => { signOut(); onNavigate?.(); }}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/50 transition-colors"
         >
           <LogOut className="h-4 w-4" />
