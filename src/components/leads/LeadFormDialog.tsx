@@ -182,18 +182,25 @@ export default function LeadFormDialog({
             <Input value={currentUserName || "—"} readOnly className="bg-muted" />
           </div>
 
-          {/* Status column selection */}
-          <div className="space-y-2">
-            <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
-            <Select value={formStatus} onValueChange={setFormStatus}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((s) => (
-                  <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Status column selection - hide when auto-mapping on create */}
+          {(isEditing || !hasMappingField) && (
+            <div className="space-y-2">
+              <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
+              <Select value={formStatus} onValueChange={setFormStatus}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((s) => (
+                    <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {!isEditing && hasMappingField && (
+            <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+              ℹ️ A coluna será definida automaticamente com base nas respostas.
+            </p>
+          )}
 
           {isEditing && (
             <div className="space-y-2">
