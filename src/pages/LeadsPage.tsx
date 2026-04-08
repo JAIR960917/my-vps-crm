@@ -58,16 +58,21 @@ export default function LeadsPage() {
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = async () => {
-    const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }] = await Promise.all([
+    const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }] = await Promise.all([
       supabase.from("crm_columns").select("*").order("position"),
       supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
       supabase.rpc("get_profile_names"),
       supabase.from("crm_statuses").select("*").order("position"),
+      supabase.from("companies").select("id, name").order("name"),
     ]);
     setColumns(cols || []);
     setLeads((lds || []) as Lead[]);
     setProfiles(profs || []);
     setStatuses((sts || []) as CrmStatus[]);
+    setCompanies((comps || []) as Company[]);
+    // Set current user name
+    const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
+    setCurrentUserName(me?.full_name || user?.email || "");
   };
 
   useEffect(() => { fetchAll(); }, []);
