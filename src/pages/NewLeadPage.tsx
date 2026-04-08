@@ -216,6 +216,7 @@ export default function NewLeadPage() {
       }
     }
     return defaultStatus;
+  };
 
   const handleSubmit = async () => {
     setSaving(true);
