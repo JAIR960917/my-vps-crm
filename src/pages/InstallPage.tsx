@@ -1,9 +1,9 @@
 import { usePwaInstall } from "@/hooks/use-pwa-install";
-import { Download, Share, Plus, MoreVertical, Check } from "lucide-react";
+import { Download, Share, Plus, MoreVertical, Check, ExternalLink, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function InstallPage() {
-  const { canInstall, install, isIOS } = usePwaInstall();
+  const { canInstall, install, isIOS, isIOSSafari, isIOSExternalBrowser } = usePwaInstall();
 
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -45,8 +45,38 @@ export default function InstallPage() {
           </Button>
         )}
 
-        {/* iOS instructions */}
-        {isIOS && (
+        {/* iOS outside Safari */}
+        {isIOSExternalBrowser && (
+          <div className="space-y-4 rounded-xl border border-border bg-card p-6 text-left">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-card-foreground">
+                Abra no Safari para instalar
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                No iPhone, o app <strong>só pode ser instalado pelo Safari</strong>. Dentro do WhatsApp ou de outro navegador, a opção de instalar não aparece.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <Step number={1} icon={<ExternalLink className="h-5 w-5" />}>
+                No navegador atual, toque em <strong>abrir no navegador</strong> ou no menu do app onde este link foi aberto
+              </Step>
+              <Step number={2} icon={<Globe className="h-5 w-5" />}>
+                Escolha <strong>Safari</strong> ou copie o link e abra manualmente no Safari
+              </Step>
+              <Step number={3} icon={<Share className="h-5 w-5" />}>
+                Depois, no Safari, toque em <strong>Compartilhar</strong> e selecione <strong>Adicionar à Tela de Início</strong>
+              </Step>
+            </div>
+
+            <p className="mt-2 text-xs text-muted-foreground">
+              Se você abriu este CRM pelo WhatsApp, isso é exatamente o motivo de não aparecer a instalação.
+            </p>
+          </div>
+        )}
+
+        {/* iOS Safari instructions */}
+        {isIOS && isIOSSafari && (
           <div className="space-y-4 rounded-xl border border-border bg-card p-6 text-left">
             <h2 className="text-lg font-semibold text-card-foreground">
               Como instalar no iPhone / iPad
@@ -66,7 +96,7 @@ export default function InstallPage() {
               </Step>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              ⚠️ Funciona apenas no <strong>Safari</strong>. Se estiver usando Chrome ou outro navegador, abra este link no Safari primeiro.
+              ⚠️ Se a opção não aparecer, role o menu do Safari para baixo até encontrar <strong>Adicionar à Tela de Início</strong>.
             </p>
           </div>
         )}
