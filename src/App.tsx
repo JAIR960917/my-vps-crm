@@ -10,6 +10,7 @@ import UsersPage from "./pages/UsersPage";
 import ColumnsPage from "./pages/ColumnsPage";
 import CompaniesPage from "./pages/CompaniesPage";
 import FormBuilderPage from "./pages/FormBuilderPage";
+import NewLeadPage from "./pages/NewLeadPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/empresas" element={<ProtectedRoute><CompaniesPage /></ProtectedRoute>} />
             <Route path="/colunas" element={<ProtectedRoute><ColumnsPage /></ProtectedRoute>} />
             <Route path="/formulario" element={<ProtectedRoute><FormBuilderPage /></ProtectedRoute>} />
+            <Route path="/novo-lead" element={<ProtectedRoute><NewLeadPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
