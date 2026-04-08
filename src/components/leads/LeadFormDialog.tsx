@@ -20,6 +20,7 @@ type FormField = {
   is_required: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
+  status_mapping: Record<string, string> | null;
 };
 
 type Props = {
