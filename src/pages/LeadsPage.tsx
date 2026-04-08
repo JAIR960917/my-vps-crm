@@ -23,6 +23,7 @@ type Profile = { user_id: string; full_name: string; email?: string };
 type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
+type Company = { id: string; name: string };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
