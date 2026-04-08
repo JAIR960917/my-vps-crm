@@ -6,7 +6,10 @@ import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Pencil, Check, X } from "lucide-react";
+import { Plus, Pencil, Check, X, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LeadCard from "@/components/leads/LeadCard";
 import LeadFormDialog from "@/components/leads/LeadFormDialog";
 import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
@@ -51,6 +54,11 @@ export default function LeadsPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
   const [historyLeadName, setHistoryLeadName] = useState("");
+  // New status column dialog state
+  const [newColOpen, setNewColOpen] = useState(false);
+  const [newColLabel, setNewColLabel] = useState("");
+  const [newColColor, setNewColColor] = useState("blue");
+  const [savingCol, setSavingCol] = useState(false);
 
   // Inline rename state
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
@@ -162,6 +170,33 @@ export default function LeadsPage() {
 
   const cancelRename = () => setRenamingKey(null);
 
+  const handleCreateStatus = async () => {
+    if (!newColLabel.trim()) return;
+    setSavingCol(true);
+    const key = newColLabel.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const maxPos = statuses.length > 0 ? Math.max(...statuses.map(s => s.position)) + 1 : 0;
+    const { error } = await supabase.from("crm_statuses").insert({
+      key, label: newColLabel.trim(), color: newColColor, position: maxPos,
+    });
+    if (error) toast.error("Erro ao criar coluna");
+    else { toast.success("Coluna criada"); fetchAll(); }
+    setSavingCol(false);
+    setNewColOpen(false);
+    setNewColLabel("");
+    setNewColColor("blue");
+  };
+
+  const handleDeleteStatus = async (statusKey: string) => {
+    const leadsInCol = leads.filter(l => l.status === statusKey);
+    if (leadsInCol.length > 0) {
+      toast.error("Remova os leads desta coluna antes de excluí-la");
+      return;
+    }
+    const { error } = await supabase.from("crm_statuses").delete().eq("key", statusKey);
+    if (error) toast.error("Erro ao excluir coluna");
+    else { toast.success("Coluna excluída"); fetchAll(); }
+  };
+
   const getLeadsByStatus = (status: string) => leads.filter((l) => l.status === status);
 
   return (
@@ -176,6 +211,11 @@ export default function LeadsPage() {
         <Button size="sm" className="shrink-0" onClick={() => openCreate()}>
           <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo </span>Lead
         </Button>
+        {isAdmin && (
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => setNewColOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /><span className="hidden sm:inline">Nova </span>Coluna
+          </Button>
+        )}
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -212,6 +252,11 @@ export default function LeadsPage() {
                       {isAdmin && (
                         <button onClick={() => startRename(status)} className="text-muted-foreground hover:text-foreground">
                           <Pencil className="h-3 w-3" />
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button onClick={() => handleDeleteStatus(status.key)} className="text-muted-foreground hover:text-destructive">
+                          <Trash2 className="h-3 w-3" />
                         </button>
                       )}
                     </>
@@ -302,6 +347,34 @@ export default function LeadsPage() {
         profiles={profiles}
         onNoteAdded={fetchAll}
       />
+
+      <Dialog open={newColOpen} onOpenChange={setNewColOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nova Coluna</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome da Coluna</Label>
+              <Input value={newColLabel} onChange={(e) => setNewColLabel(e.target.value)} placeholder="Ex: Em Negociação" />
+            </div>
+            <div className="space-y-2">
+              <Label>Cor</Label>
+              <Select value={newColColor} onValueChange={setNewColColor}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.keys(colorMap).map((c) => (
+                    <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button className="w-full" onClick={handleCreateStatus} disabled={savingCol || !newColLabel.trim()}>
+              {savingCol ? "Criando..." : "Criar Coluna"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
