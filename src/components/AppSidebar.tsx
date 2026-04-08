@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
-import { usePwaInstall } from "@/hooks/use-pwa-install";
+
 import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ interface Props {
 export default function AppSidebar({ onNavigate }: Props) {
   const { user, isAdmin, isGerente, signOut } = useAuth();
   const { settings } = useSystemSettings();
-  const { canInstall, install, showIOSGuide, dismissIOSGuide } = usePwaInstall();
+  
   const [signingOut, setSigningOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
