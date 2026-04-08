@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,6 +62,9 @@ export default function LeadsPage() {
   const [newColColor, setNewColColor] = useState("blue");
   const [savingCol, setSavingCol] = useState(false);
 
+  // Mobile: active tab for status columns
+  const [mobileTab, setMobileTab] = useState<string>("");
+
   // Inline rename state
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -85,7 +88,16 @@ export default function LeadsPage() {
     setCurrentUserName(me?.full_name || user?.email || "");
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  // Set default mobile tab when statuses load
+  useEffect(() => {
+    if (statuses.length > 0 && !mobileTab) {
+      setMobileTab(statuses[0].key);
+    }
+  }, [statuses]);
 
   // Derive labels and options from DB statuses
   const statusOptions = statuses.map(s => s.key);
@@ -220,13 +232,108 @@ export default function LeadsPage() {
         )}
       </div>
 
+      {/* Mobile: Tab selector */}
+      <div className="md:hidden mb-3 overflow-x-auto -mx-4 px-4">
+        <div className="flex gap-1.5 min-w-max">
+          {statuses.map((status) => {
+            const colors = colorMap[status.color] || colorMap.blue;
+            const count = getLeadsByStatus(status.key).length;
+            return (
+              <button
+                key={status.key}
+                onClick={() => setMobileTab(status.key)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                  mobileTab === status.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <div className={`h-2 w-2 rounded-full ${mobileTab === status.key ? "bg-primary-foreground/80" : colors.header}`} />
+                {status.label}
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  mobileTab === status.key ? "bg-primary-foreground/20" : "bg-background"
+                }`}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Mobile: Active column cards */}
+      <div className="md:hidden space-y-2 mb-4">
+        {statuses.filter(s => s.key === mobileTab).map((status) => {
+          const statusLeads = getLeadsByStatus(status.key);
+          return (
+            <div key={status.key}>
+              {isAdmin && (
+                <div className="flex items-center gap-2 mb-2">
+                  {renamingKey === status.key ? (
+                    <div className="flex items-center gap-1 flex-1">
+                      <Input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveRename();
+                          if (e.key === "Escape") cancelRename();
+                        }}
+                        className="h-7 text-sm"
+                      />
+                      <button onClick={saveRename} className="text-emerald-500 shrink-0"><Check className="h-4 w-4" /></button>
+                      <button onClick={cancelRename} className="text-muted-foreground shrink-0"><X className="h-4 w-4" /></button>
+                    </div>
+                  ) : (
+                    <>
+                      <button onClick={() => startRename(status)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                        <Pencil className="h-3 w-3" /> Renomear
+                      </button>
+                      <button onClick={() => handleDeleteStatus(status.key)} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1">
+                        <Trash2 className="h-3 w-3" /> Excluir
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              {statusLeads.length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">Nenhum lead nesta coluna</p>
+              )}
+              {statusLeads.map((lead) => (
+                <div key={lead.id} className="mb-2">
+                  <LeadCard
+                    lead={lead}
+                    columns={columns}
+                    profiles={profiles}
+                    isAdmin={isAdmin}
+                    onEdit={() => openEdit(lead)}
+                    onDelete={() => handleDelete(lead.id)}
+                    onHistory={() => {
+                      const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
+                      setHistoryLeadId(lead.id);
+                      setHistoryLeadName(data.nome_lead || (columns[0] ? data[columns[0].field_key] : null) || "Lead");
+                      setHistoryOpen(true);
+                    }}
+                  />
+                </div>
+              ))}
+              <button
+                onClick={() => navigate(`/novo-lead?status=${status.key}`)}
+                className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors"
+              >
+                + Adicionar lead
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop: Kanban board with drag & drop */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0" style={{ minHeight: "calc(100vh - 200px)" }}>
+        <div className="hidden md:flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "calc(100vh - 200px)" }}>
           {statuses.map((status) => {
             const statusLeads = getLeadsByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
             return (
-              <div key={status.key} className="flex-shrink-0 w-[240px] sm:w-[280px] flex flex-col">
+              <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col">
                 <div className="flex items-center gap-2 mb-2 px-1">
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   {renamingKey === status.key ? (
