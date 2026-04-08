@@ -7,10 +7,35 @@ interface BeforeInstallPromptEvent extends Event {
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+}
+
+function isInStandaloneMode() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as any).standalone === true
+  );
+}
+
 export function usePwaInstall() {
   const [canInstall, setCanInstall] = useState(false);
+  const [showIOSGuide, setShowIOSGuide] = useState(false);
 
   useEffect(() => {
+    // If already in standalone, no install needed
+    if (isInStandaloneMode()) return;
+
+    // For iOS: show manual guide
+    if (isIOS()) {
+      const dismissed = localStorage.getItem("ios-install-dismissed");
+      if (!dismissed) {
+        setShowIOSGuide(true);
+      }
+      return;
+    }
+
+    // For Android/Chrome: listen for beforeinstallprompt
     const handler = (e: Event) => {
       e.preventDefault();
       deferredPrompt = e as BeforeInstallPromptEvent;
@@ -19,23 +44,12 @@ export function usePwaInstall() {
 
     window.addEventListener("beforeinstallprompt", handler);
 
-    // If app is running in standalone mode, hide the button
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (navigator as any).standalone === true;
-
-    if (isStandalone) {
-      setCanInstall(false);
-    }
-
-    // Listen for app being installed — hide button
     const onInstalled = () => {
       setCanInstall(false);
       deferredPrompt = null;
     };
     window.addEventListener("appinstalled", onInstalled);
 
-    // Listen for display-mode changes (uninstall returns to browser)
     const mq = window.matchMedia("(display-mode: standalone)");
     const onDisplayChange = (e: MediaQueryListEvent) => {
       if (!e.matches && deferredPrompt) {
@@ -61,5 +75,10 @@ export function usePwaInstall() {
     deferredPrompt = null;
   };
 
-  return { canInstall, install };
+  const dismissIOSGuide = () => {
+    setShowIOSGuide(false);
+    localStorage.setItem("ios-install-dismissed", "1");
+  };
+
+  return { canInstall, install, showIOSGuide, dismissIOSGuide, isIOS: isIOS() };
 }
