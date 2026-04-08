@@ -24,6 +24,7 @@ type FormField = {
   parent_trigger_value: string | null;
   is_name_field: boolean;
   is_phone_field: boolean;
+  show_on_card: boolean;
 };
 
 const FIELD_TYPES = [
@@ -49,6 +50,7 @@ export default function FormBuilderPage() {
   const [isRequired, setIsRequired] = useState(false);
   const [isNameField, setIsNameField] = useState(false);
   const [isPhoneField, setIsPhoneField] = useState(false);
+  const [showOnCard, setShowOnCard] = useState(false);
   const [parentFieldId, setParentFieldId] = useState<string>("__none__");
   const [parentTriggerValues, setParentTriggerValues] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -70,6 +72,7 @@ export default function FormBuilderPage() {
     setIsRequired(false);
     setIsNameField(false);
     setIsPhoneField(false);
+    setShowOnCard(false);
     setParentFieldId("__none__");
     setParentTriggerValues([]);
     setEditingField(null);
@@ -104,6 +107,7 @@ export default function FormBuilderPage() {
     setIsRequired(field.is_required);
     setIsNameField(field.is_name_field);
     setIsPhoneField(field.is_phone_field);
+    setShowOnCard(field.show_on_card);
     setParentFieldId(field.parent_field_id || "__none__");
     setParentTriggerValues(parseTriggerValues(field.parent_trigger_value));
     setDialogOpen(true);
@@ -124,6 +128,7 @@ export default function FormBuilderPage() {
       is_required: isRequired,
       is_name_field: isNameField,
       is_phone_field: isPhoneField,
+      show_on_card: showOnCard,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
       parent_trigger_value: parentFieldId === "__none__" ? null : (parentTriggerValues.length > 0 ? JSON.stringify(parentTriggerValues) : null),
     };
@@ -384,6 +389,11 @@ export default function FormBuilderPage() {
             <div className="flex items-center gap-2">
               <Switch checked={isPhoneField} onCheckedChange={(v) => { setIsPhoneField(v); if (v) setIsNameField(false); }} />
               <Label>Este campo é o telefone</Label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch checked={showOnCard} onCheckedChange={setShowOnCard} />
+              <Label>Mostrar resposta no card</Label>
             </div>
 
             {/* Conditional parent */}
