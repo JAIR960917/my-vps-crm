@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { LogIn } from "lucide-react";
 
 export default function Login() {
+  const { settings } = useSystemSettings();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
