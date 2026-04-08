@@ -49,6 +49,29 @@ function applyCSS(s: Settings) {
     root.style.setProperty("--card-foreground", s.text_color);
     root.style.setProperty("--popover-foreground", s.text_color);
   }
+
+  // Update favicon dynamically
+  if (s.logo_url) {
+    let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.type = "image/png";
+    link.href = s.logo_url;
+
+    // Also update apple-touch-icon
+    let appleLink = document.querySelector<HTMLLinkElement>("link[rel='apple-touch-icon']");
+    if (appleLink) {
+      appleLink.href = s.logo_url;
+    }
+  }
+
+  // Update page title
+  if (s.system_name) {
+    document.title = s.system_name;
+  }
 }
 
 export function SystemSettingsProvider({ children }: { children: ReactNode }) {
