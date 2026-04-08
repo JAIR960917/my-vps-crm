@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon } from "lucide-react";
@@ -24,6 +25,7 @@ interface Props {
 
 export default function AppSidebar({ onNavigate }: Props) {
   const { user, isAdmin, isGerente, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -37,6 +39,19 @@ export default function AppSidebar({ onNavigate }: Props) {
   const handleNav = (path: string) => {
     navigate(path);
     onNavigate?.();
+  };
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+
+    setSigningOut(true);
+    try {
+      await signOut();
+      onNavigate?.();
+      navigate("/login", { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   return (
@@ -68,7 +83,7 @@ export default function AppSidebar({ onNavigate }: Props) {
           ))}
       </nav>
 
-      <div className="border-t border-sidebar-border px-3 py-4 space-y-2">
+      <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
         <button
           onClick={() => {
             const html = document.documentElement;
@@ -76,22 +91,23 @@ export default function AppSidebar({ onNavigate }: Props) {
             html.classList.toggle("dark", !isDark);
             localStorage.setItem("theme", isDark ? "light" : "dark");
           }}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/50 transition-colors"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/50"
         >
-          <Sun className="h-4 w-4 hidden dark:block" />
+          <Sun className="hidden h-4 w-4 dark:block" />
           <Moon className="h-4 w-4 dark:hidden" />
           <span className="dark:hidden">Modo Escuro</span>
           <span className="hidden dark:inline">Modo Claro</span>
         </button>
-        <div className="px-3 text-xs text-sidebar-foreground/60 truncate">
+        <div className="truncate px-3 text-xs text-sidebar-foreground/60">
           {user?.email}
         </div>
         <button
-          onClick={() => { signOut(); onNavigate?.(); }}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/50 transition-colors"
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/50 disabled:pointer-events-none disabled:opacity-60"
         >
           <LogOut className="h-4 w-4" />
-          Sair
+          {signingOut ? "Saindo..." : "Sair"}
         </button>
       </div>
     </aside>
