@@ -16,6 +16,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+async function fetchRoles(userId: string): Promise<AppRole[]> {
+  try {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    return (data || []).map((r) => r.role as AppRole);
+  } catch {
+    return [];
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
@@ -23,41 +35,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let resolved = false;
 
-    // Timeout to prevent infinite loading (e.g. offline)
-    const timeout = setTimeout(() => {
-      if (mounted && loading) setLoading(false);
-    }, 5000);
+    const resolve = () => {
+      if (mounted && !resolved) {
+        resolved = true;
+        setLoading(false);
+      }
+    };
+
+    // Safety timeout — never stay on "Carregando..." forever
+    const timeout = setTimeout(resolve, 4000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (_event, sess) => {
         if (!mounted) return;
-        setSession(session);
-        if (session?.user) {
-          const { data } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", session.user.id);
-          if (mounted) setRoles((data || []).map((r) => r.role as AppRole));
+        setSession(sess);
+        if (sess?.user) {
+          const r = await fetchRoles(sess.user.id);
+          if (mounted) setRoles(r);
         } else {
           setRoles([]);
         }
-        if (mounted) setLoading(false);
+        resolve();
       }
     );
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
       if (!mounted) return;
-      setSession(session);
-      if (session?.user) {
-        const { data } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id);
-        if (mounted) setRoles((data || []).map((r) => r.role as AppRole));
+      setSession(sess);
+      if (sess?.user) {
+        const r = await fetchRoles(sess.user.id);
+        if (mounted) setRoles(r);
       }
-      if (mounted) setLoading(false);
-    });
+      resolve();
+    }).catch(() => resolve());
 
     return () => {
       mounted = false;
