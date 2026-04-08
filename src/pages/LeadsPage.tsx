@@ -254,6 +254,11 @@ export default function LeadsPage() {
                           <Pencil className="h-3 w-3" />
                         </button>
                       )}
+                      {isAdmin && (
+                        <button onClick={() => handleDeleteStatus(status.key)} className="text-muted-foreground hover:text-destructive">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
                     </>
                   )}
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
