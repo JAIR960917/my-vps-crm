@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -25,6 +26,7 @@ interface Props {
 
 export default function AppSidebar({ onNavigate }: Props) {
   const { user, isAdmin, isGerente, signOut } = useAuth();
+  const { canInstall, install } = usePwaInstall();
   const [signingOut, setSigningOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -43,7 +45,6 @@ export default function AppSidebar({ onNavigate }: Props) {
 
   const handleSignOut = async () => {
     if (signingOut) return;
-
     setSigningOut(true);
     try {
       await signOut();
@@ -84,6 +85,15 @@ export default function AppSidebar({ onNavigate }: Props) {
       </nav>
 
       <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
+        {canInstall && (
+          <button
+            onClick={install}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-sidebar-accent/50"
+          >
+            <Download className="h-4 w-4" />
+            Instalar App
+          </button>
+        )}
         <button
           onClick={() => {
             const html = document.documentElement;
