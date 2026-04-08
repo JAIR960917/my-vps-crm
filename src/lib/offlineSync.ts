@@ -30,11 +30,11 @@ function removeFromQueue(id: string) {
   localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
 }
 
-export async function syncOfflineQueue(): Promise<number> {
+export async function syncOfflineQueue(): Promise<string[]> {
   const queue = getOfflineQueue();
-  if (queue.length === 0) return 0;
+  if (queue.length === 0) return [];
 
-  let synced = 0;
+  const syncedIds: string[] = [];
   for (const lead of queue) {
     const { error } = await supabase.from("crm_leads").insert({
       data: lead.data,
@@ -44,18 +44,8 @@ export async function syncOfflineQueue(): Promise<number> {
     });
     if (!error) {
       removeFromQueue(lead.id);
-      synced++;
+      syncedIds.push(lead.id);
     }
   }
-  return synced;
-}
-
-// Auto-sync when coming back online
-if (typeof window !== "undefined") {
-  window.addEventListener("online", async () => {
-    const synced = await syncOfflineQueue();
-    if (synced > 0) {
-      console.log(`[CRM] Synced ${synced} offline leads`);
-    }
-  });
+  return syncedIds;
 }

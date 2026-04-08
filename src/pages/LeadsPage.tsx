@@ -66,6 +66,10 @@ export default function LeadsPage() {
   // Mobile: active tab for status columns
   const [mobileTab, setMobileTab] = useState<string>("");
 
+  // Offline sync tracking
+  const [offlineIds, setOfflineIds] = useState<Set<string>>(new Set());
+  const [recentlySyncedIds, setRecentlySyncedIds] = useState<Set<string>>(new Set());
+
   // Inline rename state
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -126,15 +130,43 @@ export default function LeadsPage() {
   // Sync offline queue when coming back online
   useEffect(() => {
     const handleOnline = async () => {
-      const synced = await syncOfflineQueue();
-      if (synced > 0) {
-        toast.success(`${synced} lead(s) sincronizado(s)!`);
+      const syncedIds = await syncOfflineQueue();
+      if (syncedIds.length > 0) {
+        setRecentlySyncedIds(new Set(syncedIds));
+        toast.success(`${syncedIds.length} lead(s) sincronizado(s)!`);
+        // Clear synced indicator after 5 seconds
+        setTimeout(() => setRecentlySyncedIds(new Set()), 5000);
       }
-      fetchAll(); // Refresh data
+      setOfflineIds(new Set());
+      fetchAll();
     };
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
   }, []);
+
+  // Merge offline leads into displayed leads
+  useEffect(() => {
+    const queue = getOfflineQueue();
+    const queueIds = new Set(queue.map(l => l.id));
+    setOfflineIds(queueIds);
+
+    if (queue.length > 0) {
+      setLeads(prev => {
+        const existingIds = new Set(prev.map(l => l.id));
+        const newOfflineLeads = queue
+          .filter(l => !existingIds.has(l.id))
+          .map(l => ({
+            id: l.id,
+            data: l.data,
+            assigned_to: l.assigned_to,
+            created_by: l.created_by,
+            status: l.status,
+            created_at: l.created_at,
+          }));
+        return [...prev, ...newOfflineLeads];
+      });
+    }
+  }, [leads.length === 0 ? 0 : 1]); // Run after initial load
 
   // Set default mobile tab when statuses load
   useEffect(() => {
@@ -257,6 +289,11 @@ export default function LeadsPage() {
 
   const getLeadsByStatus = (status: string) => leads.filter((l) => l.status === status);
 
+  const getSyncStatus = (leadId: string): "offline" | "synced" | null => {
+    if (offlineIds.has(leadId)) return "offline";
+    if (recentlySyncedIds.has(leadId)) return "synced";
+    return null;
+  };
   return (
     <AppLayout>
       <div className="mb-3 sm:mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -350,6 +387,7 @@ export default function LeadsPage() {
                     columns={columns}
                     profiles={profiles}
                     isAdmin={isAdmin}
+                    syncStatus={getSyncStatus(lead.id)}
                     onEdit={() => openEdit(lead)}
                     onDelete={() => handleDelete(lead.id)}
                     onHistory={() => {
@@ -444,6 +482,7 @@ export default function LeadsPage() {
                                 columns={columns}
                                 profiles={profiles}
                                 isAdmin={isAdmin}
+                                syncStatus={getSyncStatus(lead.id)}
                                 onEdit={() => openEdit(lead)}
                                 onDelete={() => handleDelete(lead.id)}
                                 onHistory={() => {
