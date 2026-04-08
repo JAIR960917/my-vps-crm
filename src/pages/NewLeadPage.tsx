@@ -219,6 +219,19 @@ export default function NewLeadPage() {
   };
 
   const handleSubmit = async () => {
+    // Validate all required visible fields
+    const missing = visibleFields.filter(f => {
+      if (!f.is_required) return false;
+      const val = formData[`field_${f.id}`];
+      if (val === undefined || val === null || val === "") return true;
+      if (Array.isArray(val) && val.length === 0) return true;
+      return false;
+    });
+    if (missing.length > 0) {
+      toast.error(`Preencha o campo obrigatório: ${missing[0].label}`);
+      return;
+    }
+
     setSaving(true);
     const resolvedStatus = resolveStatus();
     const leadData = {
@@ -234,6 +247,9 @@ export default function NewLeadPage() {
       addToOfflineQueue(leadData);
       toast.success("Lead salvo offline! Será sincronizado quando tiver internet.");
       setSaving(false);
+      // Reset form for next lead
+      setFormData({});
+      setStep(0);
       navigate("/");
       return;
     }
@@ -246,13 +262,14 @@ export default function NewLeadPage() {
     });
 
     if (error) {
-      // Failed online, save offline
       addToOfflineQueue(leadData);
       toast.warning("Erro ao enviar. Salvo offline para sincronizar depois.");
     } else {
       toast.success("Lead criado com sucesso!");
     }
     setSaving(false);
+    setFormData({});
+    setStep(0);
     navigate("/");
   };
 
