@@ -91,6 +91,7 @@ export type Database = {
           parent_trigger_value: string | null
           position: number
           show_on_card: boolean
+          status_mapping: Json | null
         }
         Insert: {
           created_at?: string
@@ -105,6 +106,7 @@ export type Database = {
           parent_trigger_value?: string | null
           position?: number
           show_on_card?: boolean
+          status_mapping?: Json | null
         }
         Update: {
           created_at?: string
@@ -119,6 +121,7 @@ export type Database = {
           parent_trigger_value?: string | null
           position?: number
           show_on_card?: boolean
+          status_mapping?: Json | null
         }
         Relationships: [
           {

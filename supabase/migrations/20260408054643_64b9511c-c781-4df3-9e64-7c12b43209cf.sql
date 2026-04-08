@@ -1,0 +1,1 @@
+ALTER TABLE public.crm_form_fields ADD COLUMN status_mapping jsonb DEFAULT NULL;
