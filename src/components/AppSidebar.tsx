@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
-import { usePwaInstall } from "@/hooks/use-pwa-install";
+
 import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ interface Props {
 export default function AppSidebar({ onNavigate }: Props) {
   const { user, isAdmin, isGerente, signOut } = useAuth();
   const { settings } = useSystemSettings();
-  const { canInstall, install, showIOSGuide, dismissIOSGuide } = usePwaInstall();
+  
   const [signingOut, setSigningOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -92,23 +92,18 @@ export default function AppSidebar({ onNavigate }: Props) {
       </nav>
 
       <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
-        {canInstall && (
-          <button
-            onClick={install}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-sidebar-accent/50"
-          >
-            <Download className="h-4 w-4" />
-            Instalar App
-          </button>
-        )}
-        {showIOSGuide && (
-          <div className="rounded-lg bg-sidebar-accent p-3 text-xs text-sidebar-foreground space-y-1">
-            <p className="font-medium">Instalar no iPhone:</p>
-            <p>1. Toque no ícone <strong>Compartilhar</strong> (⬆)</p>
-            <p>2. Selecione <strong>"Adicionar à Tela de Início"</strong></p>
-            <button onClick={dismissIOSGuide} className="text-primary text-[11px] mt-1">Entendi, não mostrar novamente</button>
-          </div>
-        )}
+        <button
+          onClick={() => handleNav("/instalar")}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+            location.pathname === "/instalar"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "text-primary hover:bg-sidebar-accent/50"
+          )}
+        >
+          <Download className="h-4 w-4" />
+          Instalar App
+        </button>
         <button
           onClick={() => {
             const html = document.documentElement;
