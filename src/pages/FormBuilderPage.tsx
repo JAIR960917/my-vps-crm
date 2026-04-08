@@ -388,7 +388,7 @@ export default function FormBuilderPage() {
             {/* Conditional parent */}
             <div className="space-y-2">
               <Label>Condicional (aparece dentro de outra pergunta)</Label>
-              <Select value={parentFieldId} onValueChange={(v) => { setParentFieldId(v); setParentTriggerValue(""); }}>
+              <Select value={parentFieldId} onValueChange={(v) => { setParentFieldId(v); setParentTriggerValues([]); }}>
                 <SelectTrigger><SelectValue placeholder="Nenhuma (pergunta raiz)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Nenhuma (pergunta raiz)</SelectItem>
@@ -403,15 +403,31 @@ export default function FormBuilderPage() {
 
             {parentFieldId !== "__none__" && (
               <div className="space-y-2">
-                <Label>Aparece quando a resposta for</Label>
-                <Select value={parentTriggerValue} onValueChange={setParentTriggerValue}>
-                  <SelectTrigger><SelectValue placeholder="Qualquer resposta" /></SelectTrigger>
-                  <SelectContent>
-                    {getParentOptions(parentFieldId).map((opt) => (
-                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Aparece quando a resposta for (selecione uma ou mais)</Label>
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border rounded-md bg-muted/30">
+                  {getParentOptions(parentFieldId).map((opt) => {
+                    const checked = parentTriggerValues.includes(opt);
+                    return (
+                      <label
+                        key={opt}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm cursor-pointer transition-colors ${
+                          checked ? "bg-primary/10 border-primary text-primary" : "bg-background border-border text-foreground hover:bg-muted"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => {
+                            setParentTriggerValues(prev =>
+                              prev.includes(opt) ? prev.filter(v => v !== opt) : [...prev, opt]
+                            );
+                          }}
+                          className="h-3.5 w-3.5"
+                        />
+                        {opt}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
