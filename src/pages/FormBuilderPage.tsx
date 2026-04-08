@@ -71,8 +71,11 @@ export default function FormBuilderPage() {
   const openCreate = (parentId?: string, triggerVal?: string) => {
     resetForm();
     if (parentId) {
-      setParentFieldId(parentId);
-      setParentTriggerValue(triggerVal || "");
+      // Use setTimeout to ensure state is reset before setting parent
+      setTimeout(() => {
+        setParentFieldId(parentId);
+        setParentTriggerValue(triggerVal || "");
+      }, 0);
     }
     setDialogOpen(true);
   };
