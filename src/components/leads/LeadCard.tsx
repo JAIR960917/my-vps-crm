@@ -16,8 +16,9 @@ type LeadCardProps = {
 export default function LeadCard({ lead, columns, profiles, isAdmin, onEdit, onDelete, onHistory }: LeadCardProps) {
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
-  const primaryCol = columns[0];
-  const secondaryCol = columns[1];
+  // Use new form fields if available, fallback to dynamic columns
+  const displayName = data.nome_lead || (columns[0] && data[columns[0].field_key]) || "Sem nome";
+  const displaySecondary = data.telefone || (columns[1] && data[columns[1].field_key]) || "—";
 
   return (
     <div className="rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group">
