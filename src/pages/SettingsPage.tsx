@@ -18,6 +18,7 @@ type SettingField = {
 
 const FIELDS: SettingField[] = [
   { key: "system_name", label: "Nome do Sistema", type: "text", placeholder: "Ex: Meu CRM" },
+  { key: "twilio_whatsapp_number", label: "Número WhatsApp (Twilio)", type: "text", placeholder: "+5511999999999" },
   { key: "primary_color", label: "Cor Primária (HSL)", type: "color-hsl", placeholder: "220 72% 50%" },
   { key: "background_color", label: "Cor de Fundo (HSL)", type: "color-hsl", placeholder: "222 47% 6%" },
   { key: "text_color", label: "Cor dos Textos (HSL)", type: "color-hsl", placeholder: "210 20% 92%" },
