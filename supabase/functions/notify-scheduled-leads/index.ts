@@ -31,9 +31,15 @@ Deno.serve(async (req) => {
     const brHour = (now.getUTCHours() - 3 + 24) % 24;
     const brMinute = now.getUTCMinutes();
 
-    // Allow manual trigger via query param
+    // Allow manual trigger via query param or body
     const url = new URL(req.url);
-    const forceRun = url.searchParams.get("force") === "true";
+    let forceRun = url.searchParams.get("force") === "true";
+    if (!forceRun && req.method === "POST") {
+      try {
+        const body = await req.json();
+        if (body?.force === true) forceRun = true;
+      } catch { /* empty body is fine */ }
+    }
 
     if (!forceRun && (brHour !== targetHour || brMinute !== targetMinute)) {
       return new Response(JSON.stringify({
