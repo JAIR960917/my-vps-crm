@@ -306,6 +306,10 @@ async function hkdf(
   return okm.slice(0, length);
 }
 
+function base64urlEncode(str: string): string {
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 function base64urlEncodeBytes(bytes: Uint8Array): string {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
@@ -319,4 +323,22 @@ function base64urlDecode(str: string): Uint8Array {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+function derToRaw(der: Uint8Array): Uint8Array {
+  if (der.length === 64) return der;
+  const raw = new Uint8Array(64);
+  let offset = 2;
+  const rLen = der[offset + 1];
+  offset += 2;
+  const rStart = rLen > 32 ? offset + (rLen - 32) : offset;
+  const rDest = rLen < 32 ? 32 - rLen : 0;
+  raw.set(der.slice(rStart, offset + rLen), rDest);
+  offset += rLen;
+  const sLen = der[offset + 1];
+  offset += 2;
+  const sStart = sLen > 32 ? offset + (sLen - 32) : offset;
+  const sDest = sLen < 32 ? 64 - sLen : 32;
+  raw.set(der.slice(sStart, offset + sLen), sDest);
+  return raw;
 }
