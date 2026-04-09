@@ -39,7 +39,7 @@ const colorMap: Record<string, { header: string; badge: string }> = {
 };
 
 export default function LeadsPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isGerente } = useAuth();
   const navigate = useNavigate();
   const [columns, setColumns] = useState<CrmColumn[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -581,6 +581,7 @@ export default function LeadsPage() {
         setFormAssigned={setFormAssigned}
         saving={saving}
         isEditing={!!editingLead}
+        canReassign={isAdmin || isGerente}
         onSubmit={handleSave}
         statusOptions={statusOptions}
         statusLabels={statusLabels}
