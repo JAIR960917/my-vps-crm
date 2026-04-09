@@ -41,6 +41,11 @@ export default function NotificationSettingsPage() {
         .from("system_settings")
         .update({ setting_value: notificationTime, updated_at: new Date().toISOString() })
         .eq("setting_key", "notification_time");
+      // Reset the "already notified today" flag so notifications fire at the new time
+      await supabase
+        .from("system_settings")
+        .update({ setting_value: "", updated_at: new Date().toISOString() })
+        .eq("setting_key", "last_scheduled_notification_date");
       toast.success("Horário de notificação salvo!");
     } catch {
       toast.error("Erro ao salvar");
