@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus, ShoppingBag, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 
@@ -15,7 +19,15 @@ type FormFieldInfo = {
 };
 
 type LeadCardProps = {
-  lead: { id: string; data: Record<string, any>; assigned_to: string | null; status: string; created_at: string };
+  lead: {
+    id: string;
+    data: Record<string, any>;
+    assigned_to: string | null;
+    status: string;
+    created_at: string;
+    scheduled_date?: string | null;
+    comprou?: boolean;
+  };
   columns: { field_key: string; name: string }[];
   formFields: FormFieldInfo[];
   profiles: Profile[];
@@ -23,14 +35,19 @@ type LeadCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onHistory: () => void;
+  onSchedule?: (date: Date | null) => void;
+  onToggleComprou?: (value: boolean) => void;
   syncStatus?: "offline" | "synced" | null;
 };
 
-export default function LeadCard({ lead, columns, formFields, profiles, isAdmin, onEdit, onDelete, onHistory, syncStatus }: LeadCardProps) {
+export default function LeadCard({
+  lead, columns, formFields, profiles, isAdmin,
+  onEdit, onDelete, onHistory, onSchedule, onToggleComprou, syncStatus,
+}: LeadCardProps) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
 
-  // Find name and phone from form field flags (try all matching fields)
   const nameFields = formFields.filter((f) => f.is_name_field);
   const phoneFields = formFields.filter((f) => f.is_phone_field);
 
@@ -45,6 +62,8 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
 
   const isOffline = syncStatus === "offline";
   const isSynced = syncStatus === "synced";
+  const isComprou = lead.comprou === true;
+  const isScheduled = !!lead.scheduled_date;
 
   let createdDate = "";
   try {
@@ -53,17 +72,57 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
     createdDate = "";
   }
 
-  // Other fields to display (exclude name and phone fields)
+  let scheduledDateFormatted = "";
+  if (lead.scheduled_date) {
+    try {
+      scheduledDateFormatted = format(new Date(lead.scheduled_date), "dd/MM/yyyy", { locale: ptBR });
+    } catch {
+      scheduledDateFormatted = "";
+    }
+  }
+
   const nameFieldIds = new Set(nameFields.map((f) => f.id));
   const phoneFieldIds = new Set(phoneFields.map((f) => f.id));
-  const otherFields = formFields.filter(
-    (f) => !nameFieldIds.has(f.id) && !phoneFieldIds.has(f.id)
-  );
+
+  // Card styling based on comprou status (only when not scheduled)
+  const cardBorderClass = isComprou && !isScheduled
+    ? "border-emerald-500 bg-emerald-500/10"
+    : isOffline
+      ? "border-amber-500/50 bg-amber-500/5"
+      : isSynced
+        ? "border-emerald-500/50 bg-emerald-500/5"
+        : "";
 
   return (
-    <div className={`rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group ${
-      isOffline ? "border-amber-500/50 bg-amber-500/5" : isSynced ? "border-emerald-500/50 bg-emerald-500/5" : ""
-    }`}>
+    <div className={`rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group ${cardBorderClass}`}>
+      {/* Comprou badge */}
+      {isComprou && (
+        <div className="flex items-center gap-1 mb-1.5">
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500 text-white">
+            <ShoppingBag className="h-3 w-3" />
+            Cliente ativo
+          </span>
+        </div>
+      )}
+
+      {/* Scheduled badge */}
+      {isScheduled && scheduledDateFormatted && (
+        <div className="flex items-center gap-1 mb-1.5">
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-primary text-primary-foreground">
+            <CalendarPlus className="h-3 w-3" />
+            Agendado: {scheduledDateFormatted}
+          </span>
+          {onSchedule && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSchedule(null); }}
+              className="text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -85,6 +144,44 @@ export default function LeadCard({ lead, columns, formFields, profiles, isAdmin,
         </div>
         {!isOffline && (
           <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+            {/* Schedule button */}
+            {onSchedule && (
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
+                    <CalendarPlus className="h-3.5 w-3.5 text-primary" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
+                  <Calendar
+                    mode="single"
+                    selected={lead.scheduled_date ? new Date(lead.scheduled_date) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        onSchedule(date);
+                        setCalendarOpen(false);
+                      }
+                    }}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
+
+            {/* Comprou toggle */}
+            {onToggleComprou && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 ${isComprou ? "text-emerald-500" : ""}`}
+                onClick={(e) => { e.stopPropagation(); onToggleComprou(!isComprou); }}
+              >
+                <ShoppingBag className="h-3.5 w-3.5" />
+              </Button>
+            )}
+
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>
               <MessageSquare className="h-3.5 w-3.5 text-primary" />
             </Button>
