@@ -89,7 +89,8 @@ Deno.serve(async (req) => {
       leadsByUser[lead.assigned_to].push(lead);
     }
 
-    const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || "";
+    // Use the same public key hardcoded in the client
+    const vapidPublicKey = "BPutigpcsKh8tyUDTWIwe3ohRRCa86DIU97beqpHqcfvNnknnBJYn2pXc1HcT-GvVabBx4c6WLwouSoB25isDFo";
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
 
     let notifiedCount = 0;
