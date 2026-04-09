@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { importPKCS8, SignJWT } from "https://deno.land/x/jose@v5.2.2/index.ts";
+import { SignJWT, importJWK } from "https://deno.land/x/jose@v5.2.2/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +17,6 @@ Deno.serve(async (req) => {
   );
 
   try {
-    // Get configured notification time
     const { data: timeSetting } = await supabaseAdmin
       .from("system_settings")
       .select("setting_value")
@@ -27,19 +26,18 @@ Deno.serve(async (req) => {
     const notificationTime = timeSetting?.setting_value || "08:00";
     const [targetHour, targetMinute] = notificationTime.split(":").map(Number);
 
-    // Check if current time in Brazil (UTC-3) matches the configured time
     const now = new Date();
     const brHour = (now.getUTCHours() - 3 + 24) % 24;
     const brMinute = now.getUTCMinutes();
 
-    // Allow manual trigger via query param or body
+    let forceRun = false;
     const url = new URL(req.url);
-    let forceRun = url.searchParams.get("force") === "true";
+    if (url.searchParams.get("force") === "true") forceRun = true;
     if (!forceRun && req.method === "POST") {
       try {
         const body = await req.json();
         if (body?.force === true) forceRun = true;
-      } catch { /* empty body is fine */ }
+      } catch { /* empty body */ }
     }
 
     if (!forceRun && (brHour !== targetHour || brMinute !== targetMinute)) {
@@ -47,21 +45,16 @@ Deno.serve(async (req) => {
         message: "Não é o horário configurado",
         current: `${brHour}:${String(brMinute).padStart(2, "0")}`,
         target: notificationTime,
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Get today's date range in Brazil timezone
     const brOffset = -3 * 60 * 60 * 1000;
     const brNow = new Date(now.getTime() + brOffset);
     const todayStart = new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()));
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-
     const utcStart = new Date(todayStart.getTime() - brOffset).toISOString();
     const utcEnd = new Date(todayEnd.getTime() - brOffset).toISOString();
 
-    // Find leads scheduled for today
     const { data: scheduledLeads, error: leadsErr } = await supabaseAdmin
       .from("crm_leads")
       .select("id, data, assigned_to, scheduled_date")
@@ -76,20 +69,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check if already notified today (avoid duplicates)
-    const { data: existingNotifs } = await supabaseAdmin
-      .from("notifications")
-      .select("id")
-      .gte("created_at", utcStart)
-      .limit(1);
-
-    if (existingNotifs && existingNotifs.length > 0 && !forceRun) {
-      return new Response(JSON.stringify({ message: "Já notificado hoje", notified: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!forceRun) {
+      const { data: existingNotifs } = await supabaseAdmin
+        .from("notifications")
+        .select("id")
+        .gte("created_at", utcStart)
+        .limit(1);
+      if (existingNotifs && existingNotifs.length > 0) {
+        return new Response(JSON.stringify({ message: "Já notificado hoje", notified: 0 }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
-    // Group leads by assigned_to
     const leadsByUser: Record<string, typeof scheduledLeads> = {};
     for (const lead of scheduledLeads) {
       if (!lead.assigned_to) continue;
@@ -97,18 +89,15 @@ Deno.serve(async (req) => {
       leadsByUser[lead.assigned_to].push(lead);
     }
 
-    // Web Push setup
     const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") || "";
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
 
     let notifiedCount = 0;
 
-    // Get form fields to resolve lead names
     const { data: formFields } = await supabaseAdmin
       .from("crm_form_fields")
       .select("id, is_name_field")
       .eq("is_name_field", true);
-
     const nameFieldIds = (formFields || []).map((f: { id: string }) => f.id);
 
     for (const [userId, userLeads] of Object.entries(leadsByUser)) {
@@ -123,17 +112,15 @@ Deno.serve(async (req) => {
 
       const title = `📅 ${userLeads.length} lead(s) agendado(s) para hoje`;
 
-      // Create in-app notification for each lead
       const notificationInserts = userLeads.map((lead, idx) => ({
         user_id: userId,
         title,
         message: leadNames[idx] || "Lead agendado",
         lead_id: lead.id,
       }));
-
       await supabaseAdmin.from("notifications").insert(notificationInserts);
 
-      // Send Web Push notifications
+      // Web Push
       if (vapidPublicKey && vapidPrivateKey) {
         const { data: subs } = await supabaseAdmin
           .from("push_subscriptions")
@@ -152,13 +139,13 @@ Deno.serve(async (req) => {
           for (const sub of subs) {
             try {
               await sendWebPush(sub, payload, vapidPublicKey, vapidPrivateKey);
+              console.log("Push sent to", sub.endpoint.substring(0, 60));
             } catch (pushErr) {
               console.error("Push send error:", pushErr);
             }
           }
         }
       }
-
       notifiedCount++;
     }
 
@@ -174,7 +161,7 @@ Deno.serve(async (req) => {
   }
 });
 
-// --- Web Push helpers ---
+// --- Web Push helpers using jose ---
 
 async function sendWebPush(
   sub: { endpoint: string; p256dh: string; auth: string },
@@ -185,10 +172,28 @@ async function sendWebPush(
   const endpointUrl = new URL(sub.endpoint);
   const audience = `${endpointUrl.protocol}//${endpointUrl.host}`;
 
-  // Create VAPID JWT
-  const vapidToken = await createVapidJwt(audience, vapidPrivateKey);
+  // Import VAPID private key as JWK for ES256
+  const rawPrivate = base64urlDecode(vapidPrivateKey);
+  const rawPublic = base64urlDecode(vapidPublicKey);
 
-  // Encrypt payload using Web Push encryption (aes128gcm)
+  // Build JWK from raw keys
+  const jwk = {
+    kty: "EC",
+    crv: "P-256",
+    d: vapidPrivateKey, // already base64url
+    x: base64urlEncodeBytes(rawPublic.slice(1, 33)),
+    y: base64urlEncodeBytes(rawPublic.slice(33, 65)),
+  };
+
+  const key = await importJWK(jwk, "ES256");
+
+  const vapidToken = await new SignJWT({ aud: audience, sub: "mailto:noreply@crm.qualinetdigital.site" })
+    .setProtectedHeader({ typ: "JWT", alg: "ES256" })
+    .setIssuedAt()
+    .setExpirationTime("24h")
+    .sign(key);
+
+  // Encrypt payload
   const encrypted = await encryptPayload(sub.p256dh, sub.auth, payload);
 
   const response = await fetch(sub.endpoint, {
@@ -208,86 +213,6 @@ async function sendWebPush(
   }
 }
 
-async function createVapidJwt(audience: string, privateKeyBase64: string): Promise<string> {
-  // VAPID private key is base64url encoded raw 32-byte key
-  const padding = "=".repeat((4 - (privateKeyBase64.length % 4)) % 4);
-  const base64 = (privateKeyBase64 + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-
-  // Convert raw 32-byte EC private key to PKCS8 DER
-  const pkcs8 = rawEcToPkcs8(rawBytes);
-
-  const privateKey = await crypto.subtle.importKey(
-    "pkcs8",
-    pkcs8,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"],
-  );
-
-  const now = Math.floor(Date.now() / 1000);
-  const header = base64urlEncode(JSON.stringify({ typ: "JWT", alg: "ES256" }));
-  const payloadObj = { aud: audience, exp: now + 86400, sub: "mailto:noreply@crm.qualinetdigital.site" };
-  const body = base64urlEncode(JSON.stringify(payloadObj));
-  const data = new TextEncoder().encode(`${header}.${body}`);
-
-  const sig = await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    privateKey,
-    data,
-  );
-
-  // Convert DER signature to raw r||s format
-  const rawSig = derToRaw(new Uint8Array(sig));
-
-  return `${header}.${body}.${base64urlEncodeBytes(rawSig)}`;
-}
-
-function rawEcToPkcs8(rawKey: Uint8Array): Uint8Array {
-  // Wrap 32-byte raw EC private key in PKCS8 ASN.1 structure for P-256
-  const pkcs8Header = new Uint8Array([
-    0x30, 0x81, 0x87, 0x02, 0x01, 0x00, 0x30, 0x13,
-    0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
-    0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d,
-    0x03, 0x01, 0x07, 0x04, 0x6d, 0x30, 0x6b, 0x02,
-    0x01, 0x01, 0x04, 0x20,
-  ]);
-  const pkcs8Footer = new Uint8Array([
-    0xa1, 0x44, 0x03, 0x42, 0x00,
-  ]);
-  // We don't include the public key in PKCS8, just pad
-  const result = new Uint8Array(pkcs8Header.length + rawKey.length);
-  result.set(pkcs8Header);
-  result.set(rawKey, pkcs8Header.length);
-  return result;
-}
-
-function derToRaw(der: Uint8Array): Uint8Array {
-  // If it's already 64 bytes, it's raw format
-  if (der.length === 64) return der;
-  
-  // Parse DER SEQUENCE
-  const raw = new Uint8Array(64);
-  let offset = 2; // skip SEQUENCE tag + length
-  
-  // R
-  const rLen = der[offset + 1];
-  offset += 2;
-  const rStart = rLen > 32 ? offset + (rLen - 32) : offset;
-  const rDest = rLen < 32 ? 32 - rLen : 0;
-  raw.set(der.slice(rStart, offset + rLen), rDest);
-  offset += rLen;
-  
-  // S
-  const sLen = der[offset + 1];
-  offset += 2;
-  const sStart = sLen > 32 ? offset + (sLen - 32) : offset;
-  const sDest = sLen < 32 ? 64 - sLen : 32;
-  raw.set(der.slice(sStart, offset + sLen), sDest);
-  
-  return raw;
-}
-
 async function encryptPayload(
   p256dhBase64: string,
   authBase64: string,
@@ -297,37 +222,26 @@ async function encryptPayload(
   const authBytes = base64urlDecode(authBase64);
   const payloadBytes = new TextEncoder().encode(payload);
 
-  // Generate local ECDH key pair
   const localKey = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
     true,
     ["deriveBits"],
   );
 
-  // Import subscriber's public key
   const subscriberKey = await crypto.subtle.importKey(
-    "raw",
-    p256dhBytes,
-    { name: "ECDH", namedCurve: "P-256" },
-    false,
-    [],
+    "raw", p256dhBytes, { name: "ECDH", namedCurve: "P-256" }, false, [],
   );
 
-  // ECDH shared secret
   const sharedSecret = new Uint8Array(
     await crypto.subtle.deriveBits(
-      { name: "ECDH", public: subscriberKey },
-      localKey.privateKey,
-      256,
+      { name: "ECDH", public: subscriberKey }, localKey.privateKey, 256,
     ),
   );
 
-  // Export local public key
   const localPubKey = new Uint8Array(
     await crypto.subtle.exportKey("raw", localKey.publicKey),
   );
 
-  // HKDF for auth secret -> PRK
   const authInfo = new TextEncoder().encode("WebPush: info\0");
   const authInfoFull = new Uint8Array(authInfo.length + p256dhBytes.length + localPubKey.length);
   authInfoFull.set(authInfo);
@@ -336,28 +250,23 @@ async function encryptPayload(
 
   const ikm = await hkdf(authBytes, sharedSecret, authInfoFull, 32);
 
-  // Derive content encryption key and nonce
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const cekInfo = new TextEncoder().encode("Content-Encoding: aes128gcm\0");
   const nonceInfo = new TextEncoder().encode("Content-Encoding: nonce\0");
-
   const cek = await hkdf(salt, ikm, cekInfo, 16);
   const nonce = await hkdf(salt, ikm, nonceInfo, 12);
 
-  // Pad payload (add delimiter byte 0x02)
   const paddedPayload = new Uint8Array(payloadBytes.length + 1);
   paddedPayload.set(payloadBytes);
-  paddedPayload[payloadBytes.length] = 2; // delimiter
+  paddedPayload[payloadBytes.length] = 2;
 
-  // Encrypt with AES-128-GCM
   const aesKey = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
   const encrypted = new Uint8Array(
     await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, paddedPayload),
   );
 
-  // Build aes128gcm header: salt(16) + rs(4) + idlen(1) + keyid(65) + ciphertext
   const rs = new Uint8Array(4);
-  new DataView(rs.buffer).setUint32(0, payloadBytes.length + 1 + 16 + 1); // record size
+  new DataView(rs.buffer).setUint32(0, payloadBytes.length + 1 + 16 + 1);
   const header = new Uint8Array(16 + 4 + 1 + localPubKey.length);
   header.set(salt);
   header.set(rs, 16);
@@ -367,18 +276,13 @@ async function encryptPayload(
   const result = new Uint8Array(header.length + encrypted.length);
   result.set(header);
   result.set(encrypted, header.length);
-
   return result;
 }
 
 async function hkdf(
-  salt: Uint8Array,
-  ikm: Uint8Array,
-  info: Uint8Array,
-  length: number,
+  salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, length: number,
 ): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey("raw", ikm, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const prk = new Uint8Array(await crypto.subtle.sign("HMAC", 
+  const prk = new Uint8Array(await crypto.subtle.sign("HMAC",
     await crypto.subtle.importKey("raw", salt, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]),
     ikm,
   ));
@@ -388,10 +292,6 @@ async function hkdf(
   infoWithCounter[info.length] = 1;
   const okm = new Uint8Array(await crypto.subtle.sign("HMAC", prkKey, infoWithCounter));
   return okm.slice(0, length);
-}
-
-function base64urlEncode(str: string): string {
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function base64urlEncodeBytes(bytes: Uint8Array): string {
