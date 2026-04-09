@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
   }
 });
 
-// --- Web Push helpers using jose ---
+// --- Web Push helpers ---
 
 async function sendWebPush(
   sub: { endpoint: string; p256dh: string; auth: string },
@@ -172,26 +172,38 @@ async function sendWebPush(
   const endpointUrl = new URL(sub.endpoint);
   const audience = `${endpointUrl.protocol}//${endpointUrl.host}`;
 
-  // Import VAPID private key as JWK for ES256
   const rawPrivate = base64urlDecode(vapidPrivateKey);
   const rawPublic = base64urlDecode(vapidPublicKey);
 
-  // Build JWK from raw keys
+  // Import as JWK using crypto.subtle directly
   const jwk = {
     kty: "EC",
     crv: "P-256",
-    d: vapidPrivateKey, // already base64url
+    d: vapidPrivateKey,
     x: base64urlEncodeBytes(rawPublic.slice(1, 33)),
     y: base64urlEncodeBytes(rawPublic.slice(33, 65)),
   };
 
-  const key = await importJWK(jwk, "ES256");
+  const key = await crypto.subtle.importKey(
+    "jwk", jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false, ["sign"]
+  );
 
-  const vapidToken = await new SignJWT({ aud: audience, sub: "mailto:noreply@crm.qualinetdigital.site" })
-    .setProtectedHeader({ typ: "JWT", alg: "ES256" })
-    .setIssuedAt()
-    .setExpirationTime("24h")
-    .sign(key);
+  // Build JWT manually
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64urlEncode(JSON.stringify({ typ: "JWT", alg: "ES256" }));
+  const body = base64urlEncode(JSON.stringify({
+    aud: audience,
+    exp: now + 86400,
+    sub: "mailto:noreply@crm.qualinetdigital.site",
+  }));
+  const unsigned = new TextEncoder().encode(`${header}.${body}`);
+  const sig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" }, key, unsigned
+  );
+  const rawSig = derToRaw(new Uint8Array(sig));
+  const vapidToken = `${header}.${body}.${base64urlEncodeBytes(rawSig)}`;
 
   // Encrypt payload
   const encrypted = await encryptPayload(sub.p256dh, sub.auth, payload);
