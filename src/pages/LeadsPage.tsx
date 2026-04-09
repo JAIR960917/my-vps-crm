@@ -20,6 +20,7 @@ type CrmColumn = {
 type Lead = {
   id: string; data: Record<string, any>; assigned_to: string | null;
   created_by: string; status: string; created_at: string;
+  scheduled_date?: string | null; comprou?: boolean;
 };
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 type CrmStatus = {
@@ -334,6 +335,36 @@ export default function LeadsPage() {
     setDeleteConfirmId(null);
   };
 
+  const handleSchedule = async (leadId: string, date: Date | null) => {
+    if (date) {
+      // Set scheduled date and move to "agendados" status
+      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, scheduled_date: date.toISOString(), status: "agendados" } : l));
+      const { error } = await supabase.from("crm_leads").update({
+        scheduled_date: date.toISOString(),
+        status: "agendados",
+      }).eq("id", leadId);
+      if (error) { toast.error("Erro ao agendar"); fetchAll(); }
+      else toast.success("Lead agendado");
+    } else {
+      // Remove scheduling - revert to first status
+      const defaultStatus = statuses.length > 0 ? statuses[0].key : "novo";
+      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, scheduled_date: null, status: defaultStatus } : l));
+      const { error } = await supabase.from("crm_leads").update({
+        scheduled_date: null,
+        status: defaultStatus,
+      }).eq("id", leadId);
+      if (error) { toast.error("Erro ao remover agendamento"); fetchAll(); }
+      else toast.success("Agendamento removido");
+    }
+  };
+
+  const handleToggleComprou = async (leadId: string, value: boolean) => {
+    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, comprou: value } : l));
+    const { error } = await supabase.from("crm_leads").update({ comprou: value }).eq("id", leadId);
+    if (error) { toast.error("Erro ao atualizar"); fetchAll(); }
+    else toast.success(value ? "Marcado como cliente ativo" : "Marcação removida");
+  };
+
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
@@ -428,6 +459,8 @@ export default function LeadsPage() {
                       setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                       setHistoryOpen(true);
                     }}
+                    onSchedule={(date) => handleSchedule(lead.id, date)}
+                    onToggleComprou={(value) => handleToggleComprou(lead.id, value)}
                   />
                 </div>
               ))}
@@ -492,6 +525,8 @@ export default function LeadsPage() {
                                   setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                                   setHistoryOpen(true);
                                 }}
+                                onSchedule={(date) => handleSchedule(lead.id, date)}
+                                onToggleComprou={(value) => handleToggleComprou(lead.id, value)}
                               />
                             </div>
                           )}

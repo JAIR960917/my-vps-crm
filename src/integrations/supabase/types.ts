@@ -171,28 +171,34 @@ export type Database = {
       crm_leads: {
         Row: {
           assigned_to: string | null
+          comprou: boolean
           created_at: string
           created_by: string
           data: Json
           id: string
+          scheduled_date: string | null
           status: string
           updated_at: string
         }
         Insert: {
           assigned_to?: string | null
+          comprou?: boolean
           created_at?: string
           created_by: string
           data?: Json
           id?: string
+          scheduled_date?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
           assigned_to?: string | null
+          comprou?: boolean
           created_at?: string
           created_by?: string
           data?: Json
           id?: string
+          scheduled_date?: string | null
           status?: string
           updated_at?: string
         }
