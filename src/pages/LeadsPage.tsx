@@ -103,11 +103,21 @@ export default function LeadsPage() {
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
 
+      const scheduledStatusExists = (sts || []).some((status: CrmStatus) => status.key === "agendados");
+
       // Auto-recalculate lead statuses based on date fields
       const dateFields = loadedFields.filter(f => f.date_status_ranges);
       if (dateFields.length > 0) {
         const updates: PromiseLike<any>[] = [];
         const updatedLeads = loadedLeads.map(lead => {
+          if (lead.scheduled_date && scheduledStatusExists) {
+            if (lead.status !== "agendados") {
+              updates.push(supabase.from("crm_leads").update({ status: "agendados" }).eq("id", lead.id));
+              return { ...lead, status: "agendados" };
+            }
+            return lead;
+          }
+
           const leadData = (typeof lead.data === "object" && lead.data !== null) ? lead.data as Record<string, any> : {};
           for (const df of dateFields) {
             const config = df.date_status_ranges!;
@@ -335,6 +345,12 @@ export default function LeadsPage() {
     setDeleteConfirmId(null);
   };
 
+  const getLeadDisplayStatus = useCallback((lead: Lead) => {
+    const hasScheduledColumn = statuses.some((status) => status.key === "agendados");
+    if (lead.scheduled_date && hasScheduledColumn) return "agendados";
+    return lead.status;
+  }, [statuses]);
+
   const handleSchedule = async (leadId: string, date: Date | null) => {
     if (date) {
       // Set scheduled date and move to "agendados" status
@@ -384,7 +400,7 @@ export default function LeadsPage() {
   };
 
 
-  const getLeadsByStatus = (status: string) => leads.filter((l) => l.status === status);
+  const getLeadsByStatus = (status: string) => leads.filter((l) => getLeadDisplayStatus(l) === status);
 
   const getSyncStatus = (leadId: string): "offline" | "synced" | null => {
     if (offlineIds.has(leadId)) return "offline";
