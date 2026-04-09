@@ -146,7 +146,7 @@ export default function NotificationSettingsPage() {
             <Button size="sm" variant="outline" onClick={async () => {
               try {
                 const { data, error } = await supabase.functions.invoke("notify-scheduled-leads", {
-                  body: {},
+                  body: { force: true },
                   headers: { "Content-Type": "application/json" },
                 });
                 if (error) throw error;
