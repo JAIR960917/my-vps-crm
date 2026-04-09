@@ -38,6 +38,7 @@ type Props = {
   setFormAssigned: (s: string) => void;
   saving: boolean;
   isEditing: boolean;
+  canReassign?: boolean;
   onSubmit: (e: React.FormEvent) => void;
   statusOptions: string[];
   statusLabels: Record<string, string>;
@@ -46,7 +47,7 @@ type Props = {
 export default function LeadFormDialog({
   open, onOpenChange, profiles, companies, currentUserName,
   formData, setFormData, formStatus, setFormStatus, formAssigned,
-  setFormAssigned, saving, isEditing, onSubmit, statusOptions, statusLabels,
+  setFormAssigned, saving, isEditing, canReassign, onSubmit, statusOptions, statusLabels,
 }: Props) {
   const [fields, setFields] = useState<FormField[]>([]);
 
@@ -205,7 +206,7 @@ export default function LeadFormDialog({
             </p>
           )}
 
-          {isEditing && (
+          {isEditing && canReassign && (
             <div className="space-y-2">
               <Label>Atribuído a</Label>
               <Select value={formAssigned || "__none__"} onValueChange={(v) => setFormAssigned(v === "__none__" ? "" : v)}>
