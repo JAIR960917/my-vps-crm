@@ -459,6 +459,8 @@ export default function LeadsPage() {
                       setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                       setHistoryOpen(true);
                     }}
+                    onSchedule={(date) => handleSchedule(lead.id, date)}
+                    onToggleComprou={(value) => handleToggleComprou(lead.id, value)}
                   />
                 </div>
               ))}
@@ -523,6 +525,8 @@ export default function LeadsPage() {
                                   setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                                   setHistoryOpen(true);
                                 }}
+                                onSchedule={(date) => handleSchedule(lead.id, date)}
+                                onToggleComprou={(value) => handleToggleComprou(lead.id, value)}
                               />
                             </div>
                           )}
