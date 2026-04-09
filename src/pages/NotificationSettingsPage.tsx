@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Bell, BellOff, Save, Clock } from "lucide-react";
+import { Bell, BellOff, Save, Clock, Play } from "lucide-react";
 
 export default function NotificationSettingsPage() {
   const { isAdmin } = useAuth();
@@ -128,6 +128,36 @@ export default function NotificationSettingsPage() {
                 {saving ? "Salvando..." : "Salvar"}
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* Test button (admin only) */}
+        {isAdmin && (
+          <div className="rounded-lg border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <Play className="h-5 w-5 text-primary" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-sm">Testar Notificação</h3>
+                <p className="text-xs text-muted-foreground">
+                  Dispara a verificação de leads agendados para hoje imediatamente
+                </p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" onClick={async () => {
+              try {
+                const { data, error } = await supabase.functions.invoke("notify-scheduled-leads", {
+                  body: {},
+                  headers: { "Content-Type": "application/json" },
+                });
+                if (error) throw error;
+                toast.success(`Resultado: ${data?.message || "OK"} (${data?.notified || 0} notificados)`);
+              } catch {
+                toast.error("Erro ao testar notificação");
+              }
+            }}>
+              <Play className="mr-1.5 h-3.5 w-3.5" />
+              Testar agora
+            </Button>
           </div>
         )}
 
