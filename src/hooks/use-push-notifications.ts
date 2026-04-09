@@ -9,43 +9,98 @@ function urlBase64ToUint8Array(base64String: string) {
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = window.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
+
   for (let i = 0; i < rawData.length; ++i) {
     outputArray[i] = rawData.charCodeAt(i);
   }
+
   return outputArray;
+}
+
+function isStandaloneMode() {
+  return window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
+
+function isIOSDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function hasMatchingApplicationServerKey(
+  currentKey: ArrayBuffer | null | undefined,
+  expectedKey: Uint8Array,
+) {
+  if (!currentKey) return false;
+
+  const current = new Uint8Array(currentKey);
+  if (current.length !== expectedKey.length) return false;
+
+  return current.every((value, index) => value === expectedKey[index]);
 }
 
 export function usePushNotifications() {
   const { user } = useAuth();
 
   const subscribe = useCallback(async () => {
-    if (!user || !("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+    if (!user || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      return false;
+    }
+
+    if (isIOSDevice() && !isStandaloneMode()) {
+      return false;
+    }
 
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") return false;
+      const permission = Notification.permission === "granted"
+        ? "granted"
+        : await Notification.requestPermission();
+
+      if (permission !== "granted") {
+        return false;
+      }
 
       const registration = await navigator.serviceWorker.ready;
-      
+      await registration.update();
+
+      const expectedServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
       let subscription = await registration.pushManager.getSubscription();
+
+      if (
+        subscription &&
+        !hasMatchingApplicationServerKey(subscription.options.applicationServerKey, expectedServerKey)
+      ) {
+        const staleEndpoint = subscription.endpoint;
+        await subscription.unsubscribe();
+        await supabase
+          .from("push_subscriptions")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("endpoint", staleEndpoint);
+        subscription = null;
+      }
+
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+          applicationServerKey: expectedServerKey,
         });
       }
 
       const subJson = subscription.toJSON();
-      if (!subJson.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) return false;
+      if (!subJson.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) {
+        return false;
+      }
 
-      // Save to DB
-      await supabase.from("push_subscriptions").upsert({
+      const { error } = await supabase.from("push_subscriptions").upsert({
         user_id: user.id,
         endpoint: subJson.endpoint,
         p256dh: subJson.keys.p256dh,
         auth: subJson.keys.auth,
         user_agent: navigator.userAgent,
       }, { onConflict: "user_id,endpoint" });
+
+      if (error) {
+        throw error;
+      }
 
       return true;
     } catch {
@@ -55,27 +110,34 @@ export function usePushNotifications() {
 
   const unsubscribe = useCallback(async () => {
     if (!("serviceWorker" in navigator)) return;
+
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
+
       if (subscription) {
         const endpoint = subscription.endpoint;
         await subscription.unsubscribe();
+
         if (user) {
-          await supabase.from("push_subscriptions").delete()
+          await supabase
+            .from("push_subscriptions")
+            .delete()
             .eq("user_id", user.id)
             .eq("endpoint", endpoint);
         }
       }
-    } catch {}
+    } catch {
+      // no-op
+    }
   }, [user]);
 
-  // Auto-subscribe on login if permission already granted
   useEffect(() => {
     if (!user) return;
-    if (Notification.permission === "granted") {
-      subscribe();
-    }
+    if (Notification.permission !== "granted") return;
+    if (isIOSDevice() && !isStandaloneMode()) return;
+
+    void subscribe();
   }, [user, subscribe]);
 
   return { subscribe, unsubscribe };
