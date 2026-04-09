@@ -59,8 +59,10 @@ export default function SettingsPage() {
       for (const [key, value] of Object.entries(values)) {
         await supabase
           .from("system_settings")
-          .update({ setting_value: value, updated_at: new Date().toISOString() })
-          .eq("setting_key", key);
+          .upsert(
+            { setting_key: key, setting_value: value, updated_at: new Date().toISOString() },
+            { onConflict: "setting_key" }
+          );
       }
       await refresh();
       toast.success("Configurações salvas!");
