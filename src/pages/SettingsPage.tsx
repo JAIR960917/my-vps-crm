@@ -33,14 +33,24 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    setValues({
-      system_name: settings.system_name,
-      primary_color: settings.primary_color,
-      background_color: settings.background_color,
-      text_color: settings.text_color,
-      button_color: settings.button_color,
-      logo_url: settings.logo_url,
-    });
+    const loadExtraSettings = async () => {
+      const { data } = await supabase
+        .from("system_settings")
+        .select("setting_key, setting_value")
+        .in("setting_key", ["twilio_whatsapp_number"]);
+      const extra: Record<string, string> = {};
+      (data || []).forEach((r: any) => { extra[r.setting_key] = r.setting_value; });
+      setValues({
+        system_name: settings.system_name,
+        primary_color: settings.primary_color,
+        background_color: settings.background_color,
+        text_color: settings.text_color,
+        button_color: settings.button_color,
+        logo_url: settings.logo_url,
+        twilio_whatsapp_number: extra.twilio_whatsapp_number || "",
+      });
+    };
+    loadExtraSettings();
   }, [settings]);
 
   const handleSave = async () => {
