@@ -80,18 +80,18 @@ export default function WhatsAppPage() {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) return "Lead removido";
     const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
-    const nameField = formFields.find((f) => f.is_name_field);
-    if (nameField) return data[`field_${nameField.id}`] || "Sem nome";
-    return data.nome_lead || "Sem nome";
+    const nameFields = formFields.filter((f) => f.is_name_field);
+    const name = nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null);
+    return name || data.nome_lead || "Sem nome";
   };
 
   const getLeadPhone = (leadId: string) => {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) return "";
     const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
-    const phoneField = formFields.find((f) => f.is_phone_field);
-    if (phoneField) return data[`field_${phoneField.id}`] || "";
-    return data.telefone || "";
+    const phoneFields = formFields.filter((f) => f.is_phone_field);
+    const phone = phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null);
+    return phone || data.telefone || "";
   };
 
   const handleLeadSelect = (leadId: string) => {
