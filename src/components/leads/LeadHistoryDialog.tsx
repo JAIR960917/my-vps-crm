@@ -126,7 +126,7 @@ export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName
                       </div>
                       <div className="flex items-center gap-1">
                         <span className="text-[10px] text-muted-foreground">{formatDate(note.created_at)}</span>
-                        {isOwn && (
+                        {canDelete && (
                           <Button
                             variant="ghost" size="icon"
                             className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
