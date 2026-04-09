@@ -346,12 +346,14 @@ export default function LeadsPage() {
       if (error) { toast.error("Erro ao agendar"); fetchAll(); }
       else toast.success("Lead agendado");
     } else {
-      // Remove scheduling - revert to first status
-      const defaultStatus = statuses.length > 0 ? statuses[0].key : "novo";
-      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, scheduled_date: null, status: defaultStatus } : l));
+      // Remove scheduling - recalculate status based on lead data (date fields, mappings)
+      const lead = leads.find((l) => l.id === leadId);
+      const leadData = lead ? (typeof lead.data === "object" ? lead.data as Record<string, any> : {}) : {};
+      const recalculatedStatus = resolveStatus(leadData);
+      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, scheduled_date: null, status: recalculatedStatus } : l));
       const { error } = await supabase.from("crm_leads").update({
         scheduled_date: null,
-        status: defaultStatus,
+        status: recalculatedStatus,
       }).eq("id", leadId);
       if (error) { toast.error("Erro ao remover agendamento"); fetchAll(); }
       else toast.success("Agendamento removido");
