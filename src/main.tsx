@@ -1,5 +1,4 @@
 import { createRoot } from "react-dom/client";
-import { registerSW } from "virtual:pwa-register";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -19,11 +18,8 @@ const canRegisterServiceWorker =
   "serviceWorker" in navigator && !isPreviewHost && !isInIframe;
 
 if (canRegisterServiceWorker) {
-  registerSW({
-    immediate: true,
-    onRegisteredSW(_swUrl, registration) {
-      registration?.update();
-    },
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   });
 } else {
   navigator.serviceWorker?.getRegistrations().then((registrations) => {
@@ -32,3 +28,4 @@ if (canRegisterServiceWorker) {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
