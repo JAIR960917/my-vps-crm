@@ -342,8 +342,8 @@ export default function LeadsPage() {
       const { error } = await supabase.from("crm_leads").update({
         scheduled_date: date.toISOString(),
         status: "agendados",
-      }).eq("id", leadId);
-      if (error) { toast.error("Erro ao agendar"); fetchAll(); }
+      } as any).eq("id", leadId);
+      if (error) { console.error("Schedule save error:", error); toast.error("Erro ao agendar"); fetchAll(); }
       else toast.success("Lead agendado");
     } else {
       // Remove scheduling - recalculate status based on lead data (date fields, mappings)
@@ -354,15 +354,15 @@ export default function LeadsPage() {
       const { error } = await supabase.from("crm_leads").update({
         scheduled_date: null,
         status: recalculatedStatus,
-      }).eq("id", leadId);
-      if (error) { toast.error("Erro ao remover agendamento"); fetchAll(); }
+      } as any).eq("id", leadId);
+      if (error) { console.error("Unschedule error:", error); toast.error("Erro ao remover agendamento"); fetchAll(); }
       else toast.success("Agendamento removido");
     }
   };
 
   const handleToggleComprou = async (leadId: string, value: boolean) => {
     setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, comprou: value } : l));
-    const { error } = await supabase.from("crm_leads").update({ comprou: value }).eq("id", leadId);
+    const { error } = await supabase.from("crm_leads").update({ comprou: value } as any).eq("id", leadId);
     if (error) { toast.error("Erro ao atualizar"); fetchAll(); }
     else toast.success(value ? "Marcado como cliente ativo" : "Marcação removida");
   };
