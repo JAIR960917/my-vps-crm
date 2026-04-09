@@ -59,7 +59,6 @@ export function usePushNotifications() {
       }
 
       const registration = await navigator.serviceWorker.ready;
-      await registration.update();
 
       const expectedServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
       let subscription = await registration.pushManager.getSubscription();
@@ -78,12 +77,25 @@ export function usePushNotifications() {
         subscription = null;
       }
 
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: expectedServerKey,
-        });
+      // Already subscribed with correct key — just ensure DB record exists
+      if (subscription) {
+        const subJson = subscription.toJSON();
+        if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+          await supabase.from("push_subscriptions").upsert({
+            user_id: user.id,
+            endpoint: subJson.endpoint,
+            p256dh: subJson.keys.p256dh,
+            auth: subJson.keys.auth,
+            user_agent: navigator.userAgent,
+          }, { onConflict: "user_id,endpoint" });
+          return true;
+        }
       }
+
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: expectedServerKey,
+      });
 
       const subJson = subscription.toJSON();
       if (!subJson.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) {
