@@ -39,6 +39,8 @@ Deno.serve(async (req) => {
       } catch { /* empty body */ }
     }
 
+    console.log(`Check: current=${brHour}:${String(brMinute).padStart(2, "0")}, target=${notificationTime}, force=${forceRun}`);
+
     if (!forceRun && (brHour !== targetHour || brMinute !== targetMinute)) {
       return new Response(JSON.stringify({
         message: "Não é o horário configurado",
@@ -63,18 +65,37 @@ Deno.serve(async (req) => {
 
     if (leadsErr) throw leadsErr;
     if (!scheduledLeads || scheduledLeads.length === 0) {
+      console.log("No scheduled leads for today");
       return new Response(JSON.stringify({ message: "Nenhum lead agendado para hoje", notified: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    console.log(`Found ${scheduledLeads.length} scheduled leads for today`);
+
+    // Dedup: only block if we already sent a SCHEDULED notification today (not manual tests)
+    // We use a specific title prefix marker to distinguish scheduled from force/test
+    const scheduledMarker = "📅";
     if (!forceRun) {
       const { data: existingNotifs } = await supabaseAdmin
         .from("notifications")
-        .select("id")
+        .select("id, title")
         .gte("created_at", utcStart)
+        .like("title", `${scheduledMarker}%`)
         .limit(1);
-      if (existingNotifs && existingNotifs.length > 0) {
+
+      // Check if any of these were from a scheduled run (not force)
+      // We'll use a system_settings key to track last scheduled run date
+      const todayStr = `${brNow.getUTCFullYear()}-${String(brNow.getUTCMonth() + 1).padStart(2, "0")}-${String(brNow.getUTCDate()).padStart(2, "0")}`;
+      
+      const { data: lastRunSetting } = await supabaseAdmin
+        .from("system_settings")
+        .select("setting_value")
+        .eq("setting_key", "last_scheduled_notification_date")
+        .single();
+
+      if (lastRunSetting?.setting_value === todayStr) {
+        console.log("Already sent scheduled notification today");
         return new Response(JSON.stringify({ message: "Já notificado hoje", notified: 0 }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -132,7 +153,7 @@ Deno.serve(async (req) => {
             body: `Leads: ${leadNames.join(", ")}`,
             icon: "/pwa-192x192.png",
             badge: "/pwa-192x192.png",
-            data: { url: "/leads" },
+            data: { url: "/" },
           });
 
           for (const sub of subs) {
@@ -147,6 +168,19 @@ Deno.serve(async (req) => {
       }
       notifiedCount++;
     }
+
+    // Mark today as notified (only for scheduled runs, not force)
+    if (!forceRun) {
+      const brNowForMark = new Date(now.getTime() + brOffset);
+      const todayStr = `${brNowForMark.getUTCFullYear()}-${String(brNowForMark.getUTCMonth() + 1).padStart(2, "0")}-${String(brNowForMark.getUTCDate()).padStart(2, "0")}`;
+      
+      await supabaseAdmin.from("system_settings").upsert({
+        setting_key: "last_scheduled_notification_date",
+        setting_value: todayStr,
+      }, { onConflict: "setting_key" });
+    }
+
+    console.log(`Notified ${notifiedCount} users`);
 
     return new Response(JSON.stringify({ message: "Notificações enviadas", notified: notifiedCount }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -171,7 +205,6 @@ async function sendWebPush(
   const endpointUrl = new URL(sub.endpoint);
   const audience = `${endpointUrl.protocol}//${endpointUrl.host}`;
 
-  const rawPrivate = base64urlDecode(vapidPrivateKey);
   const rawPublic = base64urlDecode(vapidPublicKey);
   
   const jwk = {
@@ -188,12 +221,11 @@ async function sendWebPush(
     false, ["sign"]
   );
 
-  // Build JWT manually
-  const now = Math.floor(Date.now() / 1000);
+  const nowSec = Math.floor(Date.now() / 1000);
   const header = base64urlEncode(JSON.stringify({ typ: "JWT", alg: "ES256" }));
   const body = base64urlEncode(JSON.stringify({
     aud: audience,
-    exp: now + 86400,
+    exp: nowSec + 86400,
     sub: "mailto:noreply@crm.qualinetdigital.site",
   }));
   const unsigned = new TextEncoder().encode(`${header}.${body}`);
@@ -203,7 +235,6 @@ async function sendWebPush(
   const rawSig = derToRaw(new Uint8Array(sig));
   const vapidToken = `${header}.${body}.${base64urlEncodeBytes(rawSig)}`;
 
-  // Encrypt payload
   const encrypted = await encryptPayload(sub.p256dh, sub.auth, payload);
 
   const response = await fetch(sub.endpoint, {
@@ -221,6 +252,7 @@ async function sendWebPush(
     const text = await response.text();
     throw new Error(`Push failed ${response.status}: ${text}`);
   }
+  await response.text();
 }
 
 async function encryptPayload(
@@ -277,15 +309,15 @@ async function encryptPayload(
 
   const rs = new Uint8Array(4);
   new DataView(rs.buffer).setUint32(0, payloadBytes.length + 1 + 16 + 1);
-  const header = new Uint8Array(16 + 4 + 1 + localPubKey.length);
-  header.set(salt);
-  header.set(rs, 16);
-  header[20] = localPubKey.length;
-  header.set(localPubKey, 21);
+  const headerBytes = new Uint8Array(16 + 4 + 1 + localPubKey.length);
+  headerBytes.set(salt);
+  headerBytes.set(rs, 16);
+  headerBytes[20] = localPubKey.length;
+  headerBytes.set(localPubKey, 21);
 
-  const result = new Uint8Array(header.length + encrypted.length);
-  result.set(header);
-  result.set(encrypted, header.length);
+  const result = new Uint8Array(headerBytes.length + encrypted.length);
+  result.set(headerBytes);
+  result.set(encrypted, headerBytes.length);
   return result;
 }
 
