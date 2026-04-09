@@ -20,6 +20,7 @@ type CrmColumn = {
 type Lead = {
   id: string; data: Record<string, any>; assigned_to: string | null;
   created_by: string; status: string; created_at: string;
+  scheduled_date?: string | null; comprou?: boolean;
 };
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 type CrmStatus = {
