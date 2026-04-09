@@ -29,7 +29,7 @@ type Props = {
 };
 
 export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName, profiles, onNoteAdded }: Props) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState("");
   const [sending, setSending] = useState(false);
