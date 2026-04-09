@@ -1,5 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { SignJWT, importJWK } from "https://deno.land/x/jose@v5.2.2/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -91,7 +90,7 @@ Deno.serve(async (req) => {
 
     // Use the same public key hardcoded in the client
     const vapidPublicKey = "BL141X_o9G17ebARe4RvrsfOdXjL6pmMcSfCPSGB-xp7Mkn-HYIJwYgOo9txC80GGU-G9PzfKZDsHh5OEzrP_Ac";
-    const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
+    const vapidPrivateKey = "sZO50wwgUVET33_8A9lv4l8MYmnoVXO50NBzEQk8JqM";
 
     let notifiedCount = 0;
 
@@ -162,7 +161,7 @@ Deno.serve(async (req) => {
   }
 });
 
-// --- Web Push helpers using jose ---
+// --- Web Push helpers ---
 
 async function sendWebPush(
   sub: { endpoint: string; p256dh: string; auth: string },
@@ -173,26 +172,37 @@ async function sendWebPush(
   const endpointUrl = new URL(sub.endpoint);
   const audience = `${endpointUrl.protocol}//${endpointUrl.host}`;
 
-  // Import VAPID private key as JWK for ES256
   const rawPrivate = base64urlDecode(vapidPrivateKey);
   const rawPublic = base64urlDecode(vapidPublicKey);
-
-  // Build JWK from raw keys
+  
   const jwk = {
     kty: "EC",
     crv: "P-256",
-    d: vapidPrivateKey, // already base64url
+    d: vapidPrivateKey,
     x: base64urlEncodeBytes(rawPublic.slice(1, 33)),
     y: base64urlEncodeBytes(rawPublic.slice(33, 65)),
   };
 
-  const key = await importJWK(jwk, "ES256");
+  const key = await crypto.subtle.importKey(
+    "jwk", jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false, ["sign"]
+  );
 
-  const vapidToken = await new SignJWT({ aud: audience, sub: "mailto:noreply@crm.qualinetdigital.site" })
-    .setProtectedHeader({ typ: "JWT", alg: "ES256" })
-    .setIssuedAt()
-    .setExpirationTime("24h")
-    .sign(key);
+  // Build JWT manually
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64urlEncode(JSON.stringify({ typ: "JWT", alg: "ES256" }));
+  const body = base64urlEncode(JSON.stringify({
+    aud: audience,
+    exp: now + 86400,
+    sub: "mailto:noreply@crm.qualinetdigital.site",
+  }));
+  const unsigned = new TextEncoder().encode(`${header}.${body}`);
+  const sig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" }, key, unsigned
+  );
+  const rawSig = derToRaw(new Uint8Array(sig));
+  const vapidToken = `${header}.${body}.${base64urlEncodeBytes(rawSig)}`;
 
   // Encrypt payload
   const encrypted = await encryptPayload(sub.p256dh, sub.auth, payload);
@@ -295,6 +305,10 @@ async function hkdf(
   return okm.slice(0, length);
 }
 
+function base64urlEncode(str: string): string {
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 function base64urlEncodeBytes(bytes: Uint8Array): string {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
@@ -308,4 +322,22 @@ function base64urlDecode(str: string): Uint8Array {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+function derToRaw(der: Uint8Array): Uint8Array {
+  if (der.length === 64) return der;
+  const raw = new Uint8Array(64);
+  let offset = 2;
+  const rLen = der[offset + 1];
+  offset += 2;
+  const rStart = rLen > 32 ? offset + (rLen - 32) : offset;
+  const rDest = rLen < 32 ? 32 - rLen : 0;
+  raw.set(der.slice(rStart, offset + rLen), rDest);
+  offset += rLen;
+  const sLen = der[offset + 1];
+  offset += 2;
+  const sStart = sLen > 32 ? offset + (sLen - 32) : offset;
+  const sDest = sLen < 32 ? 64 - sLen : 32;
+  raw.set(der.slice(sStart, offset + sLen), sDest);
+  return raw;
 }
