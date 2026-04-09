@@ -108,6 +108,7 @@ export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName
             <div className="space-y-3">
               {notes.map((note) => {
                 const isOwn = note.user_id === user?.id;
+                const canDelete = isOwn || isAdmin;
                 const profile = getProfile(note.user_id);
                 return (
                   <div key={note.id} className="group rounded-lg border bg-muted/30 p-3">
