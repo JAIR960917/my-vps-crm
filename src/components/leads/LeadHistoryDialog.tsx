@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { Send, MessageSquare, Trash2 } from "lucide-react";
 
@@ -16,7 +17,7 @@ type Note = {
   created_at: string;
 };
 
-type Profile = { user_id: string; full_name: string; email?: string };
+type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 
 type Props = {
   open: boolean;
@@ -28,7 +29,7 @@ type Props = {
 };
 
 export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName, profiles, onNoteAdded }: Props) {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState("");
   const [sending, setSending] = useState(false);
@@ -59,7 +60,6 @@ export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName
     if (error) {
       toast.error("Erro ao adicionar nota");
     } else {
-      // Update lead's updated_at so it moves to the bottom
       await supabase.from("crm_leads").update({ updated_at: new Date().toISOString() }).eq("id", leadId);
       setNewNote("");
       fetchNotes();
@@ -74,8 +74,12 @@ export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName
     else fetchNotes();
   };
 
+  const getProfile = (userId: string) => {
+    return profiles.find((p) => p.user_id === userId);
+  };
+
   const getProfileName = (userId: string) => {
-    const p = profiles.find((p) => p.user_id === userId);
+    const p = getProfile(userId);
     return p?.full_name || p?.email || "Usuário";
   };
 
@@ -104,15 +108,24 @@ export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName
             <div className="space-y-3">
               {notes.map((note) => {
                 const isOwn = note.user_id === user?.id;
+                const profile = getProfile(note.user_id);
                 return (
                   <div key={note.id} className="group rounded-lg border bg-muted/30 p-3">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-foreground">
-                        {getProfileName(note.user_id)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src={profile?.avatar_url ?? undefined} />
+                          <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+                            {(profile?.full_name || "?").slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs font-semibold text-foreground">
+                          {getProfileName(note.user_id)}
+                        </span>
+                      </div>
                       <div className="flex items-center gap-1">
                         <span className="text-[10px] text-muted-foreground">{formatDate(note.created_at)}</span>
-                        {(isOwn || isAdmin) && (
+                        {isOwn && (
                           <Button
                             variant="ghost" size="icon"
                             className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -123,7 +136,7 @@ export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName
                         )}
                       </div>
                     </div>
-                    <p className="text-sm text-foreground whitespace-pre-wrap">{note.content}</p>
+                    <p className="text-sm text-foreground whitespace-pre-wrap ml-8">{note.content}</p>
                   </div>
                 );
               })}

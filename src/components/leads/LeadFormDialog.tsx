@@ -38,6 +38,7 @@ type Props = {
   setFormAssigned: (s: string) => void;
   saving: boolean;
   isEditing: boolean;
+  canReassign?: boolean;
   onSubmit: (e: React.FormEvent) => void;
   statusOptions: string[];
   statusLabels: Record<string, string>;
