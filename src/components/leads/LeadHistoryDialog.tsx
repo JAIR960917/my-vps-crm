@@ -29,7 +29,7 @@ type Props = {
 };
 
 export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName, profiles, onNoteAdded }: Props) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState("");
   const [sending, setSending] = useState(false);
@@ -108,6 +108,7 @@ export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName
             <div className="space-y-3">
               {notes.map((note) => {
                 const isOwn = note.user_id === user?.id;
+                const canDelete = isOwn || isAdmin;
                 const profile = getProfile(note.user_id);
                 return (
                   <div key={note.id} className="group rounded-lg border bg-muted/30 p-3">
@@ -125,7 +126,7 @@ export default function LeadHistoryDialog({ open, onOpenChange, leadId, leadName
                       </div>
                       <div className="flex items-center gap-1">
                         <span className="text-[10px] text-muted-foreground">{formatDate(note.created_at)}</span>
-                        {isOwn && (
+                        {canDelete && (
                           <Button
                             variant="ghost" size="icon"
                             className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
