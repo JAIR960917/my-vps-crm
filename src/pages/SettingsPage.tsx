@@ -18,6 +18,7 @@ type SettingField = {
 
 const FIELDS: SettingField[] = [
   { key: "system_name", label: "Nome do Sistema", type: "text", placeholder: "Ex: Meu CRM" },
+  { key: "twilio_whatsapp_number", label: "Número WhatsApp (Twilio)", type: "text", placeholder: "+5511999999999" },
   { key: "primary_color", label: "Cor Primária (HSL)", type: "color-hsl", placeholder: "220 72% 50%" },
   { key: "background_color", label: "Cor de Fundo (HSL)", type: "color-hsl", placeholder: "222 47% 6%" },
   { key: "text_color", label: "Cor dos Textos (HSL)", type: "color-hsl", placeholder: "210 20% 92%" },
@@ -32,14 +33,24 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    setValues({
-      system_name: settings.system_name,
-      primary_color: settings.primary_color,
-      background_color: settings.background_color,
-      text_color: settings.text_color,
-      button_color: settings.button_color,
-      logo_url: settings.logo_url,
-    });
+    const loadExtraSettings = async () => {
+      const { data } = await supabase
+        .from("system_settings")
+        .select("setting_key, setting_value")
+        .in("setting_key", ["twilio_whatsapp_number"]);
+      const extra: Record<string, string> = {};
+      (data || []).forEach((r: any) => { extra[r.setting_key] = r.setting_value; });
+      setValues({
+        system_name: settings.system_name,
+        primary_color: settings.primary_color,
+        background_color: settings.background_color,
+        text_color: settings.text_color,
+        button_color: settings.button_color,
+        logo_url: settings.logo_url,
+        twilio_whatsapp_number: extra.twilio_whatsapp_number || "",
+      });
+    };
+    loadExtraSettings();
   }, [settings]);
 
   const handleSave = async () => {
@@ -48,8 +59,10 @@ export default function SettingsPage() {
       for (const [key, value] of Object.entries(values)) {
         await supabase
           .from("system_settings")
-          .update({ setting_value: value, updated_at: new Date().toISOString() })
-          .eq("setting_key", key);
+          .upsert(
+            { setting_key: key, setting_value: value, updated_at: new Date().toISOString() },
+            { onConflict: "setting_key" }
+          );
       }
       await refresh();
       toast.success("Configurações salvas!");

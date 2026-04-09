@@ -343,6 +343,56 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_whatsapp_messages: {
+        Row: {
+          created_at: string
+          created_by: string
+          error_message: string | null
+          id: string
+          lead_id: string | null
+          message: string
+          phone: string
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          error_message?: string | null
+          id?: string
+          lead_id?: string | null
+          message: string
+          phone: string
+          scheduled_at: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          error_message?: string | null
+          id?: string
+          lead_id?: string | null
+          message?: string
+          phone?: string
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_whatsapp_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           id: string
