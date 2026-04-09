@@ -1,5 +1,6 @@
 import { ReactNode, useState } from "react";
 import AppSidebar from "./AppSidebar";
+import NotificationBell from "./NotificationBell";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
@@ -31,8 +32,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
-          <span className="font-bold text-lg truncate">{settings.system_name}</span>
+          <span className="font-bold text-lg truncate flex-1">{settings.system_name}</span>
+          <NotificationBell />
         </div>
+
+        {/* Desktop header with notification bell */}
+        <div className="sticky top-0 z-30 hidden lg:flex items-center justify-end border-b bg-background px-6 py-2">
+          <NotificationBell />
+        </div>
+
         <div className="p-3 sm:p-4 lg:p-6">{children}</div>
       </main>
     </div>

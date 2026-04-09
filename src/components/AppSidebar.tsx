@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -20,6 +20,7 @@ const navItems: NavItem[] = [
   { path: "/colunas", label: "Colunas CRM", icon: Columns3, roles: ["admin"] },
   { path: "/formulario", label: "Formulário", icon: FileText, roles: ["admin"] },
   { path: "/configuracoes", label: "Configurações", icon: Settings, roles: ["admin"] },
+  { path: "/notificacoes", label: "Notificações", icon: Bell },
 ];
 
 interface Props {
