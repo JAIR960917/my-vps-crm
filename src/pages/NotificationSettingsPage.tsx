@@ -54,7 +54,7 @@ export default function NotificationSettingsPage() {
       setPushEnabled(true);
       toast.success("Notificações push ativadas!");
     } else {
-      toast.error("Não foi possível ativar as notificações. Verifique as permissões do navegador.");
+      toast.error("Não foi possível ativar. No iPhone, abra o app instalado pela tela inicial e ative por lá.");
     }
   };
 

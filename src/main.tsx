@@ -1,12 +1,12 @@
 import { createRoot } from "react-dom/client";
+import { registerSW } from "virtual:pwa-register";
 import App from "./App.tsx";
 import "./index.css";
 
-// Guard: never register service worker in iframes or preview hosts
 const isInIframe = (() => {
   try {
     return window.self !== window.top;
-  } catch (e) {
+  } catch {
     return true;
   }
 })();
@@ -15,9 +15,19 @@ const isPreviewHost =
   window.location.hostname.includes("id-preview--") ||
   window.location.hostname.includes("lovableproject.com");
 
-if (isPreviewHost || isInIframe) {
+const canRegisterServiceWorker =
+  "serviceWorker" in navigator && !isPreviewHost && !isInIframe;
+
+if (canRegisterServiceWorker) {
+  registerSW({
+    immediate: true,
+    onRegisteredSW(_swUrl, registration) {
+      registration?.update();
+    },
+  });
+} else {
   navigator.serviceWorker?.getRegistrations().then((registrations) => {
-    registrations.forEach((r) => r.unregister());
+    registrations.forEach((registration) => registration.unregister());
   });
 }
 
