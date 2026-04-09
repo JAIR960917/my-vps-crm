@@ -21,9 +21,28 @@ export default defineConfig(({ mode }) => ({
         enabled: false,
       },
       workbox: {
-        navigateFallbackDenylist: [/^\/~oauth/],
+        navigateFallbackDenylist: [/^\/~oauth/, /^\/auth/],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         importScripts: ["/sw-custom.js"],
+        navigateFallback: null,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*supabase.*\/.*/i,
+            handler: "NetworkOnly",
+          },
+          {
+            urlPattern: /\/auth\//,
+            handler: "NetworkOnly",
+          },
+          {
+            urlPattern: /\/rest\//,
+            handler: "NetworkOnly",
+          },
+          {
+            urlPattern: /\/realtime\//,
+            handler: "NetworkOnly",
+          },
+        ],
       },
       manifest: {
         name: "CRM Ótica Joonker",
