@@ -174,7 +174,7 @@ async function sendWebPush(
 
   const rawPrivate = base64urlDecode(vapidPrivateKey);
   const rawPublic = base64urlDecode(vapidPublicKey);
-  console.log("Key debug - private len:", rawPrivate.length, "public len:", rawPublic.length, "d:", vapidPrivateKey.substring(0, 10) + "...", "pub:", vapidPublicKey.substring(0, 10) + "...");
+  
   const jwk = {
     kty: "EC",
     crv: "P-256",
