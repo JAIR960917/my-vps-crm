@@ -365,7 +365,39 @@ export default function LeadsPage() {
   };
 
 
-  const getLeadsByStatus = (status: string) => leads.filter((l) => getLeadDisplayStatus(l) === status);
+  // Vendedor options for the filter (gerente sees only same company, admin sees all)
+  const vendedorOptions = useMemo(() => {
+    if (!isAdmin && !isGerente) return [];
+    if (isAdmin) return fullProfiles;
+    // Gerente: find my company_id
+    const myProfile = fullProfiles.find(p => p.user_id === user?.id);
+    if (!myProfile?.company_id) return [];
+    return fullProfiles.filter(p => p.company_id === myProfile.company_id);
+  }, [fullProfiles, isAdmin, isGerente, user?.id]);
+
+  // Apply filters to leads
+  const filteredLeads = useMemo(() => {
+    let result = leads;
+    if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
+      result = result.filter(l => l.assigned_to === filterVendedor || l.created_by === filterVendedor);
+    }
+    if (filterDateFrom) {
+      const from = new Date(filterDateFrom);
+      from.setHours(0, 0, 0, 0);
+      result = result.filter(l => new Date(l.created_at) >= from);
+    }
+    if (filterDateTo) {
+      const to = new Date(filterDateTo);
+      to.setHours(23, 59, 59, 999);
+      result = result.filter(l => new Date(l.created_at) <= to);
+    }
+    return result;
+  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente]);
+
+  const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
+
+  const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo;
+  const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); };
 
   const getSyncStatus = (leadId: string): "offline" | "synced" | null => {
     if (offlineIds.has(leadId)) return "offline";
@@ -378,15 +410,81 @@ export default function LeadsPage() {
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold">Leads</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            {leads.length} lead{leads.length !== 1 ? "s" : ""}
+            {filteredLeads.length} lead{filteredLeads.length !== 1 ? "s" : ""}
+            {hasActiveFilters && ` (filtrado de ${leads.length})`}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {(isAdmin || isGerente) && (
+            <Button
+              size="sm"
+              variant={showFilters ? "default" : "outline"}
+              onClick={() => setShowFilters(!showFilters)}
+              className="shrink-0"
+            >
+              <Filter className="mr-1 h-4 w-4" />
+              Filtros
+              {hasActiveFilters && <span className="ml-1 h-2 w-2 rounded-full bg-destructive" />}
+            </Button>
+          )}
           <Button size="sm" className="shrink-0" onClick={() => navigate("/novo-lead")}>
             <Plus className="mr-1 h-4 w-4" />Lead
           </Button>
         </div>
       </div>
+
+      {/* Filter bar */}
+      {(isAdmin || isGerente) && showFilters && (
+        <div className="mb-4 p-3 bg-muted/50 rounded-lg border flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[180px] max-w-[250px]">
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Vendedor</label>
+            <Select value={filterVendedor} onValueChange={setFilterVendedor}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {vendedorOptions.map(p => (
+                  <SelectItem key={p.user_id} value={p.user_id}>
+                    {p.full_name || "Sem nome"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-[140px]">
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Data início</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className={cn("h-9 w-full justify-start text-left font-normal", !filterDateFrom && "text-muted-foreground")}>
+                  {filterDateFrom ? format(filterDateFrom, "dd/MM/yyyy") : "Selecionar"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar mode="single" selected={filterDateFrom} onSelect={setFilterDateFrom} locale={ptBR} className="p-3 pointer-events-auto" />
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="min-w-[140px]">
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Data fim</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className={cn("h-9 w-full justify-start text-left font-normal", !filterDateTo && "text-muted-foreground")}>
+                  {filterDateTo ? format(filterDateTo, "dd/MM/yyyy") : "Selecionar"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar mode="single" selected={filterDateTo} onSelect={setFilterDateTo} locale={ptBR} className="p-3 pointer-events-auto" />
+              </PopoverContent>
+            </Popover>
+          </div>
+          {hasActiveFilters && (
+            <Button size="sm" variant="ghost" onClick={clearFilters} className="h-9">
+              <X className="mr-1 h-4 w-4" />Limpar
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Mobile: Tab selector */}
       <div className="lg:hidden mb-3 overflow-x-auto -mx-3 px-3 sm:-mx-4 sm:px-4">
