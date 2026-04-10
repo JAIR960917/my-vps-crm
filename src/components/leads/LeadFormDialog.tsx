@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { formatPhoneBR } from "@/lib/phoneFormat";
 import { ArrowLeft, Check, Eye } from "lucide-react";
 
 type Profile = { user_id: string; full_name: string; email?: string };
@@ -136,6 +137,21 @@ export default function LeadFormDialog({
 
         {field.field_type === "textarea" && (
           <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={3} />
+        )}
+
+        {field.field_type === "phone" && (
+          <Input
+            type="tel"
+            inputMode="numeric"
+            placeholder="(00) 00000-0000"
+            value={formatPhoneBR(value)}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+              set(fieldKey, digits);
+            }}
+            required={field.is_required}
+            maxLength={16}
+          />
         )}
 
         {["text", "number", "date", "email"].includes(field.field_type) && (
