@@ -71,6 +71,13 @@ export default function LeadsPage() {
   const [offlineIds, setOfflineIds] = useState<Set<string>>(new Set());
   const [recentlySyncedIds, setRecentlySyncedIds] = useState<Set<string>>(new Set());
 
+  // Filters (admin/gerente only)
+  const [filterVendedor, setFilterVendedor] = useState<string>("all");
+  const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>();
+  const [filterDateTo, setFilterDateTo] = useState<Date | undefined>();
+  const [showFilters, setShowFilters] = useState(false);
+  const [fullProfiles, setFullProfiles] = useState<Profile[]>([]);
+
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
