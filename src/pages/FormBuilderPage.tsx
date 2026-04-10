@@ -37,6 +37,7 @@ type CrmStatus = { id: string; key: string; label: string; position: number; col
 const FIELD_TYPES = [
   { value: "text", label: "Texto" },
   { value: "number", label: "Número" },
+  { value: "phone", label: "Telefone" },
   { value: "date", label: "Data" },
   { value: "email", label: "Email" },
   { value: "select", label: "Seleção" },
@@ -158,7 +159,10 @@ export default function FormBuilderPage() {
     if (!label.trim()) return;
     setSaving(true);
 
-    const parsedOptions = ["select", "checkbox_group"].includes(fieldType)
+      // Auto-set is_phone_field when field type is phone
+      const autoIsPhoneField = fieldType === "phone" ? true : isPhoneField;
+
+      const parsedOptions = ["select", "checkbox_group"].includes(fieldType)
       ? options.split(",").map((o) => o.trim()).filter(Boolean)
       : null;
 
@@ -169,6 +173,7 @@ export default function FormBuilderPage() {
       is_required: isRequired,
       is_name_field: isNameField,
       is_phone_field: isPhoneField,
+      is_phone_field: autoIsPhoneField,
       show_on_card: showOnCard,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
       parent_trigger_value: parentFieldId === "__none__" ? null : (parentTriggerValues.length > 0 ? JSON.stringify(parentTriggerValues) : null),
