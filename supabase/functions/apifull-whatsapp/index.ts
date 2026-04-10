@@ -110,7 +110,21 @@ serve(async (req) => {
     if (method === "POST" && body) fetchOpts.body = body;
 
     const response = await fetch(`${APIFULL_BASE}${endpoint}`, fetchOpts);
-    const result = await response.json();
+    const responseText = await response.text();
+    
+    let result: any;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      // API returned non-JSON (plain text error)
+      if (!response.ok) {
+        return new Response(
+          JSON.stringify({ error: responseText || `HTTP ${response.status}` }),
+          { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      result = { message: responseText };
+    }
 
     if (!response.ok) {
       return new Response(
