@@ -25,6 +25,7 @@ type Campaign = {
   name: string;
   message: string;
   status_id: string;
+  instance_id: string | null;
   daily_limit: number;
   start_date: string;
   end_date: string;
@@ -48,11 +49,21 @@ type SendStats = {
   error: number;
 };
 
+type Instance = {
+  id: string;
+  name: string;
+  session: string;
+  company_id: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
 export default function WhatsAppPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [sendStats, setSendStats] = useState<Record<string, SendStats>>({});
+  const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -61,35 +72,38 @@ export default function WhatsAppPage() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [statusId, setStatusId] = useState("");
+  const [instanceId, setInstanceId] = useState("");
   const [dailyLimit, setDailyLimit] = useState("15");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Instance management state
-  const [sessionName, setSessionName] = useState("");
   const [newInstanceName, setNewInstanceName] = useState("");
+  const [newInstanceSession, setNewInstanceSession] = useState("");
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<Record<string, string>>({});
   const [instanceLoading, setInstanceLoading] = useState(false);
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [newInstanceCompanyId, setNewInstanceCompanyId] = useState("");
 
   const canManage = isAdmin;
 
   const fetchData = async () => {
     setLoading(true);
-    const [campaignsRes, statusesRes, sendsRes, sessionRes] = await Promise.all([
+    const [campaignsRes, statusesRes, sendsRes, instancesRes, companiesRes] = await Promise.all([
       supabase.from("whatsapp_campaigns").select("*").order("created_at", { ascending: false }),
       supabase.from("crm_statuses").select("*").order("position"),
       supabase.from("whatsapp_campaign_sends").select("campaign_id, status"),
-      supabase.from("system_settings").select("setting_value").eq("setting_key", "apifull_session").single(),
+      supabase.from("whatsapp_instances").select("*").order("created_at", { ascending: false }),
+      supabase.from("companies").select("id, name").order("name"),
     ]);
 
     setCampaigns((campaignsRes.data || []) as Campaign[]);
     setStatuses((statusesRes.data || []) as Status[]);
-
-    if (sessionRes.data?.setting_value) {
-      setSessionName(sessionRes.data.setting_value);
-    }
+    setInstances((instancesRes.data || []) as Instance[]);
+    setCompanies((companiesRes.data || []) as { id: string; name: string }[]);
 
     const stats: Record<string, SendStats> = {};
     for (const send of (sendsRes.data || []) as { campaign_id: string; status: string }[]) {
@@ -107,16 +121,9 @@ export default function WhatsAppPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Auto-check status when session is loaded
-  useEffect(() => {
-    if (sessionName && isAdmin) {
-      handleCheckStatus();
-    }
-  }, [sessionName]);
-
-  const callApiFull = async (action: string, extraBody: Record<string, any> = {}) => {
+  const callApiFull = async (action: string, session: string, extraBody: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("apifull-whatsapp", {
-      body: { action, session: sessionName, ...extraBody },
+      body: { action, session, ...extraBody },
     });
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);
@@ -124,66 +131,62 @@ export default function WhatsAppPage() {
   };
 
   const handleCreateInstance = async () => {
-    if (!newInstanceName.trim()) {
+    const instName = newInstanceName.trim();
+    const instSession = newInstanceSession.trim() || instName.toLowerCase().replace(/\s+/g, "-");
+    if (!instName) {
       toast.error("Digite um nome para a instância");
       return;
     }
     setInstanceLoading(true);
     try {
-      const instanceName = newInstanceName.trim();
-      const result = await callApiFull("create-instance", { name: instanceName });
-      toast.success("Instância criada com sucesso!");
-      
-      // Save session name to settings
-      const { error } = await supabase
-        .from("system_settings")
-        .upsert({ setting_key: "apifull_session", setting_value: instanceName }, { onConflict: "setting_key" });
-      
-      if (!error) {
-        setSessionName(instanceName);
-        setNewInstanceName("");
-      }
-      console.log("Create instance result:", result);
+      const result = await callApiFull("create-instance", instSession, { name: instSession });
+      toast.success("Instância criada na API Full!");
 
-      // Auto-generate QR Code after creating instance
+      const { error } = await supabase.from("whatsapp_instances").insert({
+        name: instName,
+        session: instSession,
+        company_id: newInstanceCompanyId || null,
+      });
+      if (error) throw error;
+
+      setNewInstanceName("");
+      setNewInstanceSession("");
+      setNewInstanceCompanyId("");
+      fetchData();
+
       toast.info("Gerando QR Code...");
       try {
-        const qrResult = await supabase.functions.invoke("apifull-whatsapp", {
-          body: { action: "qrcode", session: instanceName },
-        });
-        const qrData = qrResult.data;
-        const qr = qrData?.dados || qrData?.qrcode || qrData?.qr || qrData?.data?.qrcode || qrData?.data?.qr;
+        const qrResult = await callApiFull("qrcode", instSession);
+        const qr = qrResult?.dados || qrResult?.qrcode || qrResult?.qr || qrResult?.data?.qrcode || qrResult?.data?.qr;
         if (qr) {
           setQrCode(qr);
           toast.success("QR Code gerado! Escaneie com o WhatsApp.");
         } else {
-          toast.info("QR Code não disponível ainda. Clique em 'Gerar QR Code' em alguns segundos.");
-          console.log("QR response after create:", qrData);
+          toast.info("QR Code não disponível ainda. Clique em 'Gerar QR Code'.");
         }
-      } catch (qrErr: any) {
+      } catch {
         toast.info("Instância criada! Clique em 'Gerar QR Code' para conectar.");
-        console.log("QR auto-generate error:", qrErr);
       }
+
+      console.log("Create instance result:", result);
     } catch (e: any) {
       toast.error(e.message || "Erro ao criar instância");
     }
     setInstanceLoading(false);
   };
 
-  const handleGetQRCode = async () => {
-    if (!sessionName) { toast.error("Nenhuma sessão configurada"); return; }
+  const handleGetQRCode = async (inst: Instance) => {
     setInstanceLoading(true);
     setQrCode(null);
+    setSelectedInstanceId(inst.id);
     try {
-      const result = await callApiFull("qrcode");
-      // The API returns the QR code image in the "dados" field
+      const result = await callApiFull("qrcode", inst.session);
       const qr = result.dados || result.qrcode || result.qr || result.data?.qrcode || result.data?.qr;
       if (qr) {
         setQrCode(qr);
         toast.success("QR Code gerado! Escaneie com o WhatsApp.");
       } else {
         toast.info("Sessão já conectada ou QR Code não disponível");
-        console.log("QR response:", result);
       }
     } catch (e: any) {
       toast.error(e.message || "Erro ao gerar QR Code");
@@ -191,56 +194,64 @@ export default function WhatsAppPage() {
     setInstanceLoading(false);
   };
 
-  const handleCheckStatus = async () => {
-    if (!sessionName) return;
-    setInstanceLoading(true);
+  const handleCheckStatus = async (inst: Instance) => {
     try {
-      const result = await callApiFull("status");
+      const result = await callApiFull("status", inst.session);
       const status = result.status || result.state || result.data?.status || result.data?.state || "desconhecido";
-      setConnectionStatus(status);
-    } catch (e: any) {
-      setConnectionStatus("error");
+      setConnectionStatus(prev => ({ ...prev, [inst.id]: status }));
+    } catch {
+      setConnectionStatus(prev => ({ ...prev, [inst.id]: "error" }));
     }
-    setInstanceLoading(false);
   };
 
-  const handleRestartSession = async () => {
-    if (!sessionName) { toast.error("Nenhuma sessão configurada"); return; }
+  const handleRestartSession = async (inst: Instance) => {
     setInstanceLoading(true);
     try {
-      await callApiFull("restart-session");
+      await callApiFull("restart-session", inst.session);
       toast.success("Sessão reiniciada!");
-      handleCheckStatus();
+      handleCheckStatus(inst);
     } catch (e: any) {
       toast.error(e.message || "Erro ao reiniciar sessão");
     }
     setInstanceLoading(false);
   };
 
-  const handleResetInstance = async () => {
-    if (!sessionName) { toast.error("Nenhuma sessão configurada"); return; }
-    if (!confirm("Tem certeza? Isso vai desconectar o WhatsApp desta instância.")) return;
+  const handleResetInstance = async (inst: Instance) => {
+    if (!confirm(`Tem certeza? Isso vai desconectar o WhatsApp da instância "${inst.name}".`)) return;
     setInstanceLoading(true);
     try {
-      await callApiFull("reset-instance");
+      await callApiFull("reset-instance", inst.session);
       toast.success("Instância resetada!");
-      setConnectionStatus(null);
-      setQrCode(null);
+      setConnectionStatus(prev => ({ ...prev, [inst.id]: "" }));
+      if (selectedInstanceId === inst.id) setQrCode(null);
     } catch (e: any) {
       toast.error(e.message || "Erro ao resetar instância");
     }
     setInstanceLoading(false);
   };
 
+  const handleDeleteInstance = async (inst: Instance) => {
+    if (!confirm(`Excluir a instância "${inst.name}"? Campanhas vinculadas perderão a referência.`)) return;
+    const { error } = await supabase.from("whatsapp_instances").delete().eq("id", inst.id);
+    if (error) toast.error("Erro ao excluir instância");
+    else { toast.success("Instância excluída"); fetchData(); }
+  };
+
+  useEffect(() => {
+    if (instances.length > 0 && (isAdmin || isGerente)) {
+      instances.forEach(inst => handleCheckStatus(inst));
+    }
+  }, [instances.length]);
+
   const resetForm = () => {
-    setName(""); setMessage(""); setStatusId(""); setDailyLimit("15");
+    setName(""); setMessage(""); setStatusId(""); setInstanceId(""); setDailyLimit("15");
     setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
   };
 
   const handleEdit = (c: Campaign) => {
     setName(c.name); setMessage(c.message); setStatusId(c.status_id);
-    setDailyLimit(String(c.daily_limit)); setStartDate(c.start_date);
-    setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
+    setInstanceId(c.instance_id || ""); setDailyLimit(String(c.daily_limit));
+    setStartDate(c.start_date); setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
   };
 
   const handleSubmit = async () => {
@@ -251,10 +262,11 @@ export default function WhatsAppPage() {
     if (!user) return;
     setSaving(true);
 
-    const payload = {
+    const payload: any = {
       name: name.trim(), message: message.trim(), status_id: statusId,
       daily_limit: parseInt(dailyLimit) || 15, start_date: startDate,
       end_date: endDate, created_by: user.id,
+      instance_id: instanceId || null,
     };
 
     let error;
@@ -284,8 +296,11 @@ export default function WhatsAppPage() {
 
   const getStatusLabel = (sid: string) => statuses.find(s => s.id === sid)?.label || "—";
   const getStatusColor = (sid: string) => statuses.find(s => s.id === sid)?.color || "gray";
-
-  const isConnected = connectionStatus === "CONNECTED" || connectionStatus === "connected" || connectionStatus === "open";
+  const getInstanceName = (iid: string | null) => instances.find(i => i.id === iid)?.name || "—";
+  const isConnected = (id: string) => {
+    const s = connectionStatus[id];
+    return s === "CONNECTED" || s === "connected" || s === "open";
+  };
 
   return (
     <AppLayout>
@@ -295,64 +310,64 @@ export default function WhatsAppPage() {
           WhatsApp
         </h1>
         <p className="text-xs sm:text-sm text-muted-foreground">
-          Gerencie sua instância e campanhas automáticas
+          Gerencie suas instâncias e campanhas automáticas
         </p>
       </div>
 
       <Tabs defaultValue={isAdmin ? "instance" : "campaigns"} className="flex-1 flex flex-col">
         <TabsList className="mb-4">
-          {isAdmin && <TabsTrigger value="instance"><Smartphone className="h-4 w-4 mr-1" /> Instância</TabsTrigger>}
+          {(isAdmin || isGerente) && <TabsTrigger value="instance"><Smartphone className="h-4 w-4 mr-1" /> Instâncias</TabsTrigger>}
           <TabsTrigger value="campaigns"><MessageSquare className="h-4 w-4 mr-1" /> Campanhas</TabsTrigger>
           <TabsTrigger value="triggers"><Zap className="h-4 w-4 mr-1" /> Gatilhos</TabsTrigger>
         </TabsList>
 
         {/* Instance Management Tab */}
-        {isAdmin && (
+        {(isAdmin || isGerente) && (
           <TabsContent value="instance" className="flex-1 space-y-4">
-            {/* Connection Status Card */}
-            <div className="rounded-lg border bg-card p-4 space-y-4">
-              <div className="flex items-center justify-between">
+            {/* Create New Instance */}
+            {canManage && (
+              <div className="rounded-lg border bg-card p-4 space-y-3">
                 <h3 className="font-semibold text-sm flex items-center gap-2">
-                  <Settings2 className="h-4 w-4" /> Sessão Atual
+                  <Plus className="h-4 w-4" /> Criar Nova Instância
                 </h3>
-                {connectionStatus && (
-                  <Badge variant={isConnected ? "default" : "destructive"} className="flex items-center gap-1">
-                    {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-                    {isConnected ? "Conectado" : connectionStatus === "error" ? "Erro" : connectionStatus || "Desconhecido"}
-                  </Badge>
-                )}
-              </div>
-
-              {sessionName ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 bg-muted/50 rounded-md p-3">
-                    <Smartphone className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-mono">{sessionName}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nome *</Label>
+                    <Input
+                      placeholder="Ex: WhatsApp Empresa X"
+                      value={newInstanceName}
+                      onChange={e => setNewInstanceName(e.target.value)}
+                    />
                   </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={handleGetQRCode} disabled={instanceLoading}>
-                      {instanceLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <QrCode className="h-4 w-4 mr-1" />}
-                      Gerar QR Code
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={handleCheckStatus} disabled={instanceLoading}>
-                      <RefreshCw className={`h-4 w-4 mr-1 ${instanceLoading ? "animate-spin" : ""}`} />
-                      Verificar Status
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={handleRestartSession} disabled={instanceLoading}>
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                      Reiniciar Sessão
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={handleResetInstance} disabled={instanceLoading}>
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Resetar
+                  <div className="space-y-1">
+                    <Label className="text-xs">Sessão (API Full)</Label>
+                    <Input
+                      placeholder="Auto-gerado se vazio"
+                      value={newInstanceSession}
+                      onChange={e => setNewInstanceSession(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Empresa (opcional)</Label>
+                    <Select value={newInstanceCompanyId} onValueChange={setNewInstanceCompanyId}>
+                      <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhuma</SelectItem>
+                        {companies.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={handleCreateInstance} disabled={instanceLoading} className="w-full">
+                      {instanceLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                      Criar
                     </Button>
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nenhuma instância configurada. Crie uma abaixo.</p>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* QR Code Display */}
             {qrCode && (
@@ -368,26 +383,69 @@ export default function WhatsAppPage() {
                 <p className="text-xs text-muted-foreground text-center">
                   Abra o WhatsApp &gt; Aparelhos conectados &gt; Conectar um aparelho
                 </p>
+                <Button variant="outline" size="sm" onClick={() => setQrCode(null)}>Fechar</Button>
               </div>
             )}
 
-            {/* Create New Instance */}
-            {!sessionName && (
-              <div className="rounded-lg border bg-card p-4 space-y-3">
-                <h3 className="font-semibold text-sm">Criar Nova Instância</h3>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Nome da instância (ex: minha-empresa)"
-                    value={newInstanceName}
-                    onChange={e => setNewInstanceName(e.target.value)}
-                  />
-                  <Button onClick={handleCreateInstance} disabled={instanceLoading}>
-                    {instanceLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
-                    Criar
-                  </Button>
+            {/* Instances List */}
+            <ScrollArea className="flex-1">
+              {instances.length === 0 ? (
+                <div className="text-center py-12">
+                  <Smartphone className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-muted-foreground text-sm">Nenhuma instância cadastrada</p>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="space-y-3">
+                  {instances.map(inst => {
+                    const status = connectionStatus[inst.id];
+                    const connected = isConnected(inst.id);
+                    const company = companies.find(c => c.id === inst.company_id);
+                    return (
+                      <div key={inst.id} className="rounded-lg border bg-card p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Smartphone className="h-4 w-4 text-primary" />
+                              <span className="font-semibold text-sm">{inst.name}</span>
+                              <Badge variant="outline" className="font-mono text-[10px]">{inst.session}</Badge>
+                              {company && (
+                                <Badge variant="secondary" className="text-[10px]">{company.name}</Badge>
+                              )}
+                              {status && (
+                                <Badge variant={connected ? "default" : "destructive"} className="flex items-center gap-1 text-[10px]">
+                                  {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                                  {connected ? "Conectado" : status === "error" ? "Erro" : status}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {canManage && (
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => handleGetQRCode(inst)} disabled={instanceLoading}>
+                              <QrCode className="h-4 w-4 mr-1" /> QR Code
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleCheckStatus(inst)}>
+                              <RefreshCw className="h-4 w-4 mr-1" /> Status
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleRestartSession(inst)} disabled={instanceLoading}>
+                              <RefreshCw className="h-4 w-4 mr-1" /> Reiniciar
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleResetInstance(inst)} disabled={instanceLoading}>
+                              <Trash2 className="h-4 w-4 mr-1" /> Resetar
+                            </Button>
+                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeleteInstance(inst)}>
+                              <Trash2 className="h-4 w-4 mr-1" /> Excluir
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </ScrollArea>
           </TabsContent>
         )}
 
@@ -417,6 +475,17 @@ export default function WhatsAppPage() {
                     <SelectContent>
                       {statuses.map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Instância WhatsApp *</Label>
+                  <Select value={instanceId} onValueChange={setInstanceId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a instância..." /></SelectTrigger>
+                    <SelectContent>
+                      {instances.filter(i => i.is_active).map(i => (
+                        <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -477,6 +546,11 @@ export default function WhatsAppPage() {
                             <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                               {getStatusLabel(c.status_id)}
                             </Badge>
+                            {c.instance_id && (
+                              <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
+                                <Smartphone className="h-3 w-3" /> {getInstanceName(c.instance_id)}
+                              </Badge>
+                            )}
                             {c.is_active ? (
                               <Badge variant="outline" className="text-emerald-500 border-emerald-500">Ativa</Badge>
                             ) : (
@@ -528,7 +602,7 @@ export default function WhatsAppPage() {
         </TabsContent>
         {/* Trigger Campaigns Tab */}
         <TabsContent value="triggers" className="flex-1 flex flex-col">
-          <TriggerCampaigns />
+          <TriggerCampaigns instances={instances} />
         </TabsContent>
       </Tabs>
     </AppLayout>
