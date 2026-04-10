@@ -61,7 +61,7 @@ export default function TriggerCampaigns() {
     { position: 0, delay_days: 0, message: "" },
   ]);
 
-  const canManage = isAdmin || isGerente;
+  const canManage = isAdmin;
 
   const fetchData = async () => {
     setLoading(true);
