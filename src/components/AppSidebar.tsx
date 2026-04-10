@@ -21,7 +21,7 @@ const navItems: NavItem[] = [
   { path: "/formulario", label: "Formulário", icon: FileText, roles: ["admin"] },
   { path: "/configuracoes", label: "Configurações", icon: Settings, roles: ["admin"] },
   { path: "/notificacoes", label: "Notificações", icon: Bell },
-  { path: "/whatsapp", label: "WhatsApp", icon: MessageSquare },
+  { path: "/whatsapp", label: "WhatsApp", icon: MessageSquare, roles: ["admin", "gerente"] },
 ];
 
 interface Props {
