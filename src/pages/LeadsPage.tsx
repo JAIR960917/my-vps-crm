@@ -28,7 +28,7 @@ type Lead = {
   created_by: string; status: string; created_at: string;
   scheduled_date?: string | null; comprou?: boolean;
 };
-type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
+type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null; company_id?: string | null };
 type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
