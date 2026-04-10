@@ -170,10 +170,37 @@ export default function NewLeadPage() {
   // Group visible fields in pages of 2
   const FIELDS_PER_PAGE = 2;
   const totalFieldPages = Math.ceil(visibleFields.length / FIELDS_PER_PAGE);
-  const totalSteps = 1 + totalFieldPages; // step 0 = info, steps 1..N = field pages
-  const currentPageFields = step > 0
+  const totalSteps = 1 + totalFieldPages + 1; // step 0 = info, steps 1..N = field pages, last = preview
+  const previewStep = totalSteps - 1;
+  const isPreviewStep = step === previewStep;
+  const currentPageFields = step > 0 && !isPreviewStep
     ? visibleFields.slice((step - 1) * FIELDS_PER_PAGE, step * FIELDS_PER_PAGE)
     : [];
+
+  const getVisibleAnswers = () => {
+    const answers: { label: string; value: string }[] = [];
+    const processField = (field: FormField) => {
+      if (!isFieldVisible(field)) return;
+      const fieldKey = `field_${field.id}`;
+      const raw = formData[fieldKey];
+      let display = "";
+      if (Array.isArray(raw)) {
+        display = raw.length > 0 ? raw.join(", ") : "—";
+      } else {
+        display = raw ? String(raw) : "—";
+      }
+      answers.push({ label: field.label, value: display });
+      fields
+        .filter((f) => f.parent_field_id === field.id)
+        .sort((a, b) => a.position - b.position)
+        .forEach(processField);
+    };
+    fields
+      .filter((f) => !f.parent_field_id)
+      .sort((a, b) => a.position - b.position)
+      .forEach(processField);
+    return answers;
+  };
 
   const resolveStatus = (): string => {
     const defaultStatus = statuses.length > 0 ? statuses[0].key : formStatus;
