@@ -118,6 +118,7 @@ export default function LeadsPage() {
       setCurrentUserName(me?.full_name || user?.email || "");
 
       setLeads(loadedLeads);
+      setFullProfiles((fullProfs || []) as Profile[]);
 
       // Cache for offline
       try {
