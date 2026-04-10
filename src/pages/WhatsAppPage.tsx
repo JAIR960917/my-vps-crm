@@ -14,8 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   MessageSquare, Plus, Trash2, Edit2, Send, Users, Calendar, Hash,
-  QrCode, RefreshCw, Wifi, WifiOff, Loader2, Smartphone, Settings2
+  QrCode, RefreshCw, Wifi, WifiOff, Loader2, Smartphone, Settings2, Zap
 } from "lucide-react";
+import TriggerCampaigns from "@/components/whatsapp/TriggerCampaigns";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -302,6 +303,7 @@ export default function WhatsAppPage() {
         <TabsList className="mb-4">
           {isAdmin && <TabsTrigger value="instance"><Smartphone className="h-4 w-4 mr-1" /> Instância</TabsTrigger>}
           <TabsTrigger value="campaigns"><MessageSquare className="h-4 w-4 mr-1" /> Campanhas</TabsTrigger>
+          <TabsTrigger value="triggers"><Zap className="h-4 w-4 mr-1" /> Gatilhos</TabsTrigger>
         </TabsList>
 
         {/* Instance Management Tab */}
@@ -523,6 +525,10 @@ export default function WhatsAppPage() {
               </div>
             )}
           </ScrollArea>
+        </TabsContent>
+        {/* Trigger Campaigns Tab */}
+        <TabsContent value="triggers" className="flex-1 flex flex-col">
+          <TriggerCampaigns />
         </TabsContent>
       </Tabs>
     </AppLayout>
