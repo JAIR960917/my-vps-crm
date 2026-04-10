@@ -151,7 +151,7 @@ export default function WhatsAppPage() {
           body: { action: "qrcode", session: instanceName },
         });
         const qrData = qrResult.data;
-        const qr = qrData?.qrcode || qrData?.qr || qrData?.data?.qrcode || qrData?.data?.qr;
+        const qr = qrData?.dados || qrData?.qrcode || qrData?.qr || qrData?.data?.qrcode || qrData?.data?.qr;
         if (qr) {
           setQrCode(qr);
           toast.success("QR Code gerado! Escaneie com o WhatsApp.");
@@ -175,8 +175,8 @@ export default function WhatsAppPage() {
     setQrCode(null);
     try {
       const result = await callApiFull("qrcode");
-      // The API may return qrcode as base64 or URL
-      const qr = result.qrcode || result.qr || result.data?.qrcode || result.data?.qr;
+      // The API returns the QR code image in the "dados" field
+      const qr = result.dados || result.qrcode || result.qr || result.data?.qrcode || result.data?.qr;
       if (qr) {
         setQrCode(qr);
         toast.success("QR Code gerado! Escaneie com o WhatsApp.");
