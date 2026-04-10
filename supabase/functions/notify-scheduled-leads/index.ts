@@ -141,13 +141,14 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from("notifications").insert(notificationInserts);
 
       // Web Push
+      console.log(`VAPID configured: public=${!!vapidPublicKey}, private=${!!vapidPrivateKey}`);
       if (vapidPublicKey && vapidPrivateKey) {
         const { data: subs } = await supabaseAdmin
           .from("push_subscriptions")
           .select("endpoint, p256dh, auth")
           .eq("user_id", userId);
 
-        if (subs && subs.length > 0) {
+        console.log(`Found ${subs?.length || 0} push subscription(s) for user ${userId}`);
           const payload = JSON.stringify({
             title,
             body: `Leads: ${leadNames.join(", ")}`,
