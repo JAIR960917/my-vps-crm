@@ -176,6 +176,7 @@ Deno.serve(async (req) => {
             }
           }
         }
+      }
       notifiedCount++;
     }
 
