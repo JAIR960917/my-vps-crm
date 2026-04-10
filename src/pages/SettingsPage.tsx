@@ -37,7 +37,7 @@ export default function SettingsPage() {
       const { data } = await supabase
         .from("system_settings")
         .select("setting_key, setting_value")
-        .in("setting_key", ["twilio_whatsapp_number"]);
+        .in("setting_key", ["twilio_whatsapp_number", "whatsapp_cron_interval"]);
       const extra: Record<string, string> = {};
       (data || []).forEach((r: any) => { extra[r.setting_key] = r.setting_value; });
       setValues({
@@ -48,6 +48,7 @@ export default function SettingsPage() {
         button_color: settings.button_color,
         logo_url: settings.logo_url,
         twilio_whatsapp_number: extra.twilio_whatsapp_number || "",
+        whatsapp_cron_interval: extra.whatsapp_cron_interval || "5",
       });
     };
     loadExtraSettings();
