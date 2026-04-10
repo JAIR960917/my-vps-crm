@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, WifiOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, WifiOff, ArrowLeft, Check, Eye } from "lucide-react";
 import { addToOfflineQueue, syncOfflineQueue, getOfflineQueue } from "@/lib/offlineSync";
 
 type DateStatusRange = { max_years: number; status_key: string };
