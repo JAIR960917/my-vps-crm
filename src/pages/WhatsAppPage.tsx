@@ -151,7 +151,7 @@ export default function WhatsAppPage() {
           body: { action: "qrcode", session: instanceName },
         });
         const qrData = qrResult.data;
-        const qr = qrData?.qrcode || qrData?.qr || qrData?.data?.qrcode || qrData?.data?.qr;
+        const qr = qrData?.dados || qrData?.qrcode || qrData?.qr || qrData?.data?.qrcode || qrData?.data?.qr;
         if (qr) {
           setQrCode(qr);
           toast.success("QR Code gerado! Escaneie com o WhatsApp.");
