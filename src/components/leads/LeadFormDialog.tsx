@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { ArrowLeft, Check, Eye } from "lucide-react";
 
 type Profile = { user_id: string; full_name: string; email?: string };
 type Company = { id: string; name: string };
@@ -50,9 +51,11 @@ export default function LeadFormDialog({
   setFormAssigned, saving, isEditing, canReassign, onSubmit, statusOptions, statusLabels,
 }: Props) {
   const [fields, setFields] = useState<FormField[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (open) {
+      setShowPreview(false);
       supabase
         .from("crm_form_fields")
         .select("*")
@@ -68,7 +71,6 @@ export default function LeadFormDialog({
     set(key, arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item]);
   };
 
-  // Check if a field should be visible based on parent conditions
   const isFieldVisible = (field: FormField): boolean => {
     if (!field.parent_field_id) return true;
     const parent = fields.find((f) => f.id === field.parent_field_id);
@@ -76,7 +78,6 @@ export default function LeadFormDialog({
     if (!isFieldVisible(parent)) return false;
     if (!field.parent_trigger_value) return true;
     const parentValue = formData[`field_${parent.id}`];
-    // Support both JSON array and single string for trigger values
     let triggerValues: string[];
     try {
       const parsed = JSON.parse(field.parent_trigger_value);
@@ -84,7 +85,6 @@ export default function LeadFormDialog({
     } catch {
       triggerValues = [field.parent_trigger_value];
     }
-    // parentValue can be a string (select) or array (checkbox_group)
     if (Array.isArray(parentValue)) {
       return parentValue.some((v: string) => triggerValues.includes(v));
     }
@@ -150,7 +150,6 @@ export default function LeadFormDialog({
     );
   };
 
-  // Sort: root fields by position, then children follow parents
   const rootFields = fields.filter((f) => !f.parent_field_id).sort((a, b) => a.position - b.position);
 
   const renderFieldTree = (field: FormField): React.ReactNode => {
@@ -168,72 +167,158 @@ export default function LeadFormDialog({
 
   const hasMappingField = fields.some(f => (f.status_mapping && Object.keys(f.status_mapping).length > 0) || f.date_status_ranges);
 
+  // Get visible fields with their answers for the preview
+  const getVisibleAnswers = () => {
+    const answers: { label: string; value: string }[] = [];
+    const processField = (field: FormField) => {
+      if (!isFieldVisible(field)) return;
+      const fieldKey = `field_${field.id}`;
+      const raw = formData[fieldKey];
+      let display = "";
+      if (Array.isArray(raw)) {
+        display = raw.length > 0 ? raw.join(", ") : "—";
+      } else {
+        display = raw ? String(raw) : "—";
+      }
+      answers.push({ label: field.label, value: display });
+      // Process children
+      fields
+        .filter((f) => f.parent_field_id === field.id)
+        .sort((a, b) => a.position - b.position)
+        .forEach(processField);
+    };
+    rootFields.forEach(processField);
+    return answers;
+  };
+
+  const handlePreview = () => setShowPreview(true);
+  const handleBackToForm = () => setShowPreview(false);
+
+  const handleConfirmSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(e);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Editar Lead" : "Novo Lead"}</DialogTitle>
+          <DialogTitle>
+            {showPreview
+              ? "📋 Revisão das Respostas"
+              : isEditing ? "Editar Lead" : "Novo Lead"}
+          </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          {/* Auto-filled fields */}
-          <div className="space-y-2">
-            <Label>Empresa</Label>
-            <Input value={companies.length > 0 ? companies.map(c => c.name).join(", ") : "Nenhuma empresa"} readOnly className="bg-muted" />
-          </div>
-          <div className="space-y-2">
-            <Label>Vendedor Responsável</Label>
-            <Input value={currentUserName || "—"} readOnly className="bg-muted" />
-          </div>
-
-          {/* Status column selection - hide when auto-mapping on create */}
-          {(isEditing || !hasMappingField) && (
-            <div className="space-y-2">
-              <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
-              <Select value={formStatus} onValueChange={setFormStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((s) => (
-                    <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          {!isEditing && hasMappingField && (
-            <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
-              ℹ️ A coluna será definida automaticamente com base nas respostas.
+        {showPreview ? (
+          /* ====== PREVIEW STEP ====== */
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Confira as respostas antes de salvar o lead:
             </p>
-          )}
 
-          {isEditing && canReassign && (
-            <div className="space-y-2">
-              <Label>Atribuído a</Label>
-              <Select value={formAssigned || "__none__"} onValueChange={(v) => setFormAssigned(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Ninguém" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Ninguém</SelectItem>
-                  {profiles.map((p) => (
-                    <SelectItem key={p.user_id} value={p.user_id}>{p.full_name || p.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="rounded-lg border bg-muted/30 divide-y divide-border">
+              {/* Fixed info */}
+              <div className="flex justify-between items-center px-4 py-2.5">
+                <span className="text-sm font-medium text-muted-foreground">Empresa</span>
+                <span className="text-sm text-foreground font-medium">
+                  {companies.length > 0 ? companies.map(c => c.name).join(", ") : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center px-4 py-2.5">
+                <span className="text-sm font-medium text-muted-foreground">Vendedor</span>
+                <span className="text-sm text-foreground font-medium">{currentUserName || "—"}</span>
+              </div>
+              {(isEditing || !hasMappingField) && (
+                <div className="flex justify-between items-center px-4 py-2.5">
+                  <span className="text-sm font-medium text-muted-foreground">Coluna</span>
+                  <span className="text-sm text-foreground font-medium">{statusLabels[formStatus] || formStatus}</span>
+                </div>
+              )}
+
+              {/* Dynamic field answers */}
+              {getVisibleAnswers().map((item, i) => (
+                <div key={i} className="flex justify-between items-start px-4 py-2.5 gap-4">
+                  <span className="text-sm font-medium text-muted-foreground shrink-0">{item.label}</span>
+                  <span className="text-sm text-foreground font-medium text-right">{item.value}</span>
+                </div>
+              ))}
             </div>
-          )}
 
-          {/* Dynamic form fields */}
-          {rootFields.map((field) => renderFieldTree(field))}
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={handleBackToForm}>
+                <ArrowLeft className="h-4 w-4 mr-1" /> Voltar e Editar
+              </Button>
+              <Button type="button" className="flex-1" disabled={saving} onClick={handleConfirmSubmit}>
+                {saving ? "Salvando..." : <><Check className="h-4 w-4 mr-1" /> Confirmar</>}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          /* ====== FORM STEP ====== */
+          <form onSubmit={(e) => { e.preventDefault(); if (!isEditing && fields.length > 0) { handlePreview(); } else { onSubmit(e); } }} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Empresa</Label>
+              <Input value={companies.length > 0 ? companies.map(c => c.name).join(", ") : "Nenhuma empresa"} readOnly className="bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <Label>Vendedor Responsável</Label>
+              <Input value={currentUserName || "—"} readOnly className="bg-muted" />
+            </div>
 
-          {fields.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Nenhuma pergunta configurada. Vá em "Formulário" no menu para criar perguntas.
-            </p>
-          )}
+            {(isEditing || !hasMappingField) && (
+              <div className="space-y-2">
+                <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
+                <Select value={formStatus} onValueChange={setFormStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((s) => (
+                      <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {!isEditing && hasMappingField && (
+              <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+                ℹ️ A coluna será definida automaticamente com base nas respostas.
+              </p>
+            )}
 
-          <Button type="submit" className="w-full" disabled={saving}>
-            {saving ? "Salvando..." : isEditing ? "Atualizar" : "Enviar"}
-          </Button>
-        </form>
+            {isEditing && canReassign && (
+              <div className="space-y-2">
+                <Label>Atribuído a</Label>
+                <Select value={formAssigned || "__none__"} onValueChange={(v) => setFormAssigned(v === "__none__" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="Ninguém" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Ninguém</SelectItem>
+                    {profiles.map((p) => (
+                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name || p.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {rootFields.map((field) => renderFieldTree(field))}
+
+            {fields.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhuma pergunta configurada. Vá em "Formulário" no menu para criar perguntas.
+              </p>
+            )}
+
+            <Button type="submit" className="w-full" disabled={saving}>
+              {saving
+                ? "Salvando..."
+                : isEditing
+                  ? "Atualizar"
+                  : fields.length > 0
+                    ? <><Eye className="h-4 w-4 mr-1" /> Revisar Respostas</>
+                    : "Enviar"}
+            </Button>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
