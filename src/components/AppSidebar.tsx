@@ -135,6 +135,9 @@ export default function AppSidebar({ onNavigate }: Props) {
         <div className="truncate px-3 text-xs text-sidebar-foreground/60">
           {user?.email}
         </div>
+        <div className="px-3 text-[10px] text-sidebar-foreground/40">
+          v1.1.0
+        </div>
         <button
           onClick={handleSignOut}
           disabled={signingOut}
