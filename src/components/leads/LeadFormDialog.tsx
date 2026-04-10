@@ -162,6 +162,16 @@ export default function LeadFormDialog({
             required={field.is_required}
           />
         )}
+
+        {/* Fallback for unknown field types */}
+        {!["select", "checkbox_group", "textarea", "phone", "text", "number", "date", "email"].includes(field.field_type) && (
+          <Input
+            type="text"
+            value={value}
+            onChange={(e) => set(fieldKey, e.target.value)}
+            required={field.is_required}
+          />
+        )}
       </div>
     );
   };
