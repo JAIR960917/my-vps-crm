@@ -427,9 +427,36 @@ export default function NewLeadPage() {
         )}
 
         {/* Field pages */}
-        {step > 0 && (
+        {step > 0 && !isPreviewStep && (
           <div className="space-y-4">
             {currentPageFields.map(renderFormField)}
+          </div>
+        )}
+
+        {/* Preview step */}
+        {isPreviewStep && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              📋 Confira as respostas antes de salvar o lead:
+            </p>
+            <div className="rounded-lg border bg-muted/30 divide-y divide-border">
+              <div className="flex justify-between items-center px-4 py-2.5">
+                <span className="text-sm font-medium text-muted-foreground">Empresa</span>
+                <span className="text-sm text-foreground font-medium">
+                  {companies.map(c => c.name).join(", ") || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center px-4 py-2.5">
+                <span className="text-sm font-medium text-muted-foreground">Vendedor</span>
+                <span className="text-sm text-foreground font-medium">{currentUserName || "—"}</span>
+              </div>
+              {getVisibleAnswers().map((item, i) => (
+                <div key={i} className="flex justify-between items-start px-4 py-2.5 gap-4">
+                  <span className="text-sm font-medium text-muted-foreground shrink-0">{item.label}</span>
+                  <span className="text-sm text-foreground font-medium text-right">{item.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -440,7 +467,7 @@ export default function NewLeadPage() {
               <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
             </Button>
           )}
-          {step < totalSteps - 1 ? (
+          {step < previewStep ? (
             <Button className="flex-1" onClick={() => {
               // Validate required fields on current page
               if (step > 0) {
@@ -458,11 +485,14 @@ export default function NewLeadPage() {
               }
               setStep(step + 1);
             }} disabled={step === 0 && !formStatus}>
-              Próximo <ChevronRight className="h-4 w-4 ml-1" />
+              {step === previewStep - 1
+                ? <><Eye className="h-4 w-4 mr-1" /> Revisar</>
+                : <>Próximo <ChevronRight className="h-4 w-4 ml-1" /></>
+              }
             </Button>
           ) : (
             <Button className="flex-1" onClick={handleSubmit} disabled={saving}>
-              {saving ? "Salvando..." : "Enviar"}
+              {saving ? "Salvando..." : <><Check className="h-4 w-4 mr-1" /> Confirmar</>}
             </Button>
           )}
         </div>
