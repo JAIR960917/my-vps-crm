@@ -370,6 +370,16 @@ export default function NewLeadPage() {
             required={field.is_required}
           />
         )}
+
+        {/* Fallback for unknown field types (e.g. cached PWA with old bundle) */}
+        {!["select", "checkbox_group", "textarea", "phone", "text", "number", "date", "email"].includes(field.field_type) && (
+          <Input
+            type="text"
+            value={value}
+            onChange={(e) => set(fieldKey, e.target.value)}
+            required={field.is_required}
+          />
+        )}
       </div>
     );
   };
