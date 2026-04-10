@@ -135,9 +135,6 @@ export default function AppSidebar({ onNavigate }: Props) {
         <div className="truncate px-3 text-xs text-sidebar-foreground/60">
           {user?.email}
         </div>
-        <div className="mx-3 rounded-md border border-emerald-500 bg-emerald-500/10 px-2 py-1 text-center text-xs font-semibold text-emerald-400">
-          v1.1.0
-        </div>
         <button
           onClick={handleSignOut}
           disabled={signingOut}
@@ -146,6 +143,9 @@ export default function AppSidebar({ onNavigate }: Props) {
           <LogOut className="h-4 w-4" />
           {signingOut ? "Saindo..." : "Sair"}
         </button>
+        <div className="mx-3 rounded-md border border-emerald-500 bg-emerald-500/10 px-2 py-1 text-center text-xs font-semibold text-emerald-400">
+          v1.1.0
+        </div>
       </div>
     </aside>
   );
