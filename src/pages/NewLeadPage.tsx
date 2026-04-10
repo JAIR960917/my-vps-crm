@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, WifiOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, WifiOff, ArrowLeft, Check, Eye } from "lucide-react";
 import { addToOfflineQueue, syncOfflineQueue, getOfflineQueue } from "@/lib/offlineSync";
 
 type DateStatusRange = { max_years: number; status_key: string };
@@ -170,10 +170,37 @@ export default function NewLeadPage() {
   // Group visible fields in pages of 2
   const FIELDS_PER_PAGE = 2;
   const totalFieldPages = Math.ceil(visibleFields.length / FIELDS_PER_PAGE);
-  const totalSteps = 1 + totalFieldPages; // step 0 = info, steps 1..N = field pages
-  const currentPageFields = step > 0
+  const totalSteps = 1 + totalFieldPages + 1; // step 0 = info, steps 1..N = field pages, last = preview
+  const previewStep = totalSteps - 1;
+  const isPreviewStep = step === previewStep;
+  const currentPageFields = step > 0 && !isPreviewStep
     ? visibleFields.slice((step - 1) * FIELDS_PER_PAGE, step * FIELDS_PER_PAGE)
     : [];
+
+  const getVisibleAnswers = () => {
+    const answers: { label: string; value: string }[] = [];
+    const processField = (field: FormField) => {
+      if (!isFieldVisible(field)) return;
+      const fieldKey = `field_${field.id}`;
+      const raw = formData[fieldKey];
+      let display = "";
+      if (Array.isArray(raw)) {
+        display = raw.length > 0 ? raw.join(", ") : "—";
+      } else {
+        display = raw ? String(raw) : "—";
+      }
+      answers.push({ label: field.label, value: display });
+      fields
+        .filter((f) => f.parent_field_id === field.id)
+        .sort((a, b) => a.position - b.position)
+        .forEach(processField);
+    };
+    fields
+      .filter((f) => !f.parent_field_id)
+      .sort((a, b) => a.position - b.position)
+      .forEach(processField);
+    return answers;
+  };
 
   const resolveStatus = (): string => {
     const defaultStatus = statuses.length > 0 ? statuses[0].key : formStatus;
@@ -400,9 +427,36 @@ export default function NewLeadPage() {
         )}
 
         {/* Field pages */}
-        {step > 0 && (
+        {step > 0 && !isPreviewStep && (
           <div className="space-y-4">
             {currentPageFields.map(renderFormField)}
+          </div>
+        )}
+
+        {/* Preview step */}
+        {isPreviewStep && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              📋 Confira as respostas antes de salvar o lead:
+            </p>
+            <div className="rounded-lg border bg-muted/30 divide-y divide-border">
+              <div className="flex justify-between items-center px-4 py-2.5">
+                <span className="text-sm font-medium text-muted-foreground">Empresa</span>
+                <span className="text-sm text-foreground font-medium">
+                  {companies.map(c => c.name).join(", ") || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center px-4 py-2.5">
+                <span className="text-sm font-medium text-muted-foreground">Vendedor</span>
+                <span className="text-sm text-foreground font-medium">{currentUserName || "—"}</span>
+              </div>
+              {getVisibleAnswers().map((item, i) => (
+                <div key={i} className="flex justify-between items-start px-4 py-2.5 gap-4">
+                  <span className="text-sm font-medium text-muted-foreground shrink-0">{item.label}</span>
+                  <span className="text-sm text-foreground font-medium text-right">{item.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -413,7 +467,7 @@ export default function NewLeadPage() {
               <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
             </Button>
           )}
-          {step < totalSteps - 1 ? (
+          {step < previewStep ? (
             <Button className="flex-1" onClick={() => {
               // Validate required fields on current page
               if (step > 0) {
@@ -431,11 +485,14 @@ export default function NewLeadPage() {
               }
               setStep(step + 1);
             }} disabled={step === 0 && !formStatus}>
-              Próximo <ChevronRight className="h-4 w-4 ml-1" />
+              {step === previewStep - 1
+                ? <><Eye className="h-4 w-4 mr-1" /> Revisar</>
+                : <>Próximo <ChevronRight className="h-4 w-4 ml-1" /></>
+              }
             </Button>
           ) : (
             <Button className="flex-1" onClick={handleSubmit} disabled={saving}>
-              {saving ? "Salvando..." : "Enviar"}
+              {saving ? "Salvando..." : <><Check className="h-4 w-4 mr-1" /> Confirmar</>}
             </Button>
           )}
         </div>
