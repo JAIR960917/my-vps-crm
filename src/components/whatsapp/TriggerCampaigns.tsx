@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit2, Send, Users, Hash, Clock, Zap } from "lucide-react";
+import { Plus, Trash2, Edit2, Send, Users, Hash, Clock, Zap, Smartphone } from "lucide-react";
 
 type Status = {
   id: string;
@@ -30,6 +30,7 @@ type TriggerCampaign = {
   id: string;
   name: string;
   status_id: string;
+  instance_id: string | null;
   is_active: boolean;
   daily_limit: number;
   created_by: string;
@@ -44,7 +45,19 @@ type TriggerSendStats = {
   error: number;
 };
 
-export default function TriggerCampaigns() {
+type Instance = {
+  id: string;
+  name: string;
+  session: string;
+  company_id: string | null;
+  is_active: boolean;
+};
+
+interface Props {
+  instances: Instance[];
+}
+
+export default function TriggerCampaigns({ instances }: Props) {
   const { user, isAdmin, isGerente } = useAuth();
   const [campaigns, setCampaigns] = useState<TriggerCampaign[]>([]);
   const [statuses, setStatuses] = useState<Status[]>([]);
@@ -56,6 +69,7 @@ export default function TriggerCampaigns() {
 
   const [name, setName] = useState("");
   const [statusId, setStatusId] = useState("");
+  const [instanceId, setInstanceId] = useState("");
   const [dailyLimit, setDailyLimit] = useState("15");
   const [steps, setSteps] = useState<TriggerStep[]>([
     { position: 0, delay_days: 0, message: "" },
@@ -97,6 +111,7 @@ export default function TriggerCampaigns() {
   const resetForm = () => {
     setName("");
     setStatusId("");
+    setInstanceId("");
     setDailyLimit("15");
     setSteps([{ position: 0, delay_days: 0, message: "" }]);
     setEditingId(null);
@@ -106,6 +121,7 @@ export default function TriggerCampaigns() {
   const handleEdit = (c: TriggerCampaign) => {
     setName(c.name);
     setStatusId(c.status_id);
+    setInstanceId(c.instance_id || "");
     setDailyLimit(String(c.daily_limit));
     const sorted = [...(c.whatsapp_trigger_steps || [])].sort((a, b) => a.position - b.position);
     setSteps(
@@ -147,11 +163,12 @@ export default function TriggerCampaigns() {
     setSaving(true);
 
     try {
-      const payload = {
+      const payload: any = {
         name: name.trim(),
         status_id: statusId,
         daily_limit: parseInt(dailyLimit) || 15,
         created_by: user.id,
+        instance_id: instanceId || null,
       };
 
       let campaignId = editingId;
@@ -159,7 +176,6 @@ export default function TriggerCampaigns() {
       if (editingId) {
         const { error } = await supabase.from("whatsapp_trigger_campaigns").update(payload).eq("id", editingId);
         if (error) throw error;
-        // Delete old steps and re-insert
         await supabase.from("whatsapp_trigger_steps").delete().eq("campaign_id", editingId);
       } else {
         const { data, error } = await supabase.from("whatsapp_trigger_campaigns").insert(payload).select("id").single();
@@ -167,7 +183,6 @@ export default function TriggerCampaigns() {
         campaignId = data.id;
       }
 
-      // Insert steps
       const stepsPayload = steps.map((s, i) => ({
         campaign_id: campaignId!,
         position: i,
@@ -206,6 +221,7 @@ export default function TriggerCampaigns() {
 
   const getStatusLabel = (sid: string) => statuses.find((s) => s.id === sid)?.label || "—";
   const getStatusColor = (sid: string) => statuses.find((s) => s.id === sid)?.color || "gray";
+  const getInstanceName = (iid: string | null) => instances.find((i) => i.id === iid)?.name || "—";
 
   return (
     <div className="flex-1 flex flex-col">
@@ -231,7 +247,7 @@ export default function TriggerCampaigns() {
             {editingId ? "Editar campanha por gatilho" : "Nova campanha por gatilho"}
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Nome *</Label>
               <Input placeholder="Ex: Sequência boas-vindas" value={name} onChange={(e) => setName(e.target.value)} />
@@ -246,6 +262,21 @@ export default function TriggerCampaigns() {
                   {statuses.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Instância WhatsApp</Label>
+              <Select value={instanceId} onValueChange={setInstanceId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {instances.filter(i => i.is_active).map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      {i.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -341,6 +372,11 @@ export default function TriggerCampaigns() {
                         <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                           {getStatusLabel(c.status_id)}
                         </Badge>
+                        {c.instance_id && (
+                          <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
+                            <Smartphone className="h-3 w-3" /> {getInstanceName(c.instance_id)}
+                          </Badge>
+                        )}
                         {c.is_active ? (
                           <Badge variant="outline" className="text-emerald-500 border-emerald-500">Ativa</Badge>
                         ) : (

@@ -76,6 +76,26 @@ function resolveLeadFields(data: Record<string, any>, nameFields: any[], phoneFi
   return { phone, name };
 }
 
+// Resolve session name: from instance_id or fallback to system_settings
+async function resolveSession(supabase: any, instanceId: string | null): Promise<string | null> {
+  if (instanceId) {
+    const { data } = await supabase
+      .from("whatsapp_instances")
+      .select("session, is_active")
+      .eq("id", instanceId)
+      .single();
+    if (data?.is_active) return data.session;
+    return null;
+  }
+  // Fallback: legacy system_settings
+  const { data } = await supabase
+    .from("system_settings")
+    .select("setting_value")
+    .eq("setting_key", "apifull_session")
+    .single();
+  return data?.setting_value || null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -89,28 +109,23 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { data: sessionSetting } = await supabase
-      .from("system_settings").select("setting_value").eq("setting_key", "apifull_session").single();
-    const session = sessionSetting?.setting_value;
-    if (!session) {
-      return new Response(JSON.stringify({ error: "Sessão da API Full não configurada." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
     const { data: formFields } = await supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field");
     const nameFields = (formFields || []).filter((f: any) => f.is_name_field);
     const phoneFields = (formFields || []).filter((f: any) => f.is_phone_field);
 
     let totalSent = 0;
     let totalErrors = 0;
-
-    // ========== PERIOD CAMPAIGNS (existing) ==========
     const today = new Date().toISOString().split("T")[0];
+
+    // ========== PERIOD CAMPAIGNS ==========
     const { data: campaigns } = await supabase.from("whatsapp_campaigns")
       .select("*").eq("is_active", true).lte("start_date", today).gte("end_date", today);
 
     if (campaigns && campaigns.length > 0) {
       for (const campaign of campaigns) {
+        const session = await resolveSession(supabase, campaign.instance_id);
+        if (!session) continue;
+
         const { data: statusData } = await supabase.from("crm_statuses").select("key").eq("id", campaign.status_id).single();
         const statusKey = statusData?.key || "";
 
@@ -156,27 +171,27 @@ serve(async (req) => {
       }
     }
 
-    // ========== TRIGGER CAMPAIGNS (new) ==========
+    // ========== TRIGGER CAMPAIGNS ==========
     const { data: triggerCampaigns } = await supabase.from("whatsapp_trigger_campaigns")
       .select("*, whatsapp_trigger_steps(*)").eq("is_active", true);
 
     if (triggerCampaigns && triggerCampaigns.length > 0) {
       for (const tc of triggerCampaigns) {
+        const session = await resolveSession(supabase, tc.instance_id);
+        if (!session) continue;
+
         const steps = ((tc as any).whatsapp_trigger_steps || []).sort((a: any, b: any) => a.position - b.position);
         if (steps.length === 0) continue;
 
         const { data: statusData } = await supabase.from("crm_statuses").select("key").eq("id", tc.status_id).single();
         const statusKey = statusData?.key || "";
 
-        // Get leads currently in this status
         const { data: leads } = await supabase.from("crm_leads").select("id, data, status, updated_at").eq("status", statusKey);
         if (!leads || leads.length === 0) continue;
 
-        // Get all sends for this trigger campaign
         const { data: existingSends } = await supabase.from("whatsapp_trigger_sends")
           .select("lead_id, step_id, status").eq("campaign_id", tc.id);
 
-        // Daily limit check
         const todayStart = new Date(today + "T00:00:00Z").toISOString();
         const todayEnd = new Date(today + "T23:59:59Z").toISOString();
         const { count: sentToday } = await supabase.from("whatsapp_trigger_sends")
@@ -202,15 +217,13 @@ serve(async (req) => {
           if (!phone) continue;
 
           const sentStepIds = sendsByLead.get(lead.id) || new Set();
-
-          // Calculate days since lead entered this status (using updated_at as proxy)
           const enteredAt = new Date(lead.updated_at);
           const now = new Date();
           const daysSinceEntry = Math.floor((now.getTime() - enteredAt.getTime()) / (1000 * 60 * 60 * 24));
 
           for (const step of steps) {
-            if (sentStepIds.has(step.id)) continue; // Already sent
-            if (daysSinceEntry < step.delay_days) continue; // Not time yet
+            if (sentStepIds.has(step.id)) continue;
+            if (daysSinceEntry < step.delay_days) continue;
 
             const messageBody = step.message.replace(/\{nome\}/gi, name);
             const cp = cleanPhone(phone);
@@ -230,7 +243,7 @@ serve(async (req) => {
               totalErrors++;
             }
 
-            break; // Send only one step per lead per cycle to avoid flooding
+            break;
           }
         }
       }

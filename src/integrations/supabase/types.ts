@@ -487,6 +487,7 @@ export type Database = {
           daily_limit: number
           end_date: string
           id: string
+          instance_id: string | null
           is_active: boolean
           message: string
           name: string
@@ -500,6 +501,7 @@ export type Database = {
           daily_limit?: number
           end_date: string
           id?: string
+          instance_id?: string | null
           is_active?: boolean
           message: string
           name: string
@@ -513,6 +515,7 @@ export type Database = {
           daily_limit?: number
           end_date?: string
           id?: string
+          instance_id?: string | null
           is_active?: boolean
           message?: string
           name?: string
@@ -522,10 +525,55 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "whatsapp_campaigns_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "whatsapp_campaigns_status_id_fkey"
             columns: ["status_id"]
             isOneToOne: false
             referencedRelation: "crm_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_instances: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          session: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          session: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          session?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instances_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -536,6 +584,7 @@ export type Database = {
           created_by: string
           daily_limit: number
           id: string
+          instance_id: string | null
           is_active: boolean
           name: string
           status_id: string
@@ -546,6 +595,7 @@ export type Database = {
           created_by: string
           daily_limit?: number
           id?: string
+          instance_id?: string | null
           is_active?: boolean
           name: string
           status_id: string
@@ -556,12 +606,20 @@ export type Database = {
           created_by?: string
           daily_limit?: number
           id?: string
+          instance_id?: string | null
           is_active?: boolean
           name?: string
           status_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_trigger_campaigns_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_instances"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "whatsapp_trigger_campaigns_status_id_fkey"
             columns: ["status_id"]
