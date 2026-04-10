@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, WifiOff, ArrowLeft, Check, Eye } from "lucide-react";
 import { addToOfflineQueue, syncOfflineQueue, getOfflineQueue } from "@/lib/offlineSync";
+import { formatPhoneBR } from "@/lib/phoneFormat";
 
 type DateStatusRange = { max_years: number; status_key: string };
 type DateStatusConfig = { ranges: DateStatusRange[]; above_all: string; no_answer: string };
@@ -344,6 +345,21 @@ export default function NewLeadPage() {
 
         {field.field_type === "textarea" && (
           <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={3} />
+        )}
+
+        {field.field_type === "phone" && (
+          <Input
+            type="tel"
+            inputMode="numeric"
+            placeholder="(00) 00000-0000"
+            value={formatPhoneBR(value)}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+              set(fieldKey, digits);
+            }}
+            required={field.is_required}
+            maxLength={16}
+          />
         )}
 
         {["text", "number", "date", "email"].includes(field.field_type) && (
