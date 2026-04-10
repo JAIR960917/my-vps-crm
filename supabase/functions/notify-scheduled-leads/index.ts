@@ -149,6 +149,8 @@ Deno.serve(async (req) => {
           .eq("user_id", userId);
 
         console.log(`Found ${subs?.length || 0} push subscription(s) for user ${userId}`);
+
+        if (subs && subs.length > 0) {
           const payload = JSON.stringify({
             title,
             body: `Leads: ${leadNames.join(", ")}`,
@@ -164,7 +166,6 @@ Deno.serve(async (req) => {
             } catch (pushErr: any) {
               const errMsg = pushErr?.message || String(pushErr);
               console.error("Push send error for", sub.endpoint.substring(0, 60), ":", errMsg);
-              // Remove stale/expired subscriptions (410 Gone or 404)
               if (errMsg.includes("410") || errMsg.includes("404")) {
                 console.log("Removing stale subscription:", sub.endpoint.substring(0, 60));
                 await supabaseAdmin
@@ -175,7 +176,6 @@ Deno.serve(async (req) => {
             }
           }
         }
-      }
       notifiedCount++;
     }
 
