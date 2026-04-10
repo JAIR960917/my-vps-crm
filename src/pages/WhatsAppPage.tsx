@@ -129,19 +129,40 @@ export default function WhatsAppPage() {
     }
     setInstanceLoading(true);
     try {
-      const result = await callApiFull("create-instance", { name: newInstanceName.trim() });
+      const instanceName = newInstanceName.trim();
+      const result = await callApiFull("create-instance", { name: instanceName });
       toast.success("Instância criada com sucesso!");
       
       // Save session name to settings
       const { error } = await supabase
         .from("system_settings")
-        .upsert({ setting_key: "apifull_session", setting_value: newInstanceName.trim() }, { onConflict: "setting_key" });
+        .upsert({ setting_key: "apifull_session", setting_value: instanceName }, { onConflict: "setting_key" });
       
       if (!error) {
-        setSessionName(newInstanceName.trim());
+        setSessionName(instanceName);
         setNewInstanceName("");
       }
       console.log("Create instance result:", result);
+
+      // Auto-generate QR Code after creating instance
+      toast.info("Gerando QR Code...");
+      try {
+        const qrResult = await supabase.functions.invoke("apifull-whatsapp", {
+          body: { action: "qrcode", session: instanceName },
+        });
+        const qrData = qrResult.data;
+        const qr = qrData?.qrcode || qrData?.qr || qrData?.data?.qrcode || qrData?.data?.qr;
+        if (qr) {
+          setQrCode(qr);
+          toast.success("QR Code gerado! Escaneie com o WhatsApp.");
+        } else {
+          toast.info("QR Code não disponível ainda. Clique em 'Gerar QR Code' em alguns segundos.");
+          console.log("QR response after create:", qrData);
+        }
+      } catch (qrErr: any) {
+        toast.info("Instância criada! Clique em 'Gerar QR Code' para conectar.");
+        console.log("QR auto-generate error:", qrErr);
+      }
     } catch (e: any) {
       toast.error(e.message || "Erro ao criar instância");
     }
