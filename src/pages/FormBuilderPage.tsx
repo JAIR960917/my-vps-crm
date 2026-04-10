@@ -172,7 +172,6 @@ export default function FormBuilderPage() {
       options: parsedOptions,
       is_required: isRequired,
       is_name_field: isNameField,
-      is_phone_field: isPhoneField,
       is_phone_field: autoIsPhoneField,
       show_on_card: showOnCard,
       parent_field_id: parentFieldId === "__none__" ? null : parentFieldId,
