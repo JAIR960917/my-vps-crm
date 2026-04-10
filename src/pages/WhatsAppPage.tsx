@@ -10,8 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { MessageSquare, Plus, Trash2, Edit2, Send, Users, Calendar, Hash, Power } from "lucide-react";
+import {
+  MessageSquare, Plus, Trash2, Edit2, Send, Users, Calendar, Hash,
+  QrCode, RefreshCw, Wifi, WifiOff, Loader2, Smartphone, Settings2
+} from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -61,20 +65,31 @@ export default function WhatsAppPage() {
   const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Instance management state
+  const [sessionName, setSessionName] = useState("");
+  const [newInstanceName, setNewInstanceName] = useState("");
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
+  const [instanceLoading, setInstanceLoading] = useState(false);
+
   const canManage = isAdmin || isGerente;
 
   const fetchData = async () => {
     setLoading(true);
-    const [campaignsRes, statusesRes, sendsRes] = await Promise.all([
+    const [campaignsRes, statusesRes, sendsRes, sessionRes] = await Promise.all([
       supabase.from("whatsapp_campaigns").select("*").order("created_at", { ascending: false }),
       supabase.from("crm_statuses").select("*").order("position"),
       supabase.from("whatsapp_campaign_sends").select("campaign_id, status"),
+      supabase.from("system_settings").select("setting_value").eq("setting_key", "apifull_session").single(),
     ]);
 
     setCampaigns((campaignsRes.data || []) as Campaign[]);
     setStatuses((statusesRes.data || []) as Status[]);
 
-    // Calculate stats per campaign
+    if (sessionRes.data?.setting_value) {
+      setSessionName(sessionRes.data.setting_value);
+    }
+
     const stats: Record<string, SendStats> = {};
     for (const send of (sendsRes.data || []) as { campaign_id: string; status: string }[]) {
       if (!stats[send.campaign_id]) {
@@ -91,20 +106,119 @@ export default function WhatsAppPage() {
 
   useEffect(() => { fetchData(); }, []);
 
+  // Auto-check status when session is loaded
+  useEffect(() => {
+    if (sessionName && isAdmin) {
+      handleCheckStatus();
+    }
+  }, [sessionName]);
+
+  const callApiFull = async (action: string, extraBody: Record<string, any> = {}) => {
+    const { data, error } = await supabase.functions.invoke("apifull-whatsapp", {
+      body: { action, session: sessionName, ...extraBody },
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return data;
+  };
+
+  const handleCreateInstance = async () => {
+    if (!newInstanceName.trim()) {
+      toast.error("Digite um nome para a instância");
+      return;
+    }
+    setInstanceLoading(true);
+    try {
+      const result = await callApiFull("create-instance", { name: newInstanceName.trim() });
+      toast.success("Instância criada com sucesso!");
+      
+      // Save session name to settings
+      const { error } = await supabase
+        .from("system_settings")
+        .upsert({ setting_key: "apifull_session", setting_value: newInstanceName.trim() }, { onConflict: "setting_key" });
+      
+      if (!error) {
+        setSessionName(newInstanceName.trim());
+        setNewInstanceName("");
+      }
+      console.log("Create instance result:", result);
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao criar instância");
+    }
+    setInstanceLoading(false);
+  };
+
+  const handleGetQRCode = async () => {
+    if (!sessionName) { toast.error("Nenhuma sessão configurada"); return; }
+    setInstanceLoading(true);
+    setQrCode(null);
+    try {
+      const result = await callApiFull("qrcode");
+      // The API may return qrcode as base64 or URL
+      const qr = result.qrcode || result.qr || result.data?.qrcode || result.data?.qr;
+      if (qr) {
+        setQrCode(qr);
+        toast.success("QR Code gerado! Escaneie com o WhatsApp.");
+      } else {
+        toast.info("Sessão já conectada ou QR Code não disponível");
+        console.log("QR response:", result);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao gerar QR Code");
+    }
+    setInstanceLoading(false);
+  };
+
+  const handleCheckStatus = async () => {
+    if (!sessionName) return;
+    setInstanceLoading(true);
+    try {
+      const result = await callApiFull("status");
+      const status = result.status || result.state || result.data?.status || result.data?.state || "desconhecido";
+      setConnectionStatus(status);
+    } catch (e: any) {
+      setConnectionStatus("error");
+    }
+    setInstanceLoading(false);
+  };
+
+  const handleRestartSession = async () => {
+    if (!sessionName) { toast.error("Nenhuma sessão configurada"); return; }
+    setInstanceLoading(true);
+    try {
+      await callApiFull("restart-session");
+      toast.success("Sessão reiniciada!");
+      handleCheckStatus();
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao reiniciar sessão");
+    }
+    setInstanceLoading(false);
+  };
+
+  const handleResetInstance = async () => {
+    if (!sessionName) { toast.error("Nenhuma sessão configurada"); return; }
+    if (!confirm("Tem certeza? Isso vai desconectar o WhatsApp desta instância.")) return;
+    setInstanceLoading(true);
+    try {
+      await callApiFull("reset-instance");
+      toast.success("Instância resetada!");
+      setConnectionStatus(null);
+      setQrCode(null);
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao resetar instância");
+    }
+    setInstanceLoading(false);
+  };
+
   const resetForm = () => {
     setName(""); setMessage(""); setStatusId(""); setDailyLimit("15");
     setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
   };
 
   const handleEdit = (c: Campaign) => {
-    setName(c.name);
-    setMessage(c.message);
-    setStatusId(c.status_id);
-    setDailyLimit(String(c.daily_limit));
-    setStartDate(c.start_date);
-    setEndDate(c.end_date);
-    setEditingId(c.id);
-    setShowForm(true);
+    setName(c.name); setMessage(c.message); setStatusId(c.status_id);
+    setDailyLimit(String(c.daily_limit)); setStartDate(c.start_date);
+    setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
   };
 
   const handleSubmit = async () => {
@@ -116,13 +230,9 @@ export default function WhatsAppPage() {
     setSaving(true);
 
     const payload = {
-      name: name.trim(),
-      message: message.trim(),
-      status_id: statusId,
-      daily_limit: parseInt(dailyLimit) || 15,
-      start_date: startDate,
-      end_date: endDate,
-      created_by: user.id,
+      name: name.trim(), message: message.trim(), status_id: statusId,
+      daily_limit: parseInt(dailyLimit) || 15, start_date: startDate,
+      end_date: endDate, created_by: user.id,
     };
 
     let error;
@@ -132,14 +242,8 @@ export default function WhatsAppPage() {
       ({ error } = await supabase.from("whatsapp_campaigns").insert(payload));
     }
 
-    if (error) {
-      toast.error("Erro ao salvar campanha");
-      console.error(error);
-    } else {
-      toast.success(editingId ? "Campanha atualizada!" : "Campanha criada!");
-      resetForm();
-      fetchData();
-    }
+    if (error) { toast.error("Erro ao salvar campanha"); console.error(error); }
+    else { toast.success(editingId ? "Campanha atualizada!" : "Campanha criada!"); resetForm(); fetchData(); }
     setSaving(false);
   };
 
@@ -159,150 +263,247 @@ export default function WhatsAppPage() {
   const getStatusLabel = (sid: string) => statuses.find(s => s.id === sid)?.label || "—";
   const getStatusColor = (sid: string) => statuses.find(s => s.id === sid)?.color || "gray";
 
+  const isConnected = connectionStatus === "CONNECTED" || connectionStatus === "connected" || connectionStatus === "open";
+
   return (
     <AppLayout>
-      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-            <MessageSquare className="h-6 w-6 text-primary" />
-            Campanhas WhatsApp
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Crie mensagens automáticas vinculadas a colunas do kanban
-          </p>
-        </div>
-        {canManage && (
-          <Button onClick={() => { resetForm(); setShowForm(!showForm); }} size="sm">
-            <Plus className="h-4 w-4 mr-1" />
-            Nova Campanha
-          </Button>
-        )}
+      <div className="mb-4">
+        <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+          <MessageSquare className="h-6 w-6 text-primary" />
+          WhatsApp
+        </h1>
+        <p className="text-xs sm:text-sm text-muted-foreground">
+          Gerencie sua instância e campanhas automáticas
+        </p>
       </div>
 
-      {showForm && (
-        <div className="rounded-lg border bg-card p-4 mb-6 space-y-4">
-          <h3 className="font-semibold text-sm">{editingId ? "Editar campanha" : "Nova campanha"}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Nome da campanha *</Label>
-              <Input placeholder="Ex: Boas-vindas novos leads" value={name} onChange={e => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Coluna do Kanban *</Label>
-              <Select value={statusId} onValueChange={setStatusId}>
-                <SelectTrigger><SelectValue placeholder="Selecione a coluna..." /></SelectTrigger>
-                <SelectContent>
-                  {statuses.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Limite diário de envios *</Label>
-              <Input type="number" min="1" value={dailyLimit} onChange={e => setDailyLimit(e.target.value)} />
-              <p className="text-[10px] text-muted-foreground">Quantas mensagens por dia para evitar banimento</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Data início *</Label>
-              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Data fim *</Label>
-              <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Mensagem padrão *</Label>
-            <Textarea
-              placeholder="Digite a mensagem que será enviada para os leads desta coluna..."
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              className="min-h-[100px]"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Use {"{nome}"} para inserir o nome do lead automaticamente
-            </p>
-          </div>
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={resetForm}>Cancelar</Button>
-            <Button size="sm" onClick={handleSubmit} disabled={saving}>
-              <Send className="h-4 w-4 mr-1" />
-              {saving ? "Salvando..." : editingId ? "Atualizar" : "Criar Campanha"}
-            </Button>
-          </div>
-        </div>
-      )}
+      <Tabs defaultValue={isAdmin ? "instance" : "campaigns"} className="flex-1 flex flex-col">
+        <TabsList className="mb-4">
+          {isAdmin && <TabsTrigger value="instance"><Smartphone className="h-4 w-4 mr-1" /> Instância</TabsTrigger>}
+          <TabsTrigger value="campaigns"><MessageSquare className="h-4 w-4 mr-1" /> Campanhas</TabsTrigger>
+        </TabsList>
 
-      <ScrollArea className="flex-1">
-        {loading ? (
-          <p className="text-center text-muted-foreground py-8">Carregando...</p>
-        ) : campaigns.length === 0 ? (
-          <div className="text-center py-12">
-            <MessageSquare className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-muted-foreground text-sm">Nenhuma campanha criada</p>
+        {/* Instance Management Tab */}
+        {isAdmin && (
+          <TabsContent value="instance" className="flex-1 space-y-4">
+            {/* Connection Status Card */}
+            <div className="rounded-lg border bg-card p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" /> Sessão Atual
+                </h3>
+                {connectionStatus && (
+                  <Badge variant={isConnected ? "default" : "destructive"} className="flex items-center gap-1">
+                    {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                    {isConnected ? "Conectado" : connectionStatus === "error" ? "Erro" : connectionStatus || "Desconhecido"}
+                  </Badge>
+                )}
+              </div>
+
+              {sessionName ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 bg-muted/50 rounded-md p-3">
+                    <Smartphone className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-mono">{sessionName}</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={handleGetQRCode} disabled={instanceLoading}>
+                      {instanceLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <QrCode className="h-4 w-4 mr-1" />}
+                      Gerar QR Code
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleCheckStatus} disabled={instanceLoading}>
+                      <RefreshCw className={`h-4 w-4 mr-1 ${instanceLoading ? "animate-spin" : ""}`} />
+                      Verificar Status
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleRestartSession} disabled={instanceLoading}>
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Reiniciar Sessão
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={handleResetInstance} disabled={instanceLoading}>
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Resetar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nenhuma instância configurada. Crie uma abaixo.</p>
+              )}
+            </div>
+
+            {/* QR Code Display */}
+            {qrCode && (
+              <div className="rounded-lg border bg-card p-4 flex flex-col items-center gap-3">
+                <h3 className="font-semibold text-sm">Escaneie o QR Code com o WhatsApp</h3>
+                <div className="bg-white p-4 rounded-lg">
+                  <img
+                    src={qrCode.startsWith("data:") ? qrCode : `data:image/png;base64,${qrCode}`}
+                    alt="QR Code WhatsApp"
+                    className="w-64 h-64 object-contain"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Abra o WhatsApp &gt; Aparelhos conectados &gt; Conectar um aparelho
+                </p>
+              </div>
+            )}
+
+            {/* Create New Instance */}
+            {!sessionName && (
+              <div className="rounded-lg border bg-card p-4 space-y-3">
+                <h3 className="font-semibold text-sm">Criar Nova Instância</h3>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Nome da instância (ex: minha-empresa)"
+                    value={newInstanceName}
+                    onChange={e => setNewInstanceName(e.target.value)}
+                  />
+                  <Button onClick={handleCreateInstance} disabled={instanceLoading}>
+                    {instanceLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                    Criar
+                  </Button>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        )}
+
+        {/* Campaigns Tab */}
+        <TabsContent value="campaigns" className="flex-1 flex flex-col">
+          <div className="mb-4 flex items-center justify-end">
+            {canManage && (
+              <Button onClick={() => { resetForm(); setShowForm(!showForm); }} size="sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Nova Campanha
+              </Button>
+            )}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {campaigns.map(c => {
-              const stats = sendStats[c.id];
-              return (
-                <div key={c.id} className={`rounded-lg border bg-card p-4 space-y-3 ${!c.is_active ? "opacity-60" : ""}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm">{c.name}</span>
-                        <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
-                          {getStatusLabel(c.status_id)}
-                        </Badge>
-                        {c.is_active ? (
-                          <Badge variant="outline" className="text-emerald-500 border-emerald-500">Ativa</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground">Inativa</Badge>
+
+          {showForm && (
+            <div className="rounded-lg border bg-card p-4 mb-6 space-y-4">
+              <h3 className="font-semibold text-sm">{editingId ? "Editar campanha" : "Nova campanha"}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome da campanha *</Label>
+                  <Input placeholder="Ex: Boas-vindas novos leads" value={name} onChange={e => setName(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Coluna do Kanban *</Label>
+                  <Select value={statusId} onValueChange={setStatusId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a coluna..." /></SelectTrigger>
+                    <SelectContent>
+                      {statuses.map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Limite diário de envios *</Label>
+                  <Input type="number" min="1" value={dailyLimit} onChange={e => setDailyLimit(e.target.value)} />
+                  <p className="text-[10px] text-muted-foreground">Quantas mensagens por dia para evitar banimento</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Data início *</Label>
+                  <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data fim *</Label>
+                  <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Mensagem padrão *</Label>
+                <Textarea
+                  placeholder="Digite a mensagem que será enviada para os leads desta coluna..."
+                  value={message} onChange={e => setMessage(e.target.value)}
+                  className="min-h-[100px]"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Use {"{nome}"} para inserir o nome do lead automaticamente
+                </p>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={resetForm}>Cancelar</Button>
+                <Button size="sm" onClick={handleSubmit} disabled={saving}>
+                  <Send className="h-4 w-4 mr-1" />
+                  {saving ? "Salvando..." : editingId ? "Atualizar" : "Criar Campanha"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <ScrollArea className="flex-1">
+            {loading ? (
+              <p className="text-center text-muted-foreground py-8">Carregando...</p>
+            ) : campaigns.length === 0 ? (
+              <div className="text-center py-12">
+                <MessageSquare className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-muted-foreground text-sm">Nenhuma campanha criada</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {campaigns.map(c => {
+                  const stats = sendStats[c.id];
+                  return (
+                    <div key={c.id} className={`rounded-lg border bg-card p-4 space-y-3 ${!c.is_active ? "opacity-60" : ""}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm">{c.name}</span>
+                            <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
+                              {getStatusLabel(c.status_id)}
+                            </Badge>
+                            {c.is_active ? (
+                              <Badge variant="outline" className="text-emerald-500 border-emerald-500">Ativa</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-muted-foreground">Inativa</Badge>
+                            )}
+                          </div>
+                        </div>
+                        {canManage && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Switch checked={c.is_active} onCheckedChange={v => handleToggle(c.id, v)} />
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(c)}>
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(c.id)}>
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      <p className="text-sm bg-muted/50 rounded-md p-2 whitespace-pre-wrap">{c.message}</p>
+
+                      <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <Hash className="h-3 w-3" /> {c.daily_limit}/dia
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {format(new Date(c.start_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })} — {format(new Date(c.end_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+                        </span>
+                        {stats && (
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {stats.sent} enviados · {stats.pending} pendentes · {stats.error} erros · {stats.total} total
+                          </span>
+                        )}
+                        {!stats && (
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" /> Aguardando processamento
+                          </span>
                         )}
                       </div>
                     </div>
-                    {canManage && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Switch checked={c.is_active} onCheckedChange={v => handleToggle(c.id, v)} />
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(c)}>
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(c.id)}>
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="text-sm bg-muted/50 rounded-md p-2 whitespace-pre-wrap">{c.message}</p>
-
-                  <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
-                    <span className="flex items-center gap-1">
-                      <Hash className="h-3 w-3" /> {c.daily_limit}/dia
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {format(new Date(c.start_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })} — {format(new Date(c.end_date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
-                    </span>
-                    {stats && (
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {stats.sent} enviados · {stats.pending} pendentes · {stats.error} erros · {stats.total} total
-                      </span>
-                    )}
-                    {!stats && (
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3 w-3" /> Aguardando processamento
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </ScrollArea>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
     </AppLayout>
   );
 }

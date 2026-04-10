@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/twilio";
+const APIFULL_BASE = "https://api.apifull.com.br/whatsapp";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -14,27 +14,24 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
-    const TWILIO_API_KEY = Deno.env.get("TWILIO_API_KEY");
-    if (!TWILIO_API_KEY) throw new Error("TWILIO_API_KEY is not configured");
+    const APIFULL_API_KEY = Deno.env.get("APIFULL_API_KEY");
+    if (!APIFULL_API_KEY) throw new Error("APIFULL_API_KEY is not configured");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get Twilio WhatsApp number
-    const { data: twilioSettings } = await supabase
+    // Get API Full session name from settings
+    const { data: sessionSetting } = await supabase
       .from("system_settings")
       .select("setting_value")
-      .eq("setting_key", "twilio_whatsapp_number")
+      .eq("setting_key", "apifull_session")
       .single();
 
-    const fromNumber = twilioSettings?.setting_value;
-    if (!fromNumber) {
+    const session = sessionSetting?.setting_value;
+    if (!session) {
       return new Response(
-        JSON.stringify({ error: "Número WhatsApp Twilio não configurado" }),
+        JSON.stringify({ error: "Sessão da API Full não configurada. Vá em Configurações > WhatsApp." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -69,11 +66,19 @@ serve(async (req) => {
     let totalErrors = 0;
 
     for (const campaign of campaigns) {
-      // Get leads in this status that haven't been sent this campaign yet
+      // Get leads in this status
+      const { data: statusData } = await supabase
+        .from("crm_statuses")
+        .select("key")
+        .eq("id", campaign.status_id)
+        .single();
+
+      const statusKey = statusData?.key || "";
+
       const { data: leads, error: leadsErr } = await supabase
         .from("crm_leads")
         .select("id, data")
-        .eq("status", (await supabase.from("crm_statuses").select("key").eq("id", campaign.status_id).single()).data?.key || "");
+        .eq("status", statusKey);
 
       if (leadsErr || !leads) {
         console.error(`Error fetching leads for campaign ${campaign.id}:`, leadsErr);
@@ -87,11 +92,9 @@ serve(async (req) => {
         .eq("campaign_id", campaign.id);
 
       const sentLeadIds = new Set((existingSends || []).map((s: any) => s.lead_id));
-
-      // Filter leads that haven't received this campaign
       const pendingLeads = leads.filter((l: any) => !sentLeadIds.has(l.id));
 
-      // Check how many we already sent today for this campaign
+      // Check daily limit
       const todayStart = new Date(today + "T00:00:00Z").toISOString();
       const todayEnd = new Date(today + "T23:59:59Z").toISOString();
       const { count: sentToday } = await supabase
@@ -125,7 +128,7 @@ serve(async (req) => {
           continue;
         }
 
-        // Resolve name for {nome} placeholder
+        // Resolve name
         let leadName = "";
         for (const f of nameFields) {
           const val = data[`field_${f.id}`];
@@ -134,52 +137,56 @@ serve(async (req) => {
         if (!leadName) leadName = data.nome_lead || "Cliente";
 
         const messageBody = campaign.message.replace(/\{nome\}/gi, leadName);
-        const toPhone = phone.startsWith("+") ? phone : `+${phone}`;
+
+        // Clean phone: remove non-digits, ensure country code
+        let cleanPhone = phone.replace(/\D/g, "");
+        if (cleanPhone.startsWith("0")) cleanPhone = cleanPhone.substring(1);
+        if (!cleanPhone.startsWith("55")) cleanPhone = "55" + cleanPhone;
 
         try {
-          const response = await fetch(`${GATEWAY_URL}/Messages.json`, {
+          const response = await fetch(`${APIFULL_BASE}/send-message`, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "X-Connection-Api-Key": TWILIO_API_KEY,
-              "Content-Type": "application/x-www-form-urlencoded",
+              "Authorization": `Bearer ${APIFULL_API_KEY}`,
+              "Content-Type": "application/json",
             },
-            body: new URLSearchParams({
-              To: `whatsapp:${toPhone}`,
-              From: `whatsapp:${fromNumber}`,
-              Body: messageBody,
+            body: JSON.stringify({
+              session,
+              number: cleanPhone,
+              text: messageBody,
+              isGroup: false,
             }),
           });
 
           const result = await response.json();
 
           if (!response.ok) {
-            console.error(`Twilio error for lead ${lead.id}:`, result);
+            console.error(`API Full error for lead ${lead.id}:`, result);
             await supabase.from("whatsapp_campaign_sends").insert({
               campaign_id: campaign.id,
               lead_id: lead.id,
-              phone: toPhone,
+              phone: cleanPhone,
               status: "error",
-              error_message: result.message || `HTTP ${response.status}`,
+              error_message: result.message || result.error || `HTTP ${response.status}`,
             });
             totalErrors++;
           } else {
             await supabase.from("whatsapp_campaign_sends").insert({
               campaign_id: campaign.id,
               lead_id: lead.id,
-              phone: toPhone,
+              phone: cleanPhone,
               status: "sent",
               sent_at: new Date().toISOString(),
             });
             totalSent++;
-            console.log(`Campaign ${campaign.id}: sent to lead ${lead.id}, SID: ${result.sid}`);
+            console.log(`Campaign ${campaign.id}: sent to lead ${lead.id}`);
           }
         } catch (e) {
           console.error(`Error sending to lead ${lead.id}:`, e);
           await supabase.from("whatsapp_campaign_sends").insert({
             campaign_id: campaign.id,
             lead_id: lead.id,
-            phone: toPhone,
+            phone: cleanPhone,
             status: "error",
             error_message: e instanceof Error ? e.message : "Unknown error",
           });
