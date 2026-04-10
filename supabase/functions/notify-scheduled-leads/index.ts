@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import webpush from "npm:web-push@3.6.7";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,21 +74,10 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${scheduledLeads.length} scheduled leads for today`);
 
-    // Dedup: only block if we already sent a SCHEDULED notification today (not manual tests)
-    // We use a specific title prefix marker to distinguish scheduled from force/test
+    // Dedup: check if already notified today
     const scheduledMarker = "📅";
     if (!forceRun) {
-      const { data: existingNotifs } = await supabaseAdmin
-        .from("notifications")
-        .select("id, title")
-        .gte("created_at", utcStart)
-        .like("title", `${scheduledMarker}%`)
-        .limit(1);
-
-      // Check if any of these were from a scheduled run (not force)
-      // We'll use a system_settings key to track last scheduled run date
       const todayStr = `${brNow.getUTCFullYear()}-${String(brNow.getUTCMonth() + 1).padStart(2, "0")}-${String(brNow.getUTCDate()).padStart(2, "0")}`;
-      
       const { data: lastRunSetting } = await supabaseAdmin
         .from("system_settings")
         .select("setting_value")
@@ -112,7 +102,21 @@ Deno.serve(async (req) => {
     const vapidPublicKey = (Deno.env.get("VAPID_PUBLIC_KEY") || "").trim();
     const vapidPrivateKey = (Deno.env.get("VAPID_PRIVATE_KEY") || "").trim();
 
+    // Configure web-push with VAPID
+    if (vapidPublicKey && vapidPrivateKey) {
+      webpush.setVapidDetails(
+        "mailto:noreply@crm.qualinetdigital.site",
+        vapidPublicKey,
+        vapidPrivateKey
+      );
+      console.log("web-push VAPID configured successfully");
+    } else {
+      console.warn("VAPID keys not configured - push notifications will not be sent");
+    }
+
     let notifiedCount = 0;
+    let pushSentCount = 0;
+    let pushErrorCount = 0;
 
     const { data: formFields } = await supabaseAdmin
       .from("crm_form_fields")
@@ -130,8 +134,9 @@ Deno.serve(async (req) => {
         return data.nome_lead || "Lead";
       });
 
-      const title = `📅 ${userLeads.length} lead(s) agendado(s) para hoje`;
+      const title = `${scheduledMarker} ${userLeads.length} lead(s) agendado(s) para hoje`;
 
+      // Insert in-app notifications
       const notificationInserts = userLeads.map((lead, idx) => ({
         user_id: userId,
         title,
@@ -140,8 +145,7 @@ Deno.serve(async (req) => {
       }));
       await supabaseAdmin.from("notifications").insert(notificationInserts);
 
-      // Web Push
-      console.log(`VAPID configured: public=${!!vapidPublicKey}, private=${!!vapidPrivateKey}`);
+      // Send native push notifications via web-push library
       if (vapidPublicKey && vapidPrivateKey) {
         const { data: subs } = await supabaseAdmin
           .from("push_subscriptions")
@@ -161,12 +165,25 @@ Deno.serve(async (req) => {
 
           for (const sub of subs) {
             try {
-              await sendWebPush(sub, payload, vapidPublicKey, vapidPrivateKey);
-              console.log("Push sent to", sub.endpoint.substring(0, 60));
+              const pushSubscription = {
+                endpoint: sub.endpoint,
+                keys: {
+                  p256dh: sub.p256dh,
+                  auth: sub.auth,
+                },
+              };
+
+              await webpush.sendNotification(pushSubscription, payload);
+              pushSentCount++;
+              console.log(`Push sent successfully to ${sub.endpoint.substring(0, 60)}`);
             } catch (pushErr: any) {
+              pushErrorCount++;
+              const statusCode = pushErr?.statusCode || pushErr?.status;
               const errMsg = pushErr?.message || String(pushErr);
-              console.error("Push send error for", sub.endpoint.substring(0, 60), ":", errMsg);
-              if (errMsg.includes("410") || errMsg.includes("404")) {
+              console.error(`Push error for ${sub.endpoint.substring(0, 60)}: [${statusCode}] ${errMsg}`);
+              
+              // Remove stale/expired subscriptions
+              if (statusCode === 410 || statusCode === 404) {
                 console.log("Removing stale subscription:", sub.endpoint.substring(0, 60));
                 await supabaseAdmin
                   .from("push_subscriptions")
@@ -180,7 +197,7 @@ Deno.serve(async (req) => {
       notifiedCount++;
     }
 
-    // Mark today as notified (only for scheduled runs, not force)
+    // Mark today as notified (only for scheduled runs)
     if (!forceRun) {
       const brNowForMark = new Date(now.getTime() + brOffset);
       const todayStr = `${brNowForMark.getUTCFullYear()}-${String(brNowForMark.getUTCMonth() + 1).padStart(2, "0")}-${String(brNowForMark.getUTCDate()).padStart(2, "0")}`;
@@ -191,9 +208,14 @@ Deno.serve(async (req) => {
       }, { onConflict: "setting_key" });
     }
 
-    console.log(`Notified ${notifiedCount} users`);
+    console.log(`Notified ${notifiedCount} users, push sent: ${pushSentCount}, push errors: ${pushErrorCount}`);
 
-    return new Response(JSON.stringify({ message: "Notificações enviadas", notified: notifiedCount }), {
+    return new Response(JSON.stringify({ 
+      message: "Notificações enviadas", 
+      notified: notifiedCount,
+      pushSent: pushSentCount,
+      pushErrors: pushErrorCount,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
@@ -204,182 +226,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-
-// --- Web Push helpers ---
-
-async function sendWebPush(
-  sub: { endpoint: string; p256dh: string; auth: string },
-  payload: string,
-  vapidPublicKey: string,
-  vapidPrivateKey: string,
-) {
-  const endpointUrl = new URL(sub.endpoint);
-  const audience = `${endpointUrl.protocol}//${endpointUrl.host}`;
-
-  const rawPublic = base64urlDecode(vapidPublicKey);
-  
-  const jwk = {
-    kty: "EC",
-    crv: "P-256",
-    d: vapidPrivateKey,
-    x: base64urlEncodeBytes(rawPublic.slice(1, 33)),
-    y: base64urlEncodeBytes(rawPublic.slice(33, 65)),
-  };
-
-  const key = await crypto.subtle.importKey(
-    "jwk", jwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false, ["sign"]
-  );
-
-  const nowSec = Math.floor(Date.now() / 1000);
-  const header = base64urlEncode(JSON.stringify({ typ: "JWT", alg: "ES256" }));
-  const body = base64urlEncode(JSON.stringify({
-    aud: audience,
-    exp: nowSec + 86400,
-    sub: "mailto:noreply@crm.qualinetdigital.site",
-  }));
-  const unsigned = new TextEncoder().encode(`${header}.${body}`);
-  const sig = await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" }, key, unsigned
-  );
-  const rawSig = derToRaw(new Uint8Array(sig));
-  const vapidToken = `${header}.${body}.${base64urlEncodeBytes(rawSig)}`;
-
-  const encrypted = await encryptPayload(sub.p256dh, sub.auth, payload);
-
-  const response = await fetch(sub.endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/octet-stream",
-      "Content-Encoding": "aes128gcm",
-      "TTL": "86400",
-      "Authorization": `vapid t=${vapidToken}, k=${vapidPublicKey}`,
-    },
-    body: encrypted,
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Push failed ${response.status}: ${text}`);
-  }
-  await response.text();
-}
-
-async function encryptPayload(
-  p256dhBase64: string,
-  authBase64: string,
-  payload: string,
-): Promise<Uint8Array> {
-  const p256dhBytes = base64urlDecode(p256dhBase64);
-  const authBytes = base64urlDecode(authBase64);
-  const payloadBytes = new TextEncoder().encode(payload);
-
-  const localKey = await crypto.subtle.generateKey(
-    { name: "ECDH", namedCurve: "P-256" },
-    true,
-    ["deriveBits"],
-  );
-
-  const subscriberKey = await crypto.subtle.importKey(
-    "raw", p256dhBytes, { name: "ECDH", namedCurve: "P-256" }, false, [],
-  );
-
-  const sharedSecret = new Uint8Array(
-    await crypto.subtle.deriveBits(
-      { name: "ECDH", public: subscriberKey }, localKey.privateKey, 256,
-    ),
-  );
-
-  const localPubKey = new Uint8Array(
-    await crypto.subtle.exportKey("raw", localKey.publicKey),
-  );
-
-  const authInfo = new TextEncoder().encode("WebPush: info\0");
-  const authInfoFull = new Uint8Array(authInfo.length + p256dhBytes.length + localPubKey.length);
-  authInfoFull.set(authInfo);
-  authInfoFull.set(p256dhBytes, authInfo.length);
-  authInfoFull.set(localPubKey, authInfo.length + p256dhBytes.length);
-
-  const ikm = await hkdf(authBytes, sharedSecret, authInfoFull, 32);
-
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const cekInfo = new TextEncoder().encode("Content-Encoding: aes128gcm\0");
-  const nonceInfo = new TextEncoder().encode("Content-Encoding: nonce\0");
-  const cek = await hkdf(salt, ikm, cekInfo, 16);
-  const nonce = await hkdf(salt, ikm, nonceInfo, 12);
-
-  const paddedPayload = new Uint8Array(payloadBytes.length + 1);
-  paddedPayload.set(payloadBytes);
-  paddedPayload[payloadBytes.length] = 2;
-
-  const aesKey = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
-  const encrypted = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, paddedPayload),
-  );
-
-  const rs = new Uint8Array(4);
-  new DataView(rs.buffer).setUint32(0, payloadBytes.length + 1 + 16 + 1);
-  const headerBytes = new Uint8Array(16 + 4 + 1 + localPubKey.length);
-  headerBytes.set(salt);
-  headerBytes.set(rs, 16);
-  headerBytes[20] = localPubKey.length;
-  headerBytes.set(localPubKey, 21);
-
-  const result = new Uint8Array(headerBytes.length + encrypted.length);
-  result.set(headerBytes);
-  result.set(encrypted, headerBytes.length);
-  return result;
-}
-
-async function hkdf(
-  salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, length: number,
-): Promise<Uint8Array> {
-  const prk = new Uint8Array(await crypto.subtle.sign("HMAC",
-    await crypto.subtle.importKey("raw", salt, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]),
-    ikm,
-  ));
-  const prkKey = await crypto.subtle.importKey("raw", prk, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const infoWithCounter = new Uint8Array(info.length + 1);
-  infoWithCounter.set(info);
-  infoWithCounter[info.length] = 1;
-  const okm = new Uint8Array(await crypto.subtle.sign("HMAC", prkKey, infoWithCounter));
-  return okm.slice(0, length);
-}
-
-function base64urlEncode(str: string): string {
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function base64urlEncodeBytes(bytes: Uint8Array): string {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function base64urlDecode(str: string): Uint8Array {
-  const padding = "=".repeat((4 - (str.length % 4)) % 4);
-  const base64 = (str + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function derToRaw(der: Uint8Array): Uint8Array {
-  if (der.length === 64) return der;
-  const raw = new Uint8Array(64);
-  let offset = 2;
-  const rLen = der[offset + 1];
-  offset += 2;
-  const rStart = rLen > 32 ? offset + (rLen - 32) : offset;
-  const rDest = rLen < 32 ? 32 - rLen : 0;
-  raw.set(der.slice(rStart, offset + rLen), rDest);
-  offset += rLen;
-  const sLen = der[offset + 1];
-  offset += 2;
-  const sStart = sLen > 32 ? offset + (sLen - 32) : offset;
-  const sDest = sLen < 32 ? 64 - sLen : 32;
-  raw.set(der.slice(sStart, offset + sLen), sDest);
-  return raw;
-}
