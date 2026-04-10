@@ -212,6 +212,29 @@ export default function SettingsPage() {
           </div>
         ))}
 
+        {/* WhatsApp Cron Interval */}
+        <div className="space-y-2 border-t pt-4">
+          <Label className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Intervalo de Envio Automático (WhatsApp)
+          </Label>
+          <div className="flex gap-2 items-center">
+            <Input
+              type="number"
+              min={1}
+              max={1440}
+              value={values.whatsapp_cron_interval || "5"}
+              onChange={(e) => setValues((prev) => ({ ...prev, whatsapp_cron_interval: e.target.value }))}
+              placeholder="5"
+              className="w-24"
+            />
+            <span className="text-sm text-muted-foreground">minutos</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Define a cada quantos minutos o sistema envia mensagens das campanhas ativas automaticamente.
+          </p>
+        </div>
+
         <Button onClick={handleSave} disabled={saving} className="w-full">
           <Save className="mr-2 h-4 w-4" />
           {saving ? "Salvando..." : "Salvar Configurações"}
