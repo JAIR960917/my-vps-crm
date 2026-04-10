@@ -298,8 +298,8 @@ export default function WhatsAppPage() {
   const getStatusColor = (sid: string) => statuses.find(s => s.id === sid)?.color || "gray";
   const getInstanceName = (iid: string | null) => instances.find(i => i.id === iid)?.name || "—";
   const isConnected = (id: string) => {
-    const s = connectionStatus[id];
-    return s === "CONNECTED" || s === "connected" || s === "open";
+    const s = connectionStatus[id]?.toLowerCase();
+    return s === "connected" || s === "open" || s === "sucesso";
   };
 
   return (
@@ -316,13 +316,13 @@ export default function WhatsAppPage() {
 
       <Tabs defaultValue={isAdmin ? "instance" : "campaigns"} className="flex-1 flex flex-col">
         <TabsList className="mb-4">
-          {(isAdmin || isGerente) && <TabsTrigger value="instance"><Smartphone className="h-4 w-4 mr-1" /> Instâncias</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="instance"><Smartphone className="h-4 w-4 mr-1" /> Instâncias</TabsTrigger>}
           <TabsTrigger value="campaigns"><MessageSquare className="h-4 w-4 mr-1" /> Campanhas</TabsTrigger>
           <TabsTrigger value="triggers"><Zap className="h-4 w-4 mr-1" /> Gatilhos</TabsTrigger>
         </TabsList>
 
         {/* Instance Management Tab */}
-        {(isAdmin || isGerente) && (
+        {isAdmin && (
           <TabsContent value="instance" className="flex-1 space-y-4">
             {/* Create New Instance */}
             {canManage && (
@@ -414,7 +414,7 @@ export default function WhatsAppPage() {
                               {status && (
                                 <Badge variant={connected ? "default" : "destructive"} className="flex items-center gap-1 text-[10px]">
                                   {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-                                  {connected ? "Conectado" : status === "error" ? "Erro" : status}
+                                  {connected ? "Conectado" : status === "error" ? "Erro" : status?.toLowerCase() === "sucesso" ? "Conectado" : status}
                                 </Badge>
                               )}
                             </div>
