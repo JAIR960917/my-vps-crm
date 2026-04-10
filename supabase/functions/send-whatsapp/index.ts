@@ -55,9 +55,8 @@ function extractApiMessages(result: any, responseText: string) {
     result?.data?.error,
     result?.data?.msg,
     result?.data?.status,
-    responseText,
   ]
-    .map((value) => toText(value).trim())
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
     .filter(Boolean);
 }
 
