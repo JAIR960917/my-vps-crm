@@ -160,8 +160,17 @@ Deno.serve(async (req) => {
             try {
               await sendWebPush(sub, payload, vapidPublicKey, vapidPrivateKey);
               console.log("Push sent to", sub.endpoint.substring(0, 60));
-            } catch (pushErr) {
-              console.error("Push send error:", pushErr);
+            } catch (pushErr: any) {
+              const errMsg = pushErr?.message || String(pushErr);
+              console.error("Push send error for", sub.endpoint.substring(0, 60), ":", errMsg);
+              // Remove stale/expired subscriptions (410 Gone or 404)
+              if (errMsg.includes("410") || errMsg.includes("404")) {
+                console.log("Removing stale subscription:", sub.endpoint.substring(0, 60));
+                await supabaseAdmin
+                  .from("push_subscriptions")
+                  .delete()
+                  .eq("endpoint", sub.endpoint);
+              }
             }
           }
         }
