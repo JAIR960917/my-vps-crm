@@ -530,6 +530,140 @@ export type Database = {
           },
         ]
       }
+      whatsapp_trigger_campaigns: {
+        Row: {
+          created_at: string
+          created_by: string
+          daily_limit: number
+          id: string
+          is_active: boolean
+          name: string
+          status_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          daily_limit?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          status_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          daily_limit?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          status_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_trigger_campaigns_status_id_fkey"
+            columns: ["status_id"]
+            isOneToOne: false
+            referencedRelation: "crm_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_trigger_sends: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          lead_id: string
+          phone: string
+          sent_at: string | null
+          status: string
+          step_id: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          lead_id: string
+          phone: string
+          sent_at?: string | null
+          status?: string
+          step_id: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          lead_id?: string
+          phone?: string
+          sent_at?: string | null
+          status?: string
+          step_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_trigger_sends_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_trigger_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_trigger_sends_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_trigger_sends_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_trigger_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_trigger_steps: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          delay_days: number
+          id: string
+          message: string
+          position: number
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          delay_days?: number
+          id?: string
+          message: string
+          position?: number
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          delay_days?: number
+          id?: string
+          message?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_trigger_steps_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_trigger_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
