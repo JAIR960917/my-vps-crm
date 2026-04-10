@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SystemSettingsProvider } from "@/contexts/SystemSettingsContext";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 import Login from "./pages/Login";
 import LeadsPage from "./pages/LeadsPage";
 import UsersPage from "./pages/UsersPage";
@@ -20,6 +21,11 @@ import WhatsAppPage from "./pages/WhatsAppPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+function PushNotificationsBootstrap() {
+  usePushNotifications();
+  return null;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -62,6 +68,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <PushNotificationsBootstrap />
           <SystemSettingsProvider>
             <AppRoutes />
           </SystemSettingsProvider>
