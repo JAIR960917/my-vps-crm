@@ -144,12 +144,42 @@ export function usePushNotifications() {
     }
   }, [user]);
 
+  // Re-subscribe on every app load to keep push subscription fresh
   useEffect(() => {
     if (!user) return;
     if (Notification.permission !== "granted") return;
     if (isIOSDevice() && !isStandaloneMode()) return;
 
-    void subscribe();
+    const refreshSubscription = async () => {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const existing = await registration.pushManager.getSubscription();
+        
+        // If no existing subscription, re-subscribe
+        if (!existing) {
+          console.log("No push subscription found, re-subscribing...");
+          await subscribe();
+          return;
+        }
+        
+        // Always sync to DB in case it was lost
+        const subJson = existing.toJSON();
+        if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+          await supabase.from("push_subscriptions").upsert({
+            user_id: user.id,
+            endpoint: subJson.endpoint,
+            p256dh: subJson.keys.p256dh,
+            auth: subJson.keys.auth,
+            user_agent: navigator.userAgent,
+          }, { onConflict: "user_id,endpoint" });
+        }
+      } catch {
+        // Fallback: try full subscribe
+        await subscribe();
+      }
+    };
+
+    void refreshSubscription();
   }, [user, subscribe]);
 
   return { subscribe, unsubscribe };

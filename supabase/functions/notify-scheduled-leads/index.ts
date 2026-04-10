@@ -141,11 +141,14 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from("notifications").insert(notificationInserts);
 
       // Web Push
+      console.log(`VAPID configured: public=${!!vapidPublicKey}, private=${!!vapidPrivateKey}`);
       if (vapidPublicKey && vapidPrivateKey) {
         const { data: subs } = await supabaseAdmin
           .from("push_subscriptions")
           .select("endpoint, p256dh, auth")
           .eq("user_id", userId);
+
+        console.log(`Found ${subs?.length || 0} push subscription(s) for user ${userId}`);
 
         if (subs && subs.length > 0) {
           const payload = JSON.stringify({
@@ -160,12 +163,19 @@ Deno.serve(async (req) => {
             try {
               await sendWebPush(sub, payload, vapidPublicKey, vapidPrivateKey);
               console.log("Push sent to", sub.endpoint.substring(0, 60));
-            } catch (pushErr) {
-              console.error("Push send error:", pushErr);
+            } catch (pushErr: any) {
+              const errMsg = pushErr?.message || String(pushErr);
+              console.error("Push send error for", sub.endpoint.substring(0, 60), ":", errMsg);
+              if (errMsg.includes("410") || errMsg.includes("404")) {
+                console.log("Removing stale subscription:", sub.endpoint.substring(0, 60));
+                await supabaseAdmin
+                  .from("push_subscriptions")
+                  .delete()
+                  .eq("endpoint", sub.endpoint);
+              }
             }
           }
         }
-      }
       notifiedCount++;
     }
 
