@@ -8,6 +8,93 @@ const corsHeaders = {
 
 const APIFULL_BASE = "https://api.apifull.com.br/whatsapp";
 
+const SUCCESS_TOKENS = ["success", "sucesso", "sent", "enviado", "accepted", "queued", "ok"];
+const ERROR_TOKENS = [
+  "error",
+  "erro",
+  "failed",
+  "failure",
+  "invalid",
+  "invalido",
+  "inválido",
+  "offline",
+  "disconnected",
+  "desconect",
+  "not connected",
+  "não conectado",
+  "nao conectado",
+  "not found",
+  "unavailable",
+  "forbidden",
+  "blocked",
+];
+
+function toText(value: unknown) {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return "";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function truncate(text: string, max = 300) {
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function extractApiMessages(result: any, responseText: string) {
+  return [
+    result?.message,
+    result?.mensagem,
+    result?.error,
+    result?.msg,
+    result?.status,
+    result?.data?.message,
+    result?.data?.mensagem,
+    result?.data?.error,
+    result?.data?.msg,
+    result?.data?.status,
+    responseText,
+  ]
+    .map((value) => toText(value).trim())
+    .filter(Boolean);
+}
+
+function includesToken(values: string[], tokens: string[]) {
+  const haystack = values.join(" ").toLowerCase();
+  return tokens.some((token) => haystack.includes(token));
+}
+
+function resolveSendResult(responseOk: boolean, result: any, responseText: string) {
+  const messages = extractApiMessages(result, responseText);
+  const fallbackMessage = truncate(messages[0] || "A API Full não confirmou o envio da mensagem");
+  const booleanFlags = [result?.success, result?.sucesso, result?.data?.success].filter(
+    (value) => typeof value === "boolean"
+  );
+
+  if (!responseOk) {
+    return { ok: false, errorMessage: fallbackMessage };
+  }
+
+  if (booleanFlags.includes(false)) {
+    return { ok: false, errorMessage: fallbackMessage };
+  }
+
+  if (includesToken(messages, ERROR_TOKENS)) {
+    return { ok: false, errorMessage: fallbackMessage };
+  }
+
+  if (booleanFlags.includes(true) || includesToken(messages, SUCCESS_TOKENS)) {
+    return { ok: true, errorMessage: null };
+  }
+
+  return {
+    ok: false,
+    errorMessage: "A API Full respondeu sem confirmar claramente que a mensagem foi enviada",
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -88,10 +175,14 @@ serve(async (req) => {
       // Get already sent lead IDs for this campaign
       const { data: existingSends } = await supabase
         .from("whatsapp_campaign_sends")
-        .select("lead_id")
+        .select("lead_id, status")
         .eq("campaign_id", campaign.id);
 
-      const sentLeadIds = new Set((existingSends || []).map((s: any) => s.lead_id));
+      const sentLeadIds = new Set(
+        (existingSends || [])
+          .filter((s: any) => s.status === "sent")
+          .map((s: any) => s.lead_id)
+      );
       const pendingLeads = leads.filter((l: any) => !sentLeadIds.has(l.id));
 
       // Check daily limit
@@ -158,16 +249,28 @@ serve(async (req) => {
             }),
           });
 
-          const result = await response.json();
+          const responseText = await response.text();
+          let result: any = null;
 
-          if (!response.ok) {
-            console.error(`API Full error for lead ${lead.id}:`, result);
+          try {
+            result = responseText ? JSON.parse(responseText) : null;
+          } catch {
+            result = { raw: responseText };
+          }
+
+          const sendResult = resolveSendResult(response.ok, result, responseText);
+
+          if (!sendResult.ok) {
+            console.error(`API Full delivery not confirmed for lead ${lead.id}:`, {
+              status: response.status,
+              result,
+            });
             await supabase.from("whatsapp_campaign_sends").insert({
               campaign_id: campaign.id,
               lead_id: lead.id,
               phone: cleanPhone,
               status: "error",
-              error_message: result.message || result.error || `HTTP ${response.status}`,
+              error_message: sendResult.errorMessage || `HTTP ${response.status}`,
             });
             totalErrors++;
           } else {
@@ -179,7 +282,7 @@ serve(async (req) => {
               sent_at: new Date().toISOString(),
             });
             totalSent++;
-            console.log(`Campaign ${campaign.id}: sent to lead ${lead.id}`);
+            console.log(`Campaign ${campaign.id}: delivery confirmed for lead ${lead.id}`);
           }
         } catch (e) {
           console.error(`Error sending to lead ${lead.id}:`, e);
