@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Save, Upload, Trash2 } from "lucide-react";
+import { Save, Upload, Trash2, Clock } from "lucide-react";
 
 type SettingField = {
   key: string;
@@ -37,7 +37,7 @@ export default function SettingsPage() {
       const { data } = await supabase
         .from("system_settings")
         .select("setting_key, setting_value")
-        .in("setting_key", ["twilio_whatsapp_number"]);
+        .in("setting_key", ["twilio_whatsapp_number", "whatsapp_cron_interval"]);
       const extra: Record<string, string> = {};
       (data || []).forEach((r: any) => { extra[r.setting_key] = r.setting_value; });
       setValues({
@@ -48,6 +48,7 @@ export default function SettingsPage() {
         button_color: settings.button_color,
         logo_url: settings.logo_url,
         twilio_whatsapp_number: extra.twilio_whatsapp_number || "",
+        whatsapp_cron_interval: extra.whatsapp_cron_interval || "5",
       });
     };
     loadExtraSettings();
@@ -210,6 +211,29 @@ export default function SettingsPage() {
             </div>
           </div>
         ))}
+
+        {/* WhatsApp Cron Interval */}
+        <div className="space-y-2 border-t pt-4">
+          <Label className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            Intervalo de Envio Automático (WhatsApp)
+          </Label>
+          <div className="flex gap-2 items-center">
+            <Input
+              type="number"
+              min={1}
+              max={1440}
+              value={values.whatsapp_cron_interval || "5"}
+              onChange={(e) => setValues((prev) => ({ ...prev, whatsapp_cron_interval: e.target.value }))}
+              placeholder="5"
+              className="w-24"
+            />
+            <span className="text-sm text-muted-foreground">minutos</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Define a cada quantos minutos o sistema envia mensagens das campanhas ativas automaticamente.
+          </p>
+        </div>
 
         <Button onClick={handleSave} disabled={saving} className="w-full">
           <Save className="mr-2 h-4 w-4" />
