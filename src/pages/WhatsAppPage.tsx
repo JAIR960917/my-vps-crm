@@ -73,7 +73,7 @@ export default function WhatsAppPage() {
   const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
   const [instanceLoading, setInstanceLoading] = useState(false);
 
-  const canManage = isAdmin || isGerente;
+  const canManage = isAdmin;
 
   const fetchData = async () => {
     setLoading(true);
