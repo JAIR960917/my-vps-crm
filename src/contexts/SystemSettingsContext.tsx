@@ -41,6 +41,12 @@ function applyCSS(s: Settings) {
   root.style.setProperty("--ring", s.primary_color);
   root.style.setProperty("--sidebar-primary", s.primary_color);
   root.style.setProperty("--sidebar-ring", s.primary_color);
+  root.style.setProperty("--sidebar-accent", s.button_color);
+
+  // Button color applies to primary (used by Button component)
+  if (s.button_color && s.button_color !== s.primary_color) {
+    root.style.setProperty("--primary", s.button_color);
+  }
 
   if (root.classList.contains("dark")) {
     // Apply dark overrides
