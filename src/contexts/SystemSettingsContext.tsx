@@ -37,10 +37,11 @@ export function useSystemSettings() {
 
 function applyCSS(s: Settings) {
   const root = document.documentElement;
-  root.style.setProperty("--primary", s.primary_color);
+  root.style.setProperty("--primary", s.button_color || s.primary_color);
   root.style.setProperty("--ring", s.primary_color);
   root.style.setProperty("--sidebar-primary", s.primary_color);
   root.style.setProperty("--sidebar-ring", s.primary_color);
+  root.style.setProperty("--sidebar-accent", s.primary_color);
 
   if (root.classList.contains("dark")) {
     // Apply dark overrides
