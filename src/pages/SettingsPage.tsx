@@ -242,10 +242,27 @@ export default function SettingsPage() {
                 className="flex-1"
               />
               {field.type === "color-hsl" && (
-                <div
-                  className="h-9 w-9 rounded-md border shrink-0"
-                  style={{ backgroundColor: hslPreview(values[field.key] || "") }}
-                />
+                <div className="relative">
+                  <div
+                    className="h-9 w-9 rounded-md border shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                    style={{ backgroundColor: hslPreview(values[field.key] || "") }}
+                    onClick={() => {
+                      const input = document.getElementById(`color-picker-${field.key}`) as HTMLInputElement;
+                      input?.click();
+                    }}
+                    title="Clique para escolher a cor"
+                  />
+                  <input
+                    id={`color-picker-${field.key}`}
+                    type="color"
+                    className="absolute inset-0 opacity-0 w-0 h-0"
+                    value={hslToHex(values[field.key] || "0 0% 50%")}
+                    onChange={(e) => {
+                      const hsl = hexToHsl(e.target.value);
+                      setValues((prev) => ({ ...prev, [field.key]: hsl }));
+                    }}
+                  />
+                </div>
               )}
             </div>
           </div>
