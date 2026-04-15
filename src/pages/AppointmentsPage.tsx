@@ -97,24 +97,19 @@ export default function AppointmentsPage() {
       dayEnd.setHours(23, 59, 59, 999);
       query = query.gte("scheduled_datetime", dayStart.toISOString()).lte("scheduled_datetime", dayEnd.toISOString());
     }
-    const promises: Promise<any>[] = [
+    const [apptRes, profRes] = await Promise.all([
       query,
       supabase.rpc("get_profile_names"),
-    ];
+    ]);
+    setAppointments((apptRes.data || []) as unknown as Appointment[]);
+    setProfiles((profRes.data || []) as Profile[]);
     if (isAdmin) {
-      promises.push(
+      const [compRes, profFullRes] = await Promise.all([
         supabase.from("companies").select("id, name").order("name"),
         supabase.from("profiles").select("user_id, full_name, company_id"),
-      );
-    }
-    const results = await Promise.all(promises);
-    const appts = results[0].data || [];
-    const profs = results[1].data || [];
-    setAppointments(appts as unknown as Appointment[]);
-    setProfiles(profs as Profile[]);
-    if (isAdmin) {
-      setCompanies((results[2]?.data || []) as Company[]);
-      setProfilesFull((results[3]?.data || []) as ProfileFull[]);
+      ]);
+      setCompanies((compRes.data || []) as Company[]);
+      setProfilesFull((profFullRes.data || []) as ProfileFull[]);
     }
     setLoading(false);
   };
