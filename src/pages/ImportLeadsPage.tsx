@@ -208,12 +208,18 @@ export default function ImportLeadsPage() {
         const data: Record<string, string> = {};
 
         // Map CSV columns to form field IDs or CRM column keys
+        // When multiple CSV columns map to the same field, merge values (comma-separated)
         Object.entries(colToFieldId).forEach(([csvCol, target]) => {
           const value = row[csvCol];
           if (!value) return;
 
           if (target.startsWith("col__")) {
-            data[target.replace("col__", "")] = value;
+            const colKey = target.replace("col__", "");
+            if (data[colKey]) {
+              data[colKey] = data[colKey] + ", " + value;
+            } else {
+              data[colKey] = value;
+            }
             return;
           }
 
@@ -223,7 +229,12 @@ export default function ImportLeadsPage() {
               ? target
               : `field_${target}`;
 
-          data[normalizedKey] = value;
+          // Merge multiple CSV columns into the same field
+          if (data[normalizedKey]) {
+            data[normalizedKey] = data[normalizedKey] + ", " + value;
+          } else {
+            data[normalizedKey] = value;
+          }
         });
 
         const csvStatus = row[statusCol] || "";
