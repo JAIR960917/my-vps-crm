@@ -64,6 +64,7 @@ export type Database = {
           telefone: string
           updated_at: string
           valor: number
+          valor_entrada: number
           valor_venda: number
           venda: string
         }
@@ -86,6 +87,7 @@ export type Database = {
           telefone?: string
           updated_at?: string
           valor?: number
+          valor_entrada?: number
           valor_venda?: number
           venda?: string
         }
@@ -108,6 +110,7 @@ export type Database = {
           telefone?: string
           updated_at?: string
           valor?: number
+          valor_entrada?: number
           valor_venda?: number
           venda?: string
         }

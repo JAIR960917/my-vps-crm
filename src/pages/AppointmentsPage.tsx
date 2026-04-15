@@ -79,6 +79,7 @@ export default function AppointmentsPage() {
   const [saleValor, setSaleValor] = useState("");
   const [salePagamento, setSalePagamento] = useState("");
   const [saleSaving, setSaleSaving] = useState(false);
+  const [saleEntrada, setSaleEntrada] = useState("");
 
   const fetchAll = async () => {
     setLoading(true);
@@ -125,6 +126,7 @@ export default function AppointmentsPage() {
     if (field === "venda" && value === "Vendido") {
       setSaleApptId(id);
       setSaleValor("");
+      setSaleEntrada("");
       setSalePagamento("");
       setSaleDialogOpen(true);
       return;
@@ -142,6 +144,7 @@ export default function AppointmentsPage() {
     await supabase.from("crm_appointments").update({
       venda: "Vendido",
       valor_venda: parseFloat(saleValor) || 0,
+      valor_entrada: parseFloat(saleEntrada) || 0,
       forma_pagamento_venda: salePagamento,
       status: "vendido",
     } as any).eq("id", saleApptId);
@@ -432,6 +435,10 @@ export default function AppointmentsPage() {
             <div className="space-y-1.5">
               <Label>Valor Total da Venda (R$) <span className="text-destructive">*</span></Label>
               <Input type="number" step="0.01" min="0" value={saleValor} onChange={(e) => setSaleValor(e.target.value)} placeholder="0.00" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Valor da Entrada (R$)</Label>
+              <Input type="number" step="0.01" min="0" value={saleEntrada} onChange={(e) => setSaleEntrada(e.target.value)} placeholder="0.00" />
             </div>
             <div className="space-y-1.5">
               <Label>Forma de Pagamento <span className="text-destructive">*</span></Label>
