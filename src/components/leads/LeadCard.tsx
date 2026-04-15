@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Pencil, Trash2, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus } from "lucide-react";
+import { Pencil, Trash2, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -208,6 +208,16 @@ export default function LeadCard({
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
               <CalendarClock className="h-3 w-3" />
               Hoje
+            </span>
+          </div>
+        )}
+
+        {/* Pending badge */}
+        {hasPending && (
+          <div className="mb-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <Clock className="h-3 w-3" />
+              Pendente
             </span>
           </div>
         )}
