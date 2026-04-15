@@ -325,29 +325,29 @@ export default function LeadsPage() {
     return lead.status;
   }, [statuses]);
 
-  const handleSchedule = async (leadId: string, date: Date | null) => {
-    if (date) {
-      // Set scheduled date and move to "agendados" status
-      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, scheduled_date: date.toISOString(), status: "agendados" } : l));
-      const { error } = await supabase.from("crm_leads").update({
-        scheduled_date: date.toISOString(),
-        status: "agendados",
-      } as any).eq("id", leadId);
-      if (error) { console.error("Schedule save error:", error); toast.error("Erro ao agendar"); fetchAll(); }
-      else toast.success("Lead agendado");
-    } else {
-      // Remove scheduling - recalculate status based on lead data (date fields, mappings)
-      const lead = leads.find((l) => l.id === leadId);
-      const leadData = lead ? (typeof lead.data === "object" ? lead.data as Record<string, any> : {}) : {};
-      const recalculatedStatus = resolveStatus(leadData);
-      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, scheduled_date: null, status: recalculatedStatus } : l));
-      const { error } = await supabase.from("crm_leads").update({
-        scheduled_date: null,
-        status: recalculatedStatus,
-      } as any).eq("id", leadId);
-      if (error) { console.error("Unschedule error:", error); toast.error("Erro ao remover agendamento"); fetchAll(); }
-      else toast.success("Agendamento removido");
-    }
+  const openScheduleDialog = (lead: Lead) => {
+    setSchedulingLead(lead);
+    setScheduleOpen(true);
+  };
+
+  const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
+    if (!schedulingLead || !user) return;
+    setScheduleSaving(true);
+    const { error } = await supabase.from("crm_appointments").insert({
+      lead_id: schedulingLead.id,
+      scheduled_by: user.id,
+      scheduled_datetime: schedData.scheduled_datetime,
+      valor: schedData.valor,
+      forma_pagamento: schedData.forma_pagamento,
+      canal_agendamento: schedData.canal_agendamento,
+      previous_status: schedulingLead.status,
+    } as any);
+    if (error) toast.error("Erro ao agendar");
+    else toast.success("Lead agendado com sucesso!");
+    setScheduleSaving(false);
+    setScheduleOpen(false);
+    setSchedulingLead(null);
+    fetchAll();
   };
 
   const handleToggleComprou = async (leadId: string, value: boolean) => {
