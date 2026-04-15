@@ -298,7 +298,7 @@ export default function AppointmentsPage() {
 
       {loading ? (
         <p className="text-center text-muted-foreground py-8">Carregando...</p>
-      ) : appointments.length === 0 ? (
+      ) : filteredAppointments.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">Nenhum agendamento encontrado.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
