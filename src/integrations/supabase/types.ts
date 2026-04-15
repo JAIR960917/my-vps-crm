@@ -44,6 +44,68 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_appointments: {
+        Row: {
+          canal_agendamento: string
+          comparecimento: string
+          confirmacao: string
+          created_at: string
+          forma_pagamento: string
+          id: string
+          lead_id: string
+          previous_status: string
+          resumo: string | null
+          scheduled_by: string
+          scheduled_datetime: string
+          status: string
+          updated_at: string
+          valor: number
+          venda: string
+        }
+        Insert: {
+          canal_agendamento?: string
+          comparecimento?: string
+          confirmacao?: string
+          created_at?: string
+          forma_pagamento?: string
+          id?: string
+          lead_id: string
+          previous_status?: string
+          resumo?: string | null
+          scheduled_by: string
+          scheduled_datetime: string
+          status?: string
+          updated_at?: string
+          valor?: number
+          venda?: string
+        }
+        Update: {
+          canal_agendamento?: string
+          comparecimento?: string
+          confirmacao?: string
+          created_at?: string
+          forma_pagamento?: string
+          id?: string
+          lead_id?: string
+          previous_status?: string
+          resumo?: string | null
+          scheduled_by?: string
+          scheduled_datetime?: string
+          status?: string
+          updated_at?: string
+          valor?: number
+          venda?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_appointments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_columns: {
         Row: {
           created_at: string
