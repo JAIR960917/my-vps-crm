@@ -126,7 +126,26 @@ export default function AppointmentsPage() {
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   };
 
-  const openAdd = () => {
+  const handleSaleSubmit = async () => {
+    if (!saleApptId || !salePagamento || !saleValor) return;
+    setSaleSaving(true);
+    const appt = appointments.find(a => a.id === saleApptId);
+    await supabase.from("crm_appointments").update({
+      venda: "Vendido",
+      valor_venda: parseFloat(saleValor) || 0,
+      forma_pagamento_venda: salePagamento,
+      status: "vendido",
+    } as any).eq("id", saleApptId);
+    if (appt?.lead_id) {
+      await supabase.from("crm_leads").update({ comprou: true } as any).eq("id", appt.lead_id);
+    }
+    toast.success("Venda registrada! Cliente movido para ativos.");
+    setSaleSaving(false);
+    setSaleDialogOpen(false);
+    setSaleApptId(null);
+    fetchAll();
+  };
+
     setEditingAppt(null);
     setFormNome(""); setFormTelefone(""); setFormIdade("");
     setFormDate(undefined); setFormTime("09:00");
