@@ -18,7 +18,7 @@ type Step = "upload" | "columns" | "status" | "users" | "preview" | "importing";
 const IGNORE_VALUE = "__ignore__";
 
 export default function ImportLeadsPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep] = useState<Step>("upload");
