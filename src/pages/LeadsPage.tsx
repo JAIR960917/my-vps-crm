@@ -174,7 +174,7 @@ export default function LeadsPage() {
       // Cache for offline
       try {
         localStorage.setItem("crm_cache_columns", JSON.stringify(cols || []));
-        localStorage.setItem("crm_cache_leads", JSON.stringify(lds || []));
+        // Don't cache leads in localStorage - too large for 9000+ leads
         localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
         localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
