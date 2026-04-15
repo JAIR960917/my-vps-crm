@@ -52,12 +52,15 @@ export type Database = {
           created_at: string
           forma_pagamento: string
           id: string
-          lead_id: string
+          idade: string
+          lead_id: string | null
+          nome: string
           previous_status: string
           resumo: string | null
           scheduled_by: string
           scheduled_datetime: string
           status: string
+          telefone: string
           updated_at: string
           valor: number
           venda: string
@@ -69,12 +72,15 @@ export type Database = {
           created_at?: string
           forma_pagamento?: string
           id?: string
-          lead_id: string
+          idade?: string
+          lead_id?: string | null
+          nome?: string
           previous_status?: string
           resumo?: string | null
           scheduled_by: string
           scheduled_datetime: string
           status?: string
+          telefone?: string
           updated_at?: string
           valor?: number
           venda?: string
@@ -86,12 +92,15 @@ export type Database = {
           created_at?: string
           forma_pagamento?: string
           id?: string
-          lead_id?: string
+          idade?: string
+          lead_id?: string | null
+          nome?: string
           previous_status?: string
           resumo?: string | null
           scheduled_by?: string
           scheduled_datetime?: string
           status?: string
+          telefone?: string
           updated_at?: string
           valor?: number
           venda?: string

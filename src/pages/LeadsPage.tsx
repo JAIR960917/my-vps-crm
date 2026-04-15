@@ -333,6 +333,13 @@ export default function LeadsPage() {
   const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
     if (!schedulingLead || !user) return;
     setScheduleSaving(true);
+    const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
+    const nf = formFields.find(f => f.is_name_field);
+    const pf = formFields.find(f => f.is_phone_field);
+    const idadeField = formFields.find(f => f.label?.toLowerCase().includes("idade"));
+    const nome = (nf ? d[`field_${nf.id}`] : d.nome_lead) || "";
+    const telefone = (pf ? d[`field_${pf.id}`] : d.telefone) || "";
+    const idade = idadeField ? (d[`field_${idadeField.id}`] || "") : "";
     const { error } = await supabase.from("crm_appointments").insert({
       lead_id: schedulingLead.id,
       scheduled_by: user.id,
@@ -341,6 +348,9 @@ export default function LeadsPage() {
       forma_pagamento: schedData.forma_pagamento,
       canal_agendamento: schedData.canal_agendamento,
       previous_status: schedulingLead.status,
+      nome,
+      telefone,
+      idade,
     } as any);
     if (error) toast.error("Erro ao agendar");
     else toast.success("Lead agendado com sucesso!");
