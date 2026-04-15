@@ -258,9 +258,22 @@ export default function AppointmentsPage() {
             <CalendarCheck className="h-6 w-6 text-primary" />
             <h1 className="text-xl sm:text-2xl font-bold">Agendamentos</h1>
           </div>
-          <p className="text-sm text-muted-foreground">{appointments.length} agendamento(s)</p>
+          <p className="text-sm text-muted-foreground">{filteredAppointments.length} agendamento(s)</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && companies.length > 0 && (
+            <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+              <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectValue placeholder="Todas empresas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas empresas</SelectItem>
+                {companies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className={cn("justify-start text-left font-normal", !filterDate && "text-muted-foreground")}>
