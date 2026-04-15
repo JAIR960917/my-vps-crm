@@ -186,6 +186,7 @@ export default function ImportLeadsPage() {
     let imported = 0;
 
     // Build reverse maps
+    const formFieldIds = new Set(formFields.map((field) => field.id));
     const colToFieldId: Record<string, string> = {};
     const specialCols: Record<string, string> = {}; // csvHeader -> special key
     Object.entries(columnMap).forEach(([csvCol, target]) => {
@@ -207,9 +208,22 @@ export default function ImportLeadsPage() {
         const data: Record<string, string> = {};
 
         // Map CSV columns to form field IDs or CRM column keys
-        Object.entries(colToFieldId).forEach(([csvCol, fieldId]) => {
-          const key = fieldId.startsWith("col__") ? fieldId.replace("col__", "") : fieldId;
-          if (row[csvCol]) data[key] = row[csvCol];
+        Object.entries(colToFieldId).forEach(([csvCol, target]) => {
+          const value = row[csvCol];
+          if (!value) return;
+
+          if (target.startsWith("col__")) {
+            data[target.replace("col__", "")] = value;
+            return;
+          }
+
+          const normalizedKey = formFieldIds.has(target)
+            ? `field_${target}`
+            : target.startsWith("field_")
+              ? target
+              : `field_${target}`;
+
+          data[normalizedKey] = value;
         });
 
         const csvStatus = row[statusCol] || "";
