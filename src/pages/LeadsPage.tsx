@@ -85,6 +85,7 @@ export default function LeadsPage() {
   const [schedulingLead, setSchedulingLead] = useState<Lead | null>(null);
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
+  const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
 
   const loadFromCache = useCallback(() => {
     try {
