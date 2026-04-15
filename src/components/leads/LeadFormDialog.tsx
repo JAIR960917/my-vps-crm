@@ -125,6 +125,19 @@ const parseStoredDate = (value: unknown): Date | undefined => {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 };
 
+const normalizePhoneDigits = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+
+  const digits = String(value).replace(/\D/g, "");
+  if (!digits) return "";
+
+  if (digits.length > 11 && digits.startsWith("55")) {
+    return digits.slice(2, 13);
+  }
+
+  return digits.slice(0, 11);
+};
+
 const normalizeCheckboxValue = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
@@ -150,6 +163,10 @@ const normalizeCheckboxValue = (value: unknown): string[] => {
 
 const normalizeFieldValue = (field: FormField, value: unknown) => {
   if (!isFilledValue(value)) return field.field_type === "checkbox_group" ? [] : "";
+
+  if (field.is_phone_field || field.field_type === "phone") {
+    return normalizePhoneDigits(value);
+  }
 
   if (field.field_type === "checkbox_group") {
     return normalizeCheckboxValue(value);
@@ -447,16 +464,13 @@ export default function LeadFormDialog({
           <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={5} className="text-sm min-h-[120px]" />
         )}
 
-        {field.field_type === "phone" && (
+        {(field.field_type === "phone" || field.is_phone_field) && (
           <Input
             type="tel"
             inputMode="numeric"
             placeholder="(00) 00000-0000"
-            value={formatPhoneBR(value)}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
-              set(fieldKey, digits);
-            }}
+            value={formatPhoneBR(normalizePhoneDigits(rawValue))}
+            onChange={(e) => set(fieldKey, normalizePhoneDigits(e.target.value))}
             required={field.is_required}
             maxLength={16}
             className="h-9 text-sm"
@@ -493,18 +507,7 @@ export default function LeadFormDialog({
           />
         )}
 
-        {field.is_phone_field && (
-          <Input
-            type="tel"
-            value={typeof value === "string" ? formatPhoneBR(value) : value}
-            onChange={(e) => set(fieldKey, e.target.value.replace(/\D/g, ""))}
-            placeholder="(00) 00000-0000"
-            required={field.is_required}
-            className="h-9 text-sm"
-          />
-        )}
-
-        {!["select", "checkbox_group", "textarea", "phone", "text", "number", "date", "email"].includes(field.field_type) && (
+        {!['select', 'checkbox_group', 'textarea', 'phone', 'text', 'number', 'date', 'email'].includes(field.field_type) && !field.is_phone_field && (
           <Input
             type="text"
             value={value}
