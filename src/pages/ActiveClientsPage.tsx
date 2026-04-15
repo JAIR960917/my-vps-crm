@@ -134,9 +134,9 @@ export default function ActiveClientsPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <UserCheck className="h-6 w-6 text-primary" />
-            <h1 className="text-xl sm:text-2xl font-bold">Clientes Ativos</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Renovação</h1>
           </div>
-          <p className="text-sm text-muted-foreground">{appointments.length} cliente(s) ativo(s)</p>
+          <p className="text-sm text-muted-foreground">{appointments.length} cliente(s)</p>
         </div>
         <Button size="sm" onClick={openAdd}>
           <Plus className="mr-1 h-4 w-4" /> Novo Cliente

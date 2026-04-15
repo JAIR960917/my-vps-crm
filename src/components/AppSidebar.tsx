@@ -16,7 +16,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { path: "/", label: "Leads", icon: LayoutDashboard },
   { path: "/agendamentos", label: "Agendamentos", icon: CalendarCheck },
-  { path: "/clientes-ativos", label: "Clientes Ativos", icon: UserCheck },
+  { path: "/clientes-ativos", label: "Renovação", icon: UserCheck },
   { path: "/usuarios", label: "Usuários", icon: Users, roles: ["admin", "gerente"] },
   { path: "/empresas", label: "Empresas", icon: Building2, roles: ["admin"] },
   { path: "/colunas", label: "Colunas CRM", icon: Columns3, roles: ["admin"] },
