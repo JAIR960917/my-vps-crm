@@ -110,7 +110,7 @@ export default function ActiveClientsPage() {
       if (error) toast.error("Erro ao atualizar"); else toast.success("Atualizado");
     } else {
       const { error } = await supabase.from("crm_appointments").insert({
-        lead_id: "00000000-0000-0000-0000-000000000000",
+        lead_id: null,
         scheduled_by: user.id, scheduled_datetime: dt.toISOString(),
         valor: parseFloat(formValor) || 0, forma_pagamento: formPagamento,
         canal_agendamento: formCanal, nome: formNome, telefone: formTelefone, idade: formIdade,

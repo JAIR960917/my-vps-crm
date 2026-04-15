@@ -143,7 +143,7 @@ export default function AppointmentsPage() {
       else toast.success("Agendamento atualizado");
     } else {
       const { error } = await supabase.from("crm_appointments").insert({
-        lead_id: "00000000-0000-0000-0000-000000000000",
+        lead_id: null,
         scheduled_by: user.id,
         scheduled_datetime: dt.toISOString(),
         valor: parseFloat(formValor) || 0,
@@ -164,7 +164,7 @@ export default function AppointmentsPage() {
     if (!deleteId) return;
     const appt = appointments.find(a => a.id === deleteId);
     // Return lead to original column if it has a real lead_id
-    if (appt && appt.lead_id !== "00000000-0000-0000-0000-000000000000") {
+    if (appt && appt.lead_id) {
       await supabase.from("crm_leads").update({ status: appt.previous_status } as any).eq("id", appt.lead_id);
     }
     const { error } = await supabase.from("crm_appointments").delete().eq("id", deleteId);
