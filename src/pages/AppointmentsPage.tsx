@@ -55,6 +55,7 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterDate, setFilterDate] = useState<Date | undefined>(new Date());
 
   // Add/Edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
