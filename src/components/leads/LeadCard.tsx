@@ -40,7 +40,6 @@ export default function LeadCard({
   lead, columns, formFields, profiles, isAdmin,
   onEdit, onDelete, onHistory, onSchedule, onToggleComprou, syncStatus,
 }: LeadCardProps) {
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
 
