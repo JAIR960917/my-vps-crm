@@ -635,15 +635,17 @@ export default function LeadsPage() {
       </div>
 
       {/* Mobile: Active column cards */}
-      <div className="lg:hidden space-y-2 mb-4">
+      <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }} onScroll={(e) => handleColumnScroll(mobileTab, e)}>
         {statuses.filter(s => s.key === mobileTab).map((status) => {
           const statusLeads = getLeadsByStatus(status.key);
+          const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
+          const hasMore = statusLeads.length > visibleLeads.length;
           return (
             <div key={status.key}>
               {statusLeads.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhum lead nesta coluna</p>
               )}
-              {statusLeads.map((lead) => (
+              {visibleLeads.map((lead) => (
                 <div key={lead.id} className="mb-2">
                   <LeadCard
                     lead={lead}
@@ -665,6 +667,11 @@ export default function LeadsPage() {
                   />
                 </div>
               ))}
+              {hasMore && (
+                <p className="text-center text-xs text-muted-foreground py-2">
+                  Mostrando {visibleLeads.length} de {statusLeads.length} — role para carregar mais
+                </p>
+              )}
               <button
                 onClick={() => navigate(`/novo-lead?status=${status.key}`)}
                 className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors"
