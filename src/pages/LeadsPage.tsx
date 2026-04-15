@@ -668,14 +668,14 @@ export default function LeadsPage() {
       <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }} onScroll={(e) => handleColumnScroll(mobileTab, e)}>
         {statuses.filter(s => s.key === mobileTab).map((status) => {
           const statusLeads = getLeadsByStatus(status.key);
-          const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
-          const hasMore = statusLeads.length > visibleLeads.length;
+          const total = columnCounts[status.key] || 0;
+          const hasMore = statusLeads.length < total;
           return (
             <div key={status.key}>
-              {statusLeads.length === 0 && (
+              {statusLeads.length === 0 && !loadingColumns[status.key] && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhum lead nesta coluna</p>
               )}
-              {visibleLeads.map((lead) => (
+              {statusLeads.map((lead) => (
                 <div key={lead.id} className="mb-2">
                   <LeadCard
                     lead={lead}
@@ -697,9 +697,12 @@ export default function LeadsPage() {
                   />
                 </div>
               ))}
-              {hasMore && (
+              {loadingColumns[status.key] && (
+                <p className="text-center text-xs text-muted-foreground py-2">Carregando...</p>
+              )}
+              {hasMore && !loadingColumns[status.key] && (
                 <p className="text-center text-xs text-muted-foreground py-2">
-                  Mostrando {visibleLeads.length} de {statusLeads.length} — role para carregar mais
+                  Mostrando {statusLeads.length} de {total} — role para carregar mais
                 </p>
               )}
               <button
@@ -718,8 +721,8 @@ export default function LeadsPage() {
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map((status) => {
             const statusLeads = getLeadsByStatus(status.key);
-            const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
-            const hasMore = statusLeads.length > visibleLeads.length;
+            const total = columnCounts[status.key] || 0;
+            const hasMore = statusLeads.length < total;
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
@@ -727,24 +730,21 @@ export default function LeadsPage() {
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
-                    {statusLeads.length}
+                    {total}
                   </span>
                 </div>
 
                 <Droppable droppableId={status.key}>
                   {(provided, snapshot) => (
                     <div
-                      ref={(el) => {
-                        provided.innerRef(el);
-                        columnRefs.current[status.key] = el;
-                      }}
+                      ref={provided.innerRef}
                       {...provided.droppableProps}
                       onScroll={(e) => handleColumnScroll(status.key, e)}
                       className={`flex-1 rounded-xl p-2 space-y-2 transition-colors overflow-y-auto min-h-0 ${
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
                       }`}
                     >
-                      {visibleLeads.map((lead, index) => (
+                      {statusLeads.map((lead, index) => (
                         <Draggable key={lead.id} draggableId={lead.id} index={index}>
                           {(provided, snapshot) => (
                             <div
@@ -777,9 +777,13 @@ export default function LeadsPage() {
                       ))}
                       {provided.placeholder}
 
-                      {hasMore && (
+                      {loadingColumns[status.key] && (
+                        <p className="text-center text-xs text-muted-foreground py-1">Carregando...</p>
+                      )}
+
+                      {hasMore && !loadingColumns[status.key] && (
                         <p className="text-center text-xs text-muted-foreground py-1">
-                          Mostrando {visibleLeads.length} de {statusLeads.length} — role para carregar mais
+                          Mostrando {statusLeads.length} de {total} — role para carregar mais
                         </p>
                       )}
 
