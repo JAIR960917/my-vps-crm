@@ -34,7 +34,7 @@ type CrmStatus = {
   id: string; key: string; label: string; position: number; color: string;
 };
 type Company = { id: string; name: string };
-type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean; status_mapping?: Record<string, string> | null; date_status_ranges?: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null };
+type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean; show_on_card?: boolean; status_mapping?: Record<string, string> | null; date_status_ranges?: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -330,20 +330,41 @@ export default function LeadsPage() {
     setScheduleOpen(true);
   };
 
+  const getLeadSnapshot = useCallback((lead: Lead | null) => {
+    if (!lead) return { nome: "", telefone: "", idade: "" };
+
+    const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
+    const nameFields = formFields.filter((f) => f.is_name_field);
+    const phoneFields = formFields.filter((f) => f.is_phone_field);
+    const ageFields = formFields.filter((f) => f.label?.toLowerCase().includes("idade"));
+
+    const nome =
+      nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
+      data.nome_lead ||
+      columns.reduce<string | null>((found, c) => found || data[c.field_key] || null, null) ||
+      "Lead";
+
+    const telefone =
+      phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
+      data.telefone ||
+      columns.find((c) => /telefone|celular|whatsapp|fone/i.test(`${c.name} ${c.field_key}`))?.field_key &&
+        data[columns.find((c) => /telefone|celular|whatsapp|fone/i.test(`${c.name} ${c.field_key}`))!.field_key] ||
+      "";
+
+    const idade =
+      ageFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
+      data.idade ||
+      columns.find((c) => /idade/i.test(`${c.name} ${c.field_key}`))?.field_key &&
+        data[columns.find((c) => /idade/i.test(`${c.name} ${c.field_key}`))!.field_key] ||
+      "";
+
+    return { nome: String(nome || ""), telefone: String(telefone || ""), idade: String(idade || "") };
+  }, [columns, formFields]);
+
   const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
     if (!schedulingLead || !user) return;
     setScheduleSaving(true);
-    const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
-    const nameFields = formFields.filter(f => f.is_name_field);
-    const phoneFields = formFields.filter(f => f.is_phone_field);
-    const idadeField = formFields.find(f => f.label?.toLowerCase().includes("idade"));
-    let nome = "";
-    for (const nf of nameFields) { const v = d[`field_${nf.id}`]; if (v) { nome = v; break; } }
-    if (!nome) nome = d.nome_lead || "";
-    let telefone = "";
-    for (const pf of phoneFields) { const v = d[`field_${pf.id}`]; if (v) { telefone = v; break; } }
-    if (!telefone) telefone = d.telefone || "";
-    const idade = idadeField ? (d[`field_${idadeField.id}`] || "") : "";
+    const { nome, telefone, idade } = getLeadSnapshot(schedulingLead);
     const { error } = await supabase.from("crm_appointments").insert({
       lead_id: schedulingLead.id,
       scheduled_by: user.id,
@@ -557,10 +578,8 @@ export default function LeadsPage() {
                     onEdit={() => openEdit(lead)}
                     onDelete={() => handleDelete(lead.id)}
                     onHistory={() => {
-                      const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
                       setHistoryLeadId(lead.id);
-                      const nf = formFields.find(f => f.is_name_field);
-                      setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
+                      setHistoryLeadName(getLeadSnapshot(lead).nome || "Lead");
                       setHistoryOpen(true);
                     }}
                     onSchedule={() => openScheduleDialog(lead)}
@@ -623,10 +642,8 @@ export default function LeadsPage() {
                                 onEdit={() => openEdit(lead)}
                                 onDelete={() => handleDelete(lead.id)}
                                 onHistory={() => {
-                                  const data = typeof lead.data === "object" ? lead.data as Record<string, any> : {};
                                   setHistoryLeadId(lead.id);
-                                  const nf = formFields.find(f => f.is_name_field);
-                                  setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
+                                  setHistoryLeadName(getLeadSnapshot(lead).nome || "Lead");
                                   setHistoryOpen(true);
                                 }}
                                 onSchedule={() => openScheduleDialog(lead)}
@@ -676,20 +693,8 @@ export default function LeadsPage() {
       <ScheduleLeadDialog
         open={scheduleOpen}
         onOpenChange={setScheduleOpen}
-        leadName={(() => {
-          if (!schedulingLead) return "";
-          const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
-          const nameFields = formFields.filter(f => f.is_name_field);
-          for (const nf of nameFields) { const v = d[`field_${nf.id}`]; if (v) return v; }
-          return d.nome_lead || "Lead";
-        })()}
-        leadPhone={(() => {
-          if (!schedulingLead) return "";
-          const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
-          const phoneFields = formFields.filter(f => f.is_phone_field);
-          for (const pf of phoneFields) { const v = d[`field_${pf.id}`]; if (v) return v; }
-          return d.telefone || "";
-        })()}
+        leadName={getLeadSnapshot(schedulingLead).nome}
+        leadPhone={getLeadSnapshot(schedulingLead).telefone}
         saving={scheduleSaving}
         onSubmit={handleScheduleSubmit}
       />
