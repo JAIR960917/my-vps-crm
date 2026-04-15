@@ -1,0 +1,561 @@
+import { useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import AppLayout from "@/components/AppLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Upload, ArrowRight, ArrowLeft, Check, AlertTriangle, FileSpreadsheet } from "lucide-react";
+
+type Step = "upload" | "columns" | "status" | "users" | "preview" | "importing";
+
+const IGNORE_VALUE = "__ignore__";
+
+export default function ImportLeadsPage() {
+  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
+
+  const [step, setStep] = useState<Step>("upload");
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+  const [columnMap, setColumnMap] = useState<Record<string, string>>({});
+  const [statusMap, setStatusMap] = useState<Record<string, string>>({});
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
+  const [importProgress, setImportProgress] = useState(0);
+  const [importTotal, setImportTotal] = useState(0);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+
+  const { data: formFields = [] } = useQuery({
+    queryKey: ["import-form-fields"],
+    queryFn: async () => {
+      const { data } = await supabase.from("crm_form_fields").select("id, label, field_type, is_name_field, is_phone_field").order("position");
+      return data || [];
+    },
+  });
+
+  const { data: statuses = [] } = useQuery({
+    queryKey: ["import-statuses"],
+    queryFn: async () => {
+      const { data } = await supabase.from("crm_statuses").select("id, key, label").order("position");
+      return data || [];
+    },
+  });
+
+  const { data: profiles = [] } = useQuery({
+    queryKey: ["import-profiles"],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("user_id, full_name, email");
+      return data || [];
+    },
+  });
+
+  // Parse CSV with ; separator
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      if (!text) return;
+
+      const lines = text.split("\n").filter((l) => l.trim());
+      if (lines.length < 2) { toast.error("Arquivo vazio ou inválido"); return; }
+
+      // Parse header - remove BOM and quotes
+      const parseRow = (line: string) =>
+        line.split(";").map((c) => c.replace(/^\uFEFF/, "").replace(/^"|"$/g, "").trim());
+
+      const headers = parseRow(lines[0]);
+      const rows = lines.slice(1).map((line) => {
+        const cols = parseRow(line);
+        const row: Record<string, string> = {};
+        headers.forEach((h, i) => { row[h] = cols[i] || ""; });
+        return row;
+      });
+
+      setCsvHeaders(headers.filter((h) => h));
+      setCsvRows(rows);
+
+      // Auto-map columns by label similarity
+      const autoMap: Record<string, string> = {};
+      formFields.forEach((ff) => {
+        const match = headers.find(
+          (h) => h.toLowerCase().trim() === ff.label.toLowerCase().trim()
+        );
+        if (match) autoMap[match] = ff.id;
+      });
+      // Auto-map nome/telefone special columns
+      const nomeHeader = headers.find((h) => h === "Nome do Lead");
+      const nameField = formFields.find((f) => f.is_name_field);
+      if (nomeHeader && nameField && !autoMap[nomeHeader]) autoMap[nomeHeader] = nameField.id;
+
+      const telHeader = headers.find((h) => h === "Celular" || h === "Outro número de telefone");
+      const phoneField = formFields.find((f) => f.is_phone_field);
+      if (telHeader && phoneField && !autoMap[telHeader]) autoMap[telHeader] = phoneField.id;
+
+      setColumnMap(autoMap);
+
+      // Auto-map statuses
+      const uniqueStatuses = [...new Set(rows.map((r) => r["Etapa"]).filter(Boolean))];
+      const autoStatusMap: Record<string, string> = {};
+      uniqueStatuses.forEach((s) => {
+        const match = statuses.find((st) => st.label.toLowerCase() === s.toLowerCase());
+        if (match) autoStatusMap[s] = match.key;
+      });
+      setStatusMap(autoStatusMap);
+
+      // Auto-map users
+      const uniqueUsers = [...new Set(rows.map((r) => r["Responsável"]).filter(Boolean))];
+      const autoUserMap: Record<string, string> = {};
+      uniqueUsers.forEach((u) => {
+        const match = profiles.find(
+          (p) => p.full_name?.toLowerCase().trim() === u.toLowerCase().trim()
+        );
+        if (match) autoUserMap[u] = match.user_id;
+      });
+      setUserMap(autoUserMap);
+
+      setStep("columns");
+      toast.success(`${rows.length} leads encontrados no arquivo`);
+    };
+    reader.readAsText(file, "UTF-8");
+  }, [formFields, statuses, profiles]);
+
+  // Unique CSV statuses and users
+  const csvStatuses = useMemo(
+    () => [...new Set(csvRows.map((r) => r["Etapa"]).filter(Boolean))],
+    [csvRows]
+  );
+  const csvUsers = useMemo(
+    () => [...new Set(csvRows.map((r) => r["Responsável"]).filter(Boolean))],
+    [csvRows]
+  );
+
+  // Build field options for column mapping (add special entries)
+  const fieldOptions = useMemo(() => {
+    const opts = formFields.map((f) => ({ value: f.id, label: f.label }));
+    return [
+      { value: "__status__", label: "📊 Status/Etapa" },
+      { value: "__assigned__", label: "👤 Responsável" },
+      { value: "__created_at__", label: "📅 Data de criação" },
+      ...opts,
+    ];
+  }, [formFields]);
+
+  // Import logic
+  const startImport = async () => {
+    setStep("importing");
+    setImportProgress(0);
+    setImportErrors([]);
+    const total = csvRows.length;
+    setImportTotal(total);
+    const BATCH_SIZE = 50;
+    const errors: string[] = [];
+    let imported = 0;
+
+    // Build reverse maps
+    const colToFieldId: Record<string, string> = {};
+    const specialCols: Record<string, string> = {}; // csvHeader -> special key
+    Object.entries(columnMap).forEach(([csvCol, target]) => {
+      if (target === "__status__" || target === "__assigned__" || target === "__created_at__") {
+        specialCols[csvCol] = target;
+      } else if (target !== IGNORE_VALUE) {
+        colToFieldId[csvCol] = target;
+      }
+    });
+
+    // Find status column and assigned column
+    const statusCol = Object.entries(specialCols).find(([, v]) => v === "__status__")?.[0] || "Etapa";
+    const assignedCol = Object.entries(specialCols).find(([, v]) => v === "__assigned__")?.[0] || "Responsável";
+    const createdAtCol = Object.entries(specialCols).find(([, v]) => v === "__created_at__")?.[0] || "Criado";
+
+    for (let i = 0; i < total; i += BATCH_SIZE) {
+      const batch = csvRows.slice(i, i + BATCH_SIZE);
+      const inserts = batch.map((row, batchIdx) => {
+        const data: Record<string, string> = {};
+
+        // Map CSV columns to form field IDs
+        Object.entries(colToFieldId).forEach(([csvCol, fieldId]) => {
+          if (row[csvCol]) data[fieldId] = row[csvCol];
+        });
+
+        const csvStatus = row[statusCol] || "";
+        const status = statusMap[csvStatus] || "novo";
+        const csvUser = row[assignedCol] || "";
+        const assignedTo = userMap[csvUser] || null;
+
+        // Parse created_at
+        let createdAt: string | undefined;
+        const rawDate = row[createdAtCol];
+        if (rawDate) {
+          // Format: "14/04/2026 14:18:11" -> ISO
+          const match = rawDate.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
+          if (match) {
+            createdAt = `${match[3]}-${match[2]}-${match[1]}T${match[4]}`;
+          }
+        }
+
+        return {
+          data: data as any,
+          status,
+          assigned_to: assignedTo,
+          created_by: assignedTo,
+          ...(createdAt ? { created_at: createdAt } : {}),
+        };
+      });
+
+      const { error } = await supabase.from("crm_leads").insert(inserts);
+      if (error) {
+        errors.push(`Lote ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`);
+      }
+      imported += batch.length;
+      setImportProgress(Math.round((imported / total) * 100));
+    }
+
+    setImportErrors(errors);
+    if (errors.length === 0) {
+      toast.success(`${total} leads importados com sucesso!`);
+    } else {
+      toast.error(`Importação concluída com ${errors.length} erro(s)`);
+    }
+  };
+
+  if (!isAdmin) {
+    return (
+      <AppLayout>
+        <div className="p-6 text-center text-muted-foreground">Acesso restrito a administradores.</div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
+        <div className="flex items-center gap-3">
+          <FileSpreadsheet className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-bold">Importar Leads</h1>
+        </div>
+
+        {/* Step indicators */}
+        <div className="flex items-center gap-2 text-sm">
+          {(["upload", "columns", "status", "users", "preview"] as Step[]).map((s, i) => {
+            const labels = ["Upload", "Colunas", "Status", "Usuários", "Preview"];
+            const isActive = s === step;
+            const isDone =
+              (["upload", "columns", "status", "users", "preview"] as Step[]).indexOf(step) > i ||
+              step === "importing";
+            return (
+              <div key={s} className="flex items-center gap-2">
+                {i > 0 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
+                <Badge variant={isActive ? "default" : isDone ? "secondary" : "outline"}>
+                  {isDone && !isActive ? <Check className="mr-1 h-3 w-3" /> : null}
+                  {labels[i]}
+                </Badge>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* STEP: Upload */}
+        {step === "upload" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Upload do arquivo CSV</CardTitle>
+              <CardDescription>Selecione o arquivo de backup do Bitrix (formato CSV com separador ;)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <label className="flex cursor-pointer flex-col items-center gap-4 rounded-lg border-2 border-dashed border-muted-foreground/30 p-10 transition-colors hover:border-primary/50">
+                <Upload className="h-10 w-10 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Clique para selecionar o arquivo .csv</span>
+                <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+              </label>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* STEP: Column mapping */}
+        {step === "columns" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Mapeamento de Colunas</CardTitle>
+              <CardDescription>
+                Vincule cada coluna do CSV a um campo do CRM. Colunas sem vínculo serão ignoradas.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="max-h-[60vh] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Coluna CSV</TableHead>
+                    <TableHead>Exemplo</TableHead>
+                    <TableHead>Campo CRM</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {csvHeaders.map((header) => {
+                    const sample = csvRows.find((r) => r[header])?.[header] || "";
+                    return (
+                      <TableRow key={header}>
+                        <TableCell className="font-medium text-xs">{header}</TableCell>
+                        <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
+                          {sample.slice(0, 60)}
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={columnMap[header] || IGNORE_VALUE}
+                            onValueChange={(v) =>
+                              setColumnMap((prev) => {
+                                const next = { ...prev };
+                                if (v === IGNORE_VALUE) delete next[header];
+                                else next[header] = v;
+                                return next;
+                              })
+                            }
+                          >
+                            <SelectTrigger className="w-[220px] text-xs">
+                              <SelectValue placeholder="Ignorar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={IGNORE_VALUE}>— Ignorar —</SelectItem>
+                              {fieldOptions.map((o) => (
+                                <SelectItem key={o.value} value={o.value}>
+                                  {o.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+            <div className="flex justify-between p-4 pt-0">
+              <Button variant="outline" onClick={() => setStep("upload")}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+              </Button>
+              <Button onClick={() => setStep("status")}>
+                Próximo <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* STEP: Status mapping */}
+        {step === "status" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Mapeamento de Status</CardTitle>
+              <CardDescription>Vincule cada etapa do Bitrix a um status do CRM</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {csvStatuses.map((csvStatus) => (
+                <div key={csvStatus} className="flex items-center gap-4">
+                  <span className="min-w-[200px] text-sm font-medium">{csvStatus}</span>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  <Select
+                    value={statusMap[csvStatus] || ""}
+                    onValueChange={(v) => setStatusMap((prev) => ({ ...prev, [csvStatus]: v }))}
+                  >
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statuses.map((s) => (
+                        <SelectItem key={s.key} value={s.key}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+              {csvStatuses.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhuma etapa encontrada no CSV.</p>
+              )}
+            </CardContent>
+            <div className="flex justify-between p-4 pt-0">
+              <Button variant="outline" onClick={() => setStep("columns")}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+              </Button>
+              <Button onClick={() => setStep("users")}>
+                Próximo <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* STEP: User mapping */}
+        {step === "users" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Mapeamento de Usuários</CardTitle>
+              <CardDescription>Vincule cada responsável do Bitrix a um usuário do CRM</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {csvUsers.map((csvUser) => (
+                <div key={csvUser} className="flex items-center gap-4">
+                  <span className="min-w-[200px] text-sm font-medium">{csvUser}</span>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  <Select
+                    value={userMap[csvUser] || ""}
+                    onValueChange={(v) => setUserMap((prev) => ({ ...prev, [csvUser]: v }))}
+                  >
+                    <SelectTrigger className="w-[250px]">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profiles.map((p) => (
+                        <SelectItem key={p.user_id} value={p.user_id}>
+                          {p.full_name || p.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+              {csvUsers.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhum responsável encontrado no CSV.</p>
+              )}
+            </CardContent>
+            <div className="flex justify-between p-4 pt-0">
+              <Button variant="outline" onClick={() => setStep("status")}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+              </Button>
+              <Button onClick={() => setStep("preview")}>
+                Próximo <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* STEP: Preview */}
+        {step === "preview" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumo da Importação</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                <div className="rounded-lg bg-muted p-3 text-center">
+                  <div className="text-2xl font-bold">{csvRows.length}</div>
+                  <div className="text-muted-foreground">Total de leads</div>
+                </div>
+                <div className="rounded-lg bg-muted p-3 text-center">
+                  <div className="text-2xl font-bold">{Object.keys(columnMap).length}</div>
+                  <div className="text-muted-foreground">Colunas mapeadas</div>
+                </div>
+                <div className="rounded-lg bg-muted p-3 text-center">
+                  <div className="text-2xl font-bold">{Object.keys(statusMap).length}/{csvStatuses.length}</div>
+                  <div className="text-muted-foreground">Status mapeados</div>
+                </div>
+                <div className="rounded-lg bg-muted p-3 text-center">
+                  <div className="text-2xl font-bold">{Object.keys(userMap).length}/{csvUsers.length}</div>
+                  <div className="text-muted-foreground">Usuários mapeados</div>
+                </div>
+              </div>
+
+              {(csvStatuses.some((s) => !statusMap[s]) || csvUsers.some((u) => !userMap[u])) && (
+                <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    {csvStatuses.some((s) => !statusMap[s]) && (
+                      <p>Alguns status não mapeados usarão o status padrão "novo".</p>
+                    )}
+                    {csvUsers.some((u) => !userMap[u]) && (
+                      <p>Leads de usuários não mapeados ficarão sem responsável.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Sample preview */}
+              <div className="max-h-[300px] overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Responsável</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {csvRows.slice(0, 10).map((row, i) => {
+                      const nameField = formFields.find((f) => f.is_name_field);
+                      const nameCol = nameField
+                        ? Object.entries(columnMap).find(([, v]) => v === nameField.id)?.[0]
+                        : null;
+                      return (
+                        <TableRow key={i}>
+                          <TableCell className="text-xs">{i + 1}</TableCell>
+                          <TableCell className="text-xs">{nameCol ? row[nameCol] : row["Nome do Lead"] || "—"}</TableCell>
+                          <TableCell className="text-xs">
+                            <Badge variant="outline">{statusMap[row["Etapa"]] || "novo"}</Badge>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {userMap[row["Responsável"]]
+                              ? profiles.find((p) => p.user_id === userMap[row["Responsável"]])?.full_name
+                              : row["Responsável"] || "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+            <div className="flex justify-between p-4 pt-0">
+              <Button variant="outline" onClick={() => setStep("users")}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+              </Button>
+              <Button onClick={startImport}>
+                <Upload className="mr-2 h-4 w-4" /> Importar {csvRows.length} leads
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* STEP: Importing */}
+        {step === "importing" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Importando...</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Progress value={importProgress} />
+              <p className="text-center text-sm text-muted-foreground">
+                {importProgress < 100
+                  ? `Processando... ${Math.round((importProgress / 100) * importTotal)} de ${importTotal}`
+                  : "Importação concluída!"}
+              </p>
+              {importErrors.length > 0 && (
+                <div className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">
+                  {importErrors.map((err, i) => (
+                    <p key={i} className="text-destructive">{err}</p>
+                  ))}
+                </div>
+              )}
+              {importProgress >= 100 && (
+                <div className="flex justify-center gap-3">
+                  <Button variant="outline" onClick={() => { setStep("upload"); setCsvRows([]); setCsvHeaders([]); }}>
+                    Nova importação
+                  </Button>
+                  <Button onClick={() => navigate("/")}>Ver leads</Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </AppLayout>
+  );
+}
