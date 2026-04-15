@@ -50,12 +50,18 @@ const FORMAS_PAGAMENTO = [
   "Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Convênio", "Boleto", "Cortesia",
 ];
 
+type Company = { id: string; name: string };
+type ProfileFull = { user_id: string; full_name: string; company_id: string | null };
+
 export default function AppointmentsPage() {
   const { user, isAdmin } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profilesFull, setProfilesFull] = useState<ProfileFull[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState<Date | undefined>(new Date());
+  const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   // Add/Edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
