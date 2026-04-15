@@ -295,12 +295,55 @@ export default function ImportLeadsPage() {
               <CardTitle>Upload do arquivo CSV</CardTitle>
               <CardDescription>Selecione o arquivo de backup do Bitrix (formato CSV com separador ;)</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <label className="flex cursor-pointer flex-col items-center gap-4 rounded-lg border-2 border-dashed border-muted-foreground/30 p-10 transition-colors hover:border-primary/50">
                 <Upload className="h-10 w-10 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Clique para selecionar o arquivo .csv</span>
                 <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
               </label>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" className="w-full">
+                    <Trash2 className="mr-2 h-4 w-4" /> Excluir todos os leads do sistema
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta ação irá excluir permanentemente TODOS os leads, notas, atividades e agendamentos do sistema. Essa ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={async () => {
+                        const toastId = toast.loading("Excluindo todos os leads...");
+                        try {
+                          // Delete related data first
+                          await supabase.from("crm_lead_notes").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                          await supabase.from("lead_activities").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                          await supabase.from("crm_appointments").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                          await supabase.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                          await supabase.from("whatsapp_campaign_sends").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                          await supabase.from("whatsapp_trigger_sends").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                          await supabase.from("scheduled_whatsapp_messages").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                          // Delete all leads
+                          const { error } = await supabase.from("crm_leads").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+                          if (error) throw error;
+                          toast.success("Todos os leads foram excluídos!", { id: toastId });
+                        } catch (err: any) {
+                          toast.error(`Erro ao excluir: ${err.message}`, { id: toastId });
+                        }
+                      }}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Sim, excluir tudo
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </CardContent>
           </Card>
         )}
