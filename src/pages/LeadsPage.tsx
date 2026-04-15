@@ -87,27 +87,16 @@ export default function LeadsPage() {
   const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
 
-  // Lazy rendering: track how many leads to show per status column
   const LEADS_PER_PAGE = 20;
-  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
-  const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || LEADS_PER_PAGE;
-  const loadMore = (statusKey: string) => {
-    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || LEADS_PER_PAGE) + LEADS_PER_PAGE }));
-  };
-
-  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-      loadMore(statusKey);
-    }
-  };
+  const [columnCounts, setColumnCounts] = useState<Record<string, number>>({});
+  const [columnOffsets, setColumnOffsets] = useState<Record<string, number>>({});
+  const [loadingColumns, setLoadingColumns] = useState<Record<string, boolean>>({});
+  const isLoadingColumnRef = useRef<Record<string, boolean>>({});
+  const hasScheduledColumn = useMemo(() => statuses.some((status) => status.key === "agendados"), [statuses]);
 
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
-      setLeads(JSON.parse(localStorage.getItem("crm_cache_leads") || "[]"));
       setProfiles(JSON.parse(localStorage.getItem("crm_cache_profiles") || "[]"));
       setStatuses(JSON.parse(localStorage.getItem("crm_cache_statuses_full") || "[]"));
       setCompanies(JSON.parse(localStorage.getItem("crm_cache_companies") || "[]"));
@@ -116,33 +105,81 @@ export default function LeadsPage() {
     } catch {}
   }, []);
 
-  const fetchAllLeads = async () => {
-    const PAGE_SIZE = 1000;
-    let allLeads: any[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from("crm_leads")
-        .select("*")
-        .order("updated_at", { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
-      if (error || !data) break;
-      allLeads = allLeads.concat(data);
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
+  const buildLeadQuery = useCallback((statusKey: string) => {
+    let query = supabase
+      .from("crm_leads")
+      .select("*", { count: "exact" })
+      .order("updated_at", { ascending: false });
+
+    if (statusKey === "agendados" && hasScheduledColumn) {
+      query = query.not("scheduled_date", "is", null);
+    } else {
+      query = query.eq("status", statusKey);
+      if (hasScheduledColumn) {
+        query = query.is("scheduled_date", null);
+      }
     }
-    return allLeads;
-  };
+
+    if ((isAdmin || isGerente) && filterVendedor !== "all") {
+      query = query.or(`assigned_to.eq.${filterVendedor},created_by.eq.${filterVendedor}`);
+    }
+
+    if (filterDateFrom) {
+      const from = new Date(filterDateFrom);
+      from.setHours(0, 0, 0, 0);
+      query = query.gte("created_at", from.toISOString());
+    }
+
+    if (filterDateTo) {
+      const to = new Date(filterDateTo);
+      to.setHours(23, 59, 59, 999);
+      query = query.lte("created_at", to.toISOString());
+    }
+
+    return query;
+  }, [filterDateFrom, filterDateTo, filterVendedor, hasScheduledColumn, isAdmin, isGerente]);
+
+  const fetchLeadsPage = useCallback(async (statusKey: string, offset = 0, append = false) => {
+    if (isLoadingColumnRef.current[statusKey]) return;
+
+    isLoadingColumnRef.current[statusKey] = true;
+    setLoadingColumns((prev) => ({ ...prev, [statusKey]: true }));
+
+    const { data, error, count } = await buildLeadQuery(statusKey).range(offset, offset + LEADS_PER_PAGE - 1);
+
+    isLoadingColumnRef.current[statusKey] = false;
+    setLoadingColumns((prev) => ({ ...prev, [statusKey]: false }));
+
+    if (error) {
+      toast.error(`Erro ao carregar leads da coluna ${statusKey}`);
+      return;
+    }
+
+    const incoming = ((data || []) as Lead[]).filter((lead) => !appointedLeadIds.has(lead.id));
+
+    setColumnCounts((prev) => ({ ...prev, [statusKey]: count || 0 }));
+    setColumnOffsets((prev) => ({ ...prev, [statusKey]: offset + (data?.length || 0) }));
+
+    setLeads((prev) => {
+      const remaining = prev.filter((lead) => {
+        if (statusKey === "agendados" && hasScheduledColumn) return !lead.scheduled_date;
+        if (hasScheduledColumn && lead.scheduled_date) return true;
+        return lead.status !== statusKey;
+      });
+
+      const base = append ? prev : remaining;
+      const seen = new Set(base.map((lead) => lead.id));
+      const mergedIncoming = incoming.filter((lead) => !seen.has(lead.id));
+      return [...base, ...mergedIncoming];
+    });
+  }, [appointedLeadIds, buildLeadQuery, hasScheduledColumn]);
 
   const fetchAll = async () => {
-    // Always load cache first for instant display
     loadFromCache();
-
     if (!navigator.onLine) return;
 
     try {
-      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
-        fetchAllLeads(),
+      const [{ data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
@@ -153,40 +190,32 @@ export default function LeadsPage() {
         supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
         supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
       ]);
+
       setColumns(cols || []);
-      const loadedLeads = (lds || []) as Lead[];
-      // Merge company_id from fullProfs into profiles
       const companyMap = new Map((fullProfs || []).map((p: any) => [p.user_id, p.company_id]));
       const enrichedProfiles = (profs || []).map((p: any) => ({ ...p, company_id: companyMap.get(p.user_id) || null }));
       setProfiles(enrichedProfiles);
       setStatuses((sts || []) as CrmStatus[]);
       setCompanies((comps || []) as Company[]);
-      const loadedFields = (ff || []) as unknown as FormFieldInfo[];
-      setFormFields(loadedFields);
-      const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
-      setCurrentUserName(me?.full_name || user?.email || "");
-
-      setLeads(loadedLeads);
+      setFormFields((ff || []) as unknown as FormFieldInfo[]);
       setFullProfiles((fullProfs || []) as Profile[]);
       setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
       setLeadActivities((actData || []) as LeadActivity[]);
 
-      // Cache for offline
+      const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
+      setCurrentUserName(me?.full_name || user?.email || "");
+
       try {
         localStorage.setItem("crm_cache_columns", JSON.stringify(cols || []));
-        // Don't cache leads in localStorage - too large for 9000+ leads
         localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
         localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
         localStorage.setItem("crm_cache_formfields", JSON.stringify(ff || []));
         localStorage.setItem("crm_cache_fields", JSON.stringify(ffFull || []));
         localStorage.setItem("crm_cache_statuses", JSON.stringify(sts || []));
-        const me2 = (profs || []).find((p: Profile) => p.user_id === user?.id);
-        localStorage.setItem("crm_cache_username", me2?.full_name || user?.email || "");
+        localStorage.setItem("crm_cache_username", me?.full_name || user?.email || "");
       } catch {}
-    } catch {
-      // Network failed, cache already loaded
-    }
+    } catch {}
   };
 
   const trySyncOffline = useCallback(async () => {
@@ -494,33 +523,29 @@ export default function LeadsPage() {
     return fullProfiles.filter(p => p.company_id === myProfile.company_id);
   }, [fullProfiles, isAdmin, isGerente, user?.id]);
 
-  // Apply filters to leads
-  const filteredLeads = useMemo(() => {
-    let result = leads.filter(l => !appointedLeadIds.has(l.id));
-    if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
-      result = result.filter(l => l.assigned_to === filterVendedor || l.created_by === filterVendedor);
-    }
-    if (filterDateFrom) {
-      const from = new Date(filterDateFrom);
-      from.setHours(0, 0, 0, 0);
-      result = result.filter(l => new Date(l.created_at) >= from);
-    }
-    if (filterDateTo) {
-      const to = new Date(filterDateTo);
-      to.setHours(23, 59, 59, 999);
-      result = result.filter(l => new Date(l.created_at) <= to);
-    }
-    return result;
-  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds]);
+  const filteredLeads = useMemo(() => leads.filter((l) => !appointedLeadIds.has(l.id)), [leads, appointedLeadIds]);
 
-  // Reset visible counts when filters change
   useEffect(() => {
-    setVisibleCounts({});
-  }, [filterVendedor, filterDateFrom, filterDateTo]);
+    if (!statuses.length) return;
+    setColumnOffsets({});
+    setColumnCounts({});
+    setLeads((prev) => prev.filter((lead) => offlineIds.has(lead.id)));
+    Promise.all(statuses.map((status) => fetchLeadsPage(status.key, 0, false)));
+  }, [statuses, filterVendedor, filterDateFrom, filterDateTo, appointedLeadIds, offlineIds, fetchLeadsPage]);
 
   const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
 
+  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const offset = columnOffsets[statusKey] || 0;
+    const total = columnCounts[statusKey] || 0;
+    if (el.scrollTop + el.clientHeight < el.scrollHeight - 100) return;
+    if (offset >= total || loadingColumns[statusKey]) return;
+    fetchLeadsPage(statusKey, offset, true);
+  };
+
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
+  const totalAvailableLeads = Object.values(columnCounts).reduce((sum, count) => sum + count, 0);
 
   const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo;
   const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); };
@@ -536,8 +561,8 @@ export default function LeadsPage() {
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold">Leads</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            {filteredLeads.length} lead{filteredLeads.length !== 1 ? "s" : ""}
-            {hasActiveFilters && ` (filtrado de ${leads.length})`}
+            {totalAvailableLeads} lead{totalAvailableLeads !== 1 ? "s" : ""}
+            {hasActiveFilters && ` (com filtros aplicados)`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -643,14 +668,14 @@ export default function LeadsPage() {
       <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }} onScroll={(e) => handleColumnScroll(mobileTab, e)}>
         {statuses.filter(s => s.key === mobileTab).map((status) => {
           const statusLeads = getLeadsByStatus(status.key);
-          const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
-          const hasMore = statusLeads.length > visibleLeads.length;
+          const total = columnCounts[status.key] || 0;
+          const hasMore = statusLeads.length < total;
           return (
             <div key={status.key}>
-              {statusLeads.length === 0 && (
+              {statusLeads.length === 0 && !loadingColumns[status.key] && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhum lead nesta coluna</p>
               )}
-              {visibleLeads.map((lead) => (
+              {statusLeads.map((lead) => (
                 <div key={lead.id} className="mb-2">
                   <LeadCard
                     lead={lead}
@@ -672,9 +697,12 @@ export default function LeadsPage() {
                   />
                 </div>
               ))}
-              {hasMore && (
+              {loadingColumns[status.key] && (
+                <p className="text-center text-xs text-muted-foreground py-2">Carregando...</p>
+              )}
+              {hasMore && !loadingColumns[status.key] && (
                 <p className="text-center text-xs text-muted-foreground py-2">
-                  Mostrando {visibleLeads.length} de {statusLeads.length} — role para carregar mais
+                  Mostrando {statusLeads.length} de {total} — role para carregar mais
                 </p>
               )}
               <button
@@ -693,8 +721,8 @@ export default function LeadsPage() {
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map((status) => {
             const statusLeads = getLeadsByStatus(status.key);
-            const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
-            const hasMore = statusLeads.length > visibleLeads.length;
+            const total = columnCounts[status.key] || 0;
+            const hasMore = statusLeads.length < total;
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
@@ -702,24 +730,21 @@ export default function LeadsPage() {
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
-                    {statusLeads.length}
+                    {total}
                   </span>
                 </div>
 
                 <Droppable droppableId={status.key}>
                   {(provided, snapshot) => (
                     <div
-                      ref={(el) => {
-                        provided.innerRef(el);
-                        columnRefs.current[status.key] = el;
-                      }}
+                      ref={provided.innerRef}
                       {...provided.droppableProps}
                       onScroll={(e) => handleColumnScroll(status.key, e)}
                       className={`flex-1 rounded-xl p-2 space-y-2 transition-colors overflow-y-auto min-h-0 ${
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
                       }`}
                     >
-                      {visibleLeads.map((lead, index) => (
+                      {statusLeads.map((lead, index) => (
                         <Draggable key={lead.id} draggableId={lead.id} index={index}>
                           {(provided, snapshot) => (
                             <div
@@ -752,9 +777,13 @@ export default function LeadsPage() {
                       ))}
                       {provided.placeholder}
 
-                      {hasMore && (
+                      {loadingColumns[status.key] && (
+                        <p className="text-center text-xs text-muted-foreground py-1">Carregando...</p>
+                      )}
+
+                      {hasMore && !loadingColumns[status.key] && (
                         <p className="text-center text-xs text-muted-foreground py-1">
-                          Mostrando {visibleLeads.length} de {statusLeads.length} — role para carregar mais
+                          Mostrando {statusLeads.length} de {total} — role para carregar mais
                         </p>
                       )}
 
