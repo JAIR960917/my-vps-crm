@@ -79,6 +79,12 @@ export default function LeadsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [fullProfiles, setFullProfiles] = useState<Profile[]>([]);
 
+  // Schedule dialog
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [schedulingLead, setSchedulingLead] = useState<Lead | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
+
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
