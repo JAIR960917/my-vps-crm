@@ -95,15 +95,17 @@ export default function UsersPage() {
     e.preventDefault();
     if (!canManage) return;
     setCreating(true);
-    const { data, error } = await supabase.functions.invoke("create-user", {
-      body: { email, password, full_name: name, role },
-    });
+    const body: Record<string, any> = { email, password: "joonker2026", full_name: name, role };
+    if (isAdmin && createCompanyId !== "__none__") {
+      body.company_id = createCompanyId;
+    }
+    const { data, error } = await supabase.functions.invoke("create-user", { body });
     if (error || data?.error) {
       toast.error(data?.error || "Erro ao criar usuário");
     } else {
-      toast.success("Usuário criado");
+      toast.success("Usuário criado com senha padrão: joonker2026");
       setOpenCreate(false);
-      setName(""); setEmail(""); setPassword(""); setRole("vendedor");
+      setName(""); setEmail(""); setRole("vendedor"); setCreateCompanyId("__none__");
       fetchData();
     }
     setCreating(false);
