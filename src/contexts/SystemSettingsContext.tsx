@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Settings = {
   system_name: string;
@@ -81,30 +82,42 @@ function applyCSS(s: Settings) {
 }
 
 export function SystemSettingsProvider({ children }: { children: ReactNode }) {
+  const { loading: authLoading, session } = useAuth();
   const [settings, setSettings] = useState<Settings>(defaults);
   const [loading, setLoading] = useState(true);
 
-  const fetchSettings = async () => {
-    const { data } = await supabase
+  const fetchSettings = useCallback(async () => {
+    setLoading(true);
+
+    const { data, error } = await supabase
       .from("system_settings")
       .select("setting_key, setting_value");
 
-    if (data) {
-      const merged = { ...defaults };
-      data.forEach((row: any) => {
-        if (row.setting_key in merged) {
-          (merged as any)[row.setting_key] = row.setting_value;
-        }
-      });
-      setSettings(merged);
-      applyCSS(merged);
+    if (error || !data) {
+      setSettings(defaults);
+      setLoading(false);
+      return;
     }
+
+    const merged = { ...defaults };
+    data.forEach((row: any) => {
+      if (row.setting_key in merged) {
+        (merged as any)[row.setting_key] = row.setting_value;
+      }
+    });
+
+    setSettings(merged);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
+    applyCSS(settings);
+  }, [settings]);
+
+  useEffect(() => {
+    if (authLoading) return;
     fetchSettings();
-  }, []);
+  }, [authLoading, session?.user?.id, fetchSettings]);
 
   // Re-apply CSS when theme changes
   useEffect(() => {
