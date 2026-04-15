@@ -55,6 +55,7 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterDate, setFilterDate] = useState<Date | undefined>(new Date());
 
   // Add/Edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -81,8 +82,16 @@ export default function AppointmentsPage() {
 
   const fetchAll = async () => {
     setLoading(true);
+    let query = supabase.from("crm_appointments").select("*").eq("status", "agendado").order("scheduled_datetime");
+    if (filterDate) {
+      const dayStart = new Date(filterDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(filterDate);
+      dayEnd.setHours(23, 59, 59, 999);
+      query = query.gte("scheduled_datetime", dayStart.toISOString()).lte("scheduled_datetime", dayEnd.toISOString());
+    }
     const [{ data: appts }, { data: profs }] = await Promise.all([
-      supabase.from("crm_appointments").select("*").eq("status", "agendado").order("scheduled_datetime"),
+      query,
       supabase.rpc("get_profile_names"),
     ]);
     setAppointments((appts || []) as unknown as Appointment[]);
@@ -90,7 +99,7 @@ export default function AppointmentsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [filterDate]);
 
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
@@ -219,7 +228,7 @@ export default function AppointmentsPage() {
 
   return (
     <AppLayout>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <CalendarCheck className="h-6 w-6 text-primary" />
@@ -227,9 +236,27 @@ export default function AppointmentsPage() {
           </div>
           <p className="text-sm text-muted-foreground">{appointments.length} agendamento(s)</p>
         </div>
-        <Button size="sm" onClick={openAdd}>
-          <Plus className="mr-1 h-4 w-4" /> Novo Agendamento
-        </Button>
+        <div className="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("justify-start text-left font-normal", !filterDate && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4 text-destructive" />
+                {filterDate ? format(filterDate, "dd/MM/yyyy", { locale: ptBR }) : "Todos os dias"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar mode="single" selected={filterDate} onSelect={setFilterDate} locale={ptBR} className="p-3 pointer-events-auto" />
+            </PopoverContent>
+          </Popover>
+          {filterDate && (
+            <Button variant="ghost" size="sm" onClick={() => setFilterDate(undefined)}>
+              Limpar
+            </Button>
+          )}
+          <Button size="sm" onClick={openAdd}>
+            <Plus className="mr-1 h-4 w-4" /> Novo Agendamento
+          </Button>
+        </div>
       </div>
 
       {loading ? (
