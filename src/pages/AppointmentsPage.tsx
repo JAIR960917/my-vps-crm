@@ -149,7 +149,7 @@ export default function AppointmentsPage() {
       status: "vendido",
     } as any).eq("id", saleApptId);
     if (appt?.lead_id) {
-      await supabase.from("crm_leads").update({ comprou: true } as any).eq("id", appt.lead_id);
+      await supabase.from("crm_leads").update({ comprou: true, status: "vendido" } as any).eq("id", appt.lead_id);
     }
     toast.success("Venda registrada! Cliente movido para ativos.");
     setSaleSaving(false);
