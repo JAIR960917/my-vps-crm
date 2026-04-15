@@ -175,7 +175,8 @@ export default function ActiveClientsPage() {
                     <td className="px-3 py-2">{dtFormatted}</td>
                     <td className="px-3 py-2">{getProfileName(appt.scheduled_by)}</td>
                     <td className="px-3 py-2">R$ {Number(appt.valor).toFixed(2)}</td>
-                    <td className="px-3 py-2">{appt.forma_pagamento}</td>
+                    <td className="px-3 py-2 font-semibold text-green-500">R$ {Number((appt as any).valor_venda || 0).toFixed(2)}</td>
+                    <td className="px-3 py-2">{(appt as any).forma_pagamento_venda || "—"}</td>
                     <td className="px-3 py-2">{appt.canal_agendamento}</td>
                     <td className="px-3 py-2">{appt.resumo || "—"}</td>
                     <td className="px-3 py-2">
