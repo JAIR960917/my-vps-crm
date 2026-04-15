@@ -80,6 +80,7 @@ export default function LeadsPage() {
   const [filterDateTo, setFilterDateTo] = useState<Date | undefined>();
   const [showFilters, setShowFilters] = useState(false);
   const [fullProfiles, setFullProfiles] = useState<Profile[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Schedule dialog
   const [scheduleOpen, setScheduleOpen] = useState(false);
