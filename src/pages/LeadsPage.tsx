@@ -138,13 +138,14 @@ export default function LeadsPage() {
   };
 
   const fetchAll = async () => {
-    // Always load cache first for instant display
-    loadFromCache();
-
-    if (!navigator.onLine) return;
+    if (!navigator.onLine) {
+      loadFromCache();
+      return;
+    }
 
     try {
-      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }, { data: noteData }] = await Promise.all([
+      // Fetch critical data first (leads + structure)
+      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
         fetchAllLeads(),
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
@@ -153,13 +154,10 @@ export default function LeadsPage() {
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
         supabase.from("crm_form_fields").select("*").order("position"),
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
-        supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
-        supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
-        supabase.from("crm_lead_notes").select("lead_id"),
       ]);
+
       setColumns(cols || []);
       const loadedLeads = (lds || []) as Lead[];
-      // Merge company_id from fullProfs into profiles
       const companyMap = new Map((fullProfs || []).map((p: any) => [p.user_id, p.company_id]));
       const enrichedProfiles = (profs || []).map((p: any) => ({ ...p, company_id: companyMap.get(p.user_id) || null }));
       setProfiles(enrichedProfiles);
@@ -169,17 +167,12 @@ export default function LeadsPage() {
       setFormFields(loadedFields);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
-
       setLeads(loadedLeads);
       setFullProfiles((fullProfs || []) as Profile[]);
-      setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
-      setLeadActivities((actData || []) as LeadActivity[]);
-      setLeadNoteIds(new Set((noteData || []).map((n: any) => n.lead_id)));
 
       // Cache for offline
       try {
         localStorage.setItem("crm_cache_columns", JSON.stringify(cols || []));
-        // Don't cache leads in localStorage - too large for 9000+ leads
         localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
         localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
@@ -189,8 +182,23 @@ export default function LeadsPage() {
         const me2 = (profs || []).find((p: Profile) => p.user_id === user?.id);
         localStorage.setItem("crm_cache_username", me2?.full_name || user?.email || "");
       } catch {}
+
+      // Fetch secondary data separately (won't break leads display if it fails)
+      try {
+        const [{ data: activeAppts }, { data: actData }, { data: noteData }] = await Promise.all([
+          supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
+          supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
+          supabase.from("crm_lead_notes").select("lead_id"),
+        ]);
+        setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
+        setLeadActivities((actData || []) as LeadActivity[]);
+        setLeadNoteIds(new Set((noteData || []).map((n: any) => n.lead_id)));
+      } catch {
+        // Secondary data failed, leads still visible
+      }
     } catch {
-      // Network failed, cache already loaded
+      // Network failed, load from cache as fallback
+      loadFromCache();
     }
   };
 
