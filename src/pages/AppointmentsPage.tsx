@@ -437,6 +437,10 @@ export default function AppointmentsPage() {
               <Input type="number" step="0.01" min="0" value={saleValor} onChange={(e) => setSaleValor(e.target.value)} placeholder="0.00" />
             </div>
             <div className="space-y-1.5">
+              <Label>Valor da Entrada (R$)</Label>
+              <Input type="number" step="0.01" min="0" value={saleEntrada} onChange={(e) => setSaleEntrada(e.target.value)} placeholder="0.00" />
+            </div>
+            <div className="space-y-1.5">
               <Label>Forma de Pagamento <span className="text-destructive">*</span></Label>
               <Select value={salePagamento} onValueChange={setSalePagamento}>
                 <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
