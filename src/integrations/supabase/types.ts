@@ -51,6 +51,7 @@ export type Database = {
           confirmacao: string
           created_at: string
           forma_pagamento: string
+          forma_pagamento_venda: string
           id: string
           idade: string
           lead_id: string | null
@@ -63,6 +64,7 @@ export type Database = {
           telefone: string
           updated_at: string
           valor: number
+          valor_venda: number
           venda: string
         }
         Insert: {
@@ -71,6 +73,7 @@ export type Database = {
           confirmacao?: string
           created_at?: string
           forma_pagamento?: string
+          forma_pagamento_venda?: string
           id?: string
           idade?: string
           lead_id?: string | null
@@ -83,6 +86,7 @@ export type Database = {
           telefone?: string
           updated_at?: string
           valor?: number
+          valor_venda?: number
           venda?: string
         }
         Update: {
@@ -91,6 +95,7 @@ export type Database = {
           confirmacao?: string
           created_at?: string
           forma_pagamento?: string
+          forma_pagamento_venda?: string
           id?: string
           idade?: string
           lead_id?: string | null
@@ -103,6 +108,7 @@ export type Database = {
           telefone?: string
           updated_at?: string
           valor?: number
+          valor_venda?: number
           venda?: string
         }
         Relationships: [

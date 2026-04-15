@@ -72,6 +72,13 @@ export default function AppointmentsPage() {
   // Delete
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Sale dialog (when "Vendido" is selected)
+  const [saleDialogOpen, setSaleDialogOpen] = useState(false);
+  const [saleApptId, setSaleApptId] = useState<string | null>(null);
+  const [saleValor, setSaleValor] = useState("");
+  const [salePagamento, setSalePagamento] = useState("");
+  const [saleSaving, setSaleSaving] = useState(false);
+
   const fetchAll = async () => {
     setLoading(true);
     const [{ data: appts }, { data: profs }] = await Promise.all([
@@ -106,9 +113,37 @@ export default function AppointmentsPage() {
       return;
     }
 
+    if (field === "venda" && value === "Vendido") {
+      setSaleApptId(id);
+      setSaleValor("");
+      setSalePagamento("");
+      setSaleDialogOpen(true);
+      return;
+    }
+
     const { error } = await supabase.from("crm_appointments").update({ [field]: value } as any).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+  };
+
+  const handleSaleSubmit = async () => {
+    if (!saleApptId || !salePagamento || !saleValor) return;
+    setSaleSaving(true);
+    const appt = appointments.find(a => a.id === saleApptId);
+    await supabase.from("crm_appointments").update({
+      venda: "Vendido",
+      valor_venda: parseFloat(saleValor) || 0,
+      forma_pagamento_venda: salePagamento,
+      status: "vendido",
+    } as any).eq("id", saleApptId);
+    if (appt?.lead_id) {
+      await supabase.from("crm_leads").update({ comprou: true } as any).eq("id", appt.lead_id);
+    }
+    toast.success("Venda registrada! Cliente movido para ativos.");
+    setSaleSaving(false);
+    setSaleDialogOpen(false);
+    setSaleApptId(null);
+    fetchAll();
   };
 
   const openAdd = () => {
@@ -359,6 +394,33 @@ export default function AppointmentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Sale Dialog */}
+      <Dialog open={saleDialogOpen} onOpenChange={(open) => { if (!open) { setSaleDialogOpen(false); setSaleApptId(null); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Registrar Venda</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Valor Total da Venda (R$) <span className="text-destructive">*</span></Label>
+              <Input type="number" step="0.01" min="0" value={saleValor} onChange={(e) => setSaleValor(e.target.value)} placeholder="0.00" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Forma de Pagamento <span className="text-destructive">*</span></Label>
+              <Select value={salePagamento} onValueChange={setSalePagamento}>
+                <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                <SelectContent>
+                  {FORMAS_PAGAMENTO.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button className="w-full" disabled={saleSaving || !saleValor || !salePagamento} onClick={handleSaleSubmit}>
+              {saleSaving ? "Salvando..." : "Confirmar Venda"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
