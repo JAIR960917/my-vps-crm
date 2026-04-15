@@ -253,7 +253,7 @@ export type Database = {
           assigned_to: string | null
           comprou: boolean
           created_at: string
-          created_by: string
+          created_by: string | null
           data: Json
           id: string
           scheduled_date: string | null
@@ -264,7 +264,7 @@ export type Database = {
           assigned_to?: string | null
           comprou?: boolean
           created_at?: string
-          created_by: string
+          created_by?: string | null
           data?: Json
           id?: string
           scheduled_date?: string | null
@@ -275,7 +275,7 @@ export type Database = {
           assigned_to?: string | null
           comprou?: boolean
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           data?: Json
           id?: string
           scheduled_date?: string | null
