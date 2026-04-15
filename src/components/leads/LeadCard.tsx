@@ -91,24 +91,6 @@ export default function LeadCard({
 
   return (
     <div className={`rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group ${cardBorderClass}`}>
-      {/* Scheduled badge */}
-      {isScheduled && scheduledDateFormatted && (
-        <div className="flex items-center gap-1 mb-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-primary text-primary-foreground">
-            <CalendarPlus className="h-3 w-3" />
-            Agendado: {scheduledDateFormatted}
-          </span>
-          {onSchedule && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onSchedule(null); }}
-              className="text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
