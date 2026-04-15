@@ -18,6 +18,8 @@ import ProfilePage from "./pages/ProfilePage";
 import InstallPage from "./pages/InstallPage";
 import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import WhatsAppPage from "./pages/WhatsAppPage";
+import AppointmentsPage from "./pages/AppointmentsPage";
+import ActiveClientsPage from "./pages/ActiveClientsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,6 +57,8 @@ const AppRoutes = () => {
       <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/notificacoes" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
       <Route path="/whatsapp" element={<ProtectedRoute><WhatsAppPage /></ProtectedRoute>} />
+      <Route path="/agendamentos" element={<ProtectedRoute><AppointmentsPage /></ProtectedRoute>} />
+      <Route path="/clientes-ativos" element={<ProtectedRoute><ActiveClientsPage /></ProtectedRoute>} />
       <Route path="/instalar" element={<InstallPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
