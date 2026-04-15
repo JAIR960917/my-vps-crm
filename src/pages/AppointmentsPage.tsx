@@ -126,6 +126,7 @@ export default function AppointmentsPage() {
     if (field === "venda" && value === "Vendido") {
       setSaleApptId(id);
       setSaleValor("");
+      setSaleEntrada("");
       setSalePagamento("");
       setSaleDialogOpen(true);
       return;
