@@ -546,8 +546,10 @@ export default function LeadsPage() {
     const ids = new Set<string>();
     // Leads with completed activities
     leadActivities.filter(a => a.completed_at).forEach(a => ids.add(a.lead_id));
+    // Leads with notes
+    leadNoteIds.forEach(id => ids.add(id));
     return ids;
-  }, [leadActivities]);
+  }, [leadActivities, leadNoteIds]);
 
   const getLeadsByStatus = (status: string) => {
     const statusLeads = filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
