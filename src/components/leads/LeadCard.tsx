@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus } from "lucide-react";
+import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -12,6 +12,13 @@ type FormFieldInfo = {
   is_name_field?: boolean;
   is_phone_field?: boolean;
   show_on_card?: boolean;
+};
+
+type LeadActivity = {
+  id: string;
+  title: string;
+  scheduled_date: string;
+  completed_at: string | null;
 };
 
 type LeadCardProps = {
@@ -34,11 +41,12 @@ type LeadCardProps = {
   onSchedule?: () => void;
   onToggleComprou?: (value: boolean) => void;
   syncStatus?: "offline" | "synced" | null;
+  activities?: LeadActivity[];
 };
 
 export default function LeadCard({
   lead, columns, formFields, profiles, isAdmin,
-  onEdit, onDelete, onHistory, onSchedule, onToggleComprou, syncStatus,
+  onEdit, onDelete, onHistory, onSchedule, onToggleComprou, syncStatus, activities,
 }: LeadCardProps) {
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
@@ -57,7 +65,6 @@ export default function LeadCard({
 
   const isOffline = syncStatus === "offline";
   const isSynced = syncStatus === "synced";
-  const isScheduled = !!lead.scheduled_date;
 
   let createdDate = "";
   try {
@@ -66,23 +73,37 @@ export default function LeadCard({
     createdDate = "";
   }
 
-  let scheduledDateFormatted = "";
-  if (lead.scheduled_date) {
-    try {
-      scheduledDateFormatted = format(new Date(lead.scheduled_date), "dd/MM/yyyy", { locale: ptBR });
-    } catch {
-      scheduledDateFormatted = "";
-    }
-  }
-
   const nameFieldIds = new Set(nameFields.map((f) => f.id));
   const phoneFieldIds = new Set(phoneFields.map((f) => f.id));
 
-  const cardBorderClass = isOffline
-      ? "border-amber-500/50 bg-amber-500/5"
-      : isSynced
-        ? "border-emerald-500/50 bg-emerald-500/5"
-        : "";
+  // Activity status for the card
+  const pendingActivities = (activities || []).filter(a => !a.completed_at);
+  const overdueActivities = pendingActivities.filter(a => new Date(a.scheduled_date) < new Date());
+  const todayActivities = pendingActivities.filter(a => {
+    const d = new Date(a.scheduled_date);
+    const now = new Date();
+    return d.toDateString() === now.toDateString() && d >= now;
+  });
+
+  const hasOverdue = overdueActivities.length > 0;
+  const hasToday = todayActivities.length > 0;
+  const hasPending = pendingActivities.length > 0 && !hasOverdue && !hasToday;
+
+  let cardBorderClass = "";
+  if (isOffline) {
+    cardBorderClass = "border-amber-500/50 bg-amber-500/5";
+  } else if (isSynced) {
+    cardBorderClass = "border-emerald-500/50 bg-emerald-500/5";
+  } else if (hasOverdue) {
+    cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20";
+  } else if (hasToday) {
+    cardBorderClass = "border-amber-400 bg-amber-500/5";
+  } else if (hasPending) {
+    cardBorderClass = "border-blue-400/50 bg-blue-500/5";
+  }
+
+  // Next activity to show
+  const nextActivity = pendingActivities.sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())[0];
 
   return (
     <div className={`rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group ${cardBorderClass}`}>
@@ -107,7 +128,6 @@ export default function LeadCard({
         </div>
         {!isOffline && (
           <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
-            {/* Schedule button */}
             {onSchedule && (
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onSchedule(); }}>
                 <CalendarPlus className="h-3.5 w-3.5 text-primary" />
@@ -157,6 +177,32 @@ export default function LeadCard({
             </div>
           );
         })}
+
+      {/* Next activity indicator */}
+      {nextActivity && (
+        <div className={`mt-2 pt-2 border-t flex items-center gap-1.5 ${
+          hasOverdue ? "text-red-500" : hasToday ? "text-amber-600" : "text-blue-500"
+        }`}>
+          {hasOverdue ? (
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+          )}
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium truncate">{nextActivity.title}</p>
+            <p className="text-[10px] opacity-80">
+              {(() => {
+                try {
+                  return format(new Date(nextActivity.scheduled_date), "dd/MM 'às' HH:mm", { locale: ptBR });
+                } catch {
+                  return "";
+                }
+              })()}
+              {hasOverdue && " · Atrasada"}
+            </p>
+          </div>
+        </div>
+      )}
 
       {assignedProfile && (
         <div className="mt-2 pt-2 border-t">
