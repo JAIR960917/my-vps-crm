@@ -191,7 +191,7 @@ export default function ImportLeadsPage() {
     Object.entries(columnMap).forEach(([csvCol, target]) => {
       if (target === "__status__" || target === "__assigned__" || target === "__created_at__") {
         specialCols[csvCol] = target;
-      } else if (target !== IGNORE_VALUE) {
+      } else if (target !== IGNORE_VALUE && !target.startsWith("user__") && !target.startsWith("status__")) {
         colToFieldId[csvCol] = target;
       }
     });
@@ -203,7 +203,7 @@ export default function ImportLeadsPage() {
 
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const batch = csvRows.slice(i, i + BATCH_SIZE);
-      const inserts = batch.map((row, batchIdx) => {
+      const inserts = batch.map((row) => {
         const data: Record<string, string> = {};
 
         // Map CSV columns to form field IDs or CRM column keys
@@ -218,10 +218,9 @@ export default function ImportLeadsPage() {
         const assignedTo = userMap[csvUser] || null;
 
         // Parse created_at
-        let createdAt: string | undefined;
+        let createdAt: string = new Date().toISOString();
         const rawDate = row[createdAtCol];
         if (rawDate) {
-          // Format: "14/04/2026 14:18:11" -> ISO
           const match = rawDate.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
           if (match) {
             createdAt = `${match[3]}-${match[2]}-${match[1]}T${match[4]}`;
@@ -233,7 +232,7 @@ export default function ImportLeadsPage() {
           status,
           assigned_to: assignedTo,
           created_by: user?.id || null,
-          ...(createdAt ? { created_at: createdAt } : {}),
+          created_at: createdAt,
         };
       });
 
