@@ -212,6 +212,16 @@ export default function LeadCard({
           </div>
         )}
 
+        {/* Pending badge */}
+        {hasPending && (
+          <div className="mb-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <Clock className="h-3 w-3" />
+              Pendente
+            </span>
+          </div>
+        )}
+
         {/* All clear badge */}
         {!hasOverdue && !hasToday && !hasPending && (
           <div className="mb-1.5">
