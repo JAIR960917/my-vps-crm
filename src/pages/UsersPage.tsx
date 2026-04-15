@@ -253,10 +253,6 @@ export default function UsersPage() {
                 <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label>Senha</Label>
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
-              </div>
-              <div className="space-y-2">
                 <Label>Papel</Label>
                 <Select value={role} onValueChange={setRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -267,6 +263,21 @@ export default function UsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {isAdmin && (
+                <div className="space-y-2">
+                  <Label>Empresa</Label>
+                  <Select value={createCompanyId} onValueChange={setCreateCompanyId}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Nenhuma</SelectItem>
+                      {companies.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">Senha padrão: <strong>joonker2026</strong></p>
               <Button type="submit" className="w-full" disabled={creating}>
                 {creating ? "Criando..." : "Criar Usuário"}
               </Button>
