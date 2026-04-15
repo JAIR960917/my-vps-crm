@@ -94,6 +94,16 @@ export default function LeadFormDialog({
   const [showPreview, setShowPreview] = useState(false);
   const [profileRoles, setProfileRoles] = useState<Record<string, string>>({});
 
+  // Derive the company name for the assigned user (or current user)
+  const assignedCompanyName = useMemo(() => {
+    const targetUserId = formAssigned || user?.id;
+    if (!targetUserId) return "—";
+    const profile = profiles.find((p) => p.user_id === targetUserId);
+    if (!profile) return "—";
+    const company = companies.find((c) => c.id === (profile as any).company_id);
+    return company?.name || "—";
+  }, [formAssigned, user?.id, profiles, companies]);
+
   // Timeline state
   const [activities, setActivities] = useState<Activity[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
