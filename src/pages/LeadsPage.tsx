@@ -35,6 +35,7 @@ type CrmStatus = {
 };
 type Company = { id: string; name: string };
 type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean; show_on_card?: boolean; status_mapping?: Record<string, string> | null; date_status_ranges?: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null };
+type LeadActivity = { id: string; lead_id: string; title: string; scheduled_date: string; completed_at: string | null };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -84,6 +85,7 @@ export default function LeadsPage() {
   const [schedulingLead, setSchedulingLead] = useState<Lead | null>(null);
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
+  const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
 
   const loadFromCache = useCallback(() => {
     try {
@@ -104,7 +106,7 @@ export default function LeadsPage() {
     if (!navigator.onLine) return;
 
     try {
-      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }] = await Promise.all([
+      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
         supabase.rpc("get_profile_names"),
@@ -114,6 +116,7 @@ export default function LeadsPage() {
         supabase.from("crm_form_fields").select("*").order("position"),
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
         supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
+        supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
       ]);
       setColumns(cols || []);
       const loadedLeads = (lds || []) as Lead[];
@@ -128,6 +131,7 @@ export default function LeadsPage() {
       setLeads(loadedLeads);
       setFullProfiles((fullProfs || []) as Profile[]);
       setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
+      setLeadActivities((actData || []) as LeadActivity[]);
 
       // Cache for offline
       try {
@@ -443,6 +447,8 @@ export default function LeadsPage() {
 
   const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
 
+  const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
+
   const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo;
   const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); };
 
@@ -578,6 +584,7 @@ export default function LeadsPage() {
                     profiles={profiles}
                     isAdmin={isAdmin}
                     syncStatus={getSyncStatus(lead.id)}
+                    activities={getActivitiesForLead(lead.id)}
                     onEdit={() => openEdit(lead)}
                     onDelete={() => handleDelete(lead.id)}
                     onHistory={() => {
@@ -642,6 +649,7 @@ export default function LeadsPage() {
                                 profiles={profiles}
                                 isAdmin={isAdmin}
                                 syncStatus={getSyncStatus(lead.id)}
+                                activities={getActivitiesForLead(lead.id)}
                                 onEdit={() => openEdit(lead)}
                                 onDelete={() => handleDelete(lead.id)}
                                 onHistory={() => {
@@ -691,6 +699,8 @@ export default function LeadsPage() {
         onSubmit={handleSave}
         statusOptions={statusOptions}
         statusLabels={statusLabels}
+        leadId={editingLead?.id}
+        onActivityChange={fetchAll}
       />
 
       <ScheduleLeadDialog
