@@ -536,7 +536,7 @@ export default function LeadFormDialog({
             <form onSubmit={(e) => { e.preventDefault(); if (fields.length > 0) handlePreview(); else onSubmit(e); }} className="space-y-4">
               <div className="space-y-2">
                 <Label>Empresa</Label>
-                <Input value={companies.length > 0 ? companies.map(c => c.name).join(", ") : "Nenhuma empresa"} readOnly className="bg-muted" />
+                <Input value={assignedCompanyName} readOnly className="bg-muted" />
               </div>
               <div className="space-y-2">
                 <Label>Vendedor Responsável</Label>
