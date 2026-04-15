@@ -125,6 +125,19 @@ const parseStoredDate = (value: unknown): Date | undefined => {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 };
 
+const normalizePhoneDigits = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+
+  const digits = String(value).replace(/\D/g, "");
+  if (!digits) return "";
+
+  if (digits.length > 11 && digits.startsWith("55")) {
+    return digits.slice(2, 13);
+  }
+
+  return digits.slice(0, 11);
+};
+
 const normalizeCheckboxValue = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
@@ -150,6 +163,10 @@ const normalizeCheckboxValue = (value: unknown): string[] => {
 
 const normalizeFieldValue = (field: FormField, value: unknown) => {
   if (!isFilledValue(value)) return field.field_type === "checkbox_group" ? [] : "";
+
+  if (field.is_phone_field || field.field_type === "phone") {
+    return normalizePhoneDigits(value);
+  }
 
   if (field.field_type === "checkbox_group") {
     return normalizeCheckboxValue(value);
