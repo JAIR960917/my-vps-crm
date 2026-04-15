@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -97,7 +97,7 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  <CalendarIcon className="mr-2 h-4 w-4 text-destructive" />
                   {date ? format(date, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
                 </Button>
               </PopoverTrigger>
@@ -109,7 +109,10 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
 
           <div className="space-y-2">
             <Label>Horário <span className="text-destructive">*</span></Label>
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
+            <div className="relative">
+              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive pointer-events-none" />
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required className="pl-10" />
+            </div>
           </div>
 
           <div className="space-y-2">
