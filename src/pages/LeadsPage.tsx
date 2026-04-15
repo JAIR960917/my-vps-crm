@@ -99,6 +99,24 @@ export default function LeadsPage() {
     } catch {}
   }, []);
 
+  const fetchAllLeads = async () => {
+    const PAGE_SIZE = 1000;
+    let allLeads: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("crm_leads")
+        .select("*")
+        .order("updated_at", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error || !data) break;
+      allLeads = allLeads.concat(data);
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+    return allLeads;
+  };
+
   const fetchAll = async () => {
     // Always load cache first for instant display
     loadFromCache();
@@ -106,9 +124,9 @@ export default function LeadsPage() {
     if (!navigator.onLine) return;
 
     try {
-      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
+      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
+        fetchAllLeads(),
         supabase.from("crm_columns").select("*").order("position"),
-        supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
         supabase.from("companies").select("id, name").order("name"),
@@ -314,8 +332,8 @@ export default function LeadsPage() {
 
       let existingLead: Lead | null = null;
       if (leadName && leadPhone) {
-        // Search for existing lead with same name+phone
-        const { data: allLeads } = await supabase.from("crm_leads").select("*");
+        // Search for existing lead with same name+phone using already loaded leads
+        const allLeads = leads;
         if (allLeads) {
           existingLead = (allLeads as Lead[]).find(l => {
             const d = typeof l.data === "object" ? (l.data as Record<string, any>) : {};
