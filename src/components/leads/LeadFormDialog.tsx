@@ -312,7 +312,12 @@ export default function LeadFormDialog({
 
   // Activity handlers
   const handleCreateActivity = async () => {
-    if (!actTitle.trim() || !actDate || !leadId || !user) return;
+    if (!actTitle.trim() || !actDate || !leadId || !user) {
+      console.log("Missing data:", { actTitle, actDate, leadId, userId: user?.id });
+      if (!actTitle.trim()) toast.error("Preencha o título");
+      if (!actDate) toast.error("Preencha a data");
+      return;
+    }
     setActSaving(true);
     const { error } = await supabase.from("lead_activities").insert({
       lead_id: leadId,
