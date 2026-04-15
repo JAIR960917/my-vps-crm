@@ -156,8 +156,9 @@ export default function ActiveClientsPage() {
                 <th className="text-left px-3 py-2.5 font-medium">Telefone</th>
                 <th className="text-left px-3 py-2.5 font-medium">Data da Consulta</th>
                 <th className="text-left px-3 py-2.5 font-medium">Vendedor</th>
-                <th className="text-left px-3 py-2.5 font-medium">Valor</th>
-                <th className="text-left px-3 py-2.5 font-medium">Forma de Pagamento</th>
+                <th className="text-left px-3 py-2.5 font-medium">Valor Consulta</th>
+                <th className="text-left px-3 py-2.5 font-medium">Valor Venda</th>
+                <th className="text-left px-3 py-2.5 font-medium">Pgto Venda</th>
                 <th className="text-left px-3 py-2.5 font-medium">Canal</th>
                 <th className="text-left px-3 py-2.5 font-medium">Resumo</th>
                 <th className="text-left px-3 py-2.5 font-medium">Ações</th>
