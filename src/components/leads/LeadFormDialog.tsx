@@ -357,6 +357,36 @@ export default function LeadFormDialog({
     else { fetchActivities(); onActivityChange?.(); }
   };
 
+  const startEditActivity = (act: Activity) => {
+    setEditingActivityId(act.id);
+    setEditActTitle(act.title);
+    setEditActDescription(act.description || "");
+    try {
+      const d = new Date(act.scheduled_date);
+      setEditActDate(format(d, "yyyy-MM-dd'T'HH:mm"));
+    } catch {
+      setEditActDate("");
+    }
+  };
+
+  const handleUpdateActivity = async () => {
+    if (!editingActivityId || !editActTitle.trim() || !editActDate) return;
+    setEditActSaving(true);
+    const { error } = await supabase.from("lead_activities").update({
+      title: editActTitle.trim(),
+      description: editActDescription.trim() || null,
+      scheduled_date: new Date(editActDate).toISOString(),
+    }).eq("id", editingActivityId);
+    if (error) toast.error("Erro ao atualizar: " + error.message);
+    else {
+      toast.success("Atividade atualizada!");
+      setEditingActivityId(null);
+      fetchActivities();
+      onActivityChange?.();
+    }
+    setEditActSaving(false);
+  };
+
   // Note handlers
   const handleSendNote = async () => {
     if (!newNote.trim() || !leadId || !user) {
