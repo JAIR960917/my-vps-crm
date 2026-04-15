@@ -334,11 +334,15 @@ export default function LeadsPage() {
     if (!schedulingLead || !user) return;
     setScheduleSaving(true);
     const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
-    const nf = formFields.find(f => f.is_name_field);
-    const pf = formFields.find(f => f.is_phone_field);
+    const nameFields = formFields.filter(f => f.is_name_field);
+    const phoneFields = formFields.filter(f => f.is_phone_field);
     const idadeField = formFields.find(f => f.label?.toLowerCase().includes("idade"));
-    const nome = (nf ? d[`field_${nf.id}`] : d.nome_lead) || "";
-    const telefone = (pf ? d[`field_${pf.id}`] : d.telefone) || "";
+    let nome = "";
+    for (const nf of nameFields) { const v = d[`field_${nf.id}`]; if (v) { nome = v; break; } }
+    if (!nome) nome = d.nome_lead || "";
+    let telefone = "";
+    for (const pf of phoneFields) { const v = d[`field_${pf.id}`]; if (v) { telefone = v; break; } }
+    if (!telefone) telefone = d.telefone || "";
     const idade = idadeField ? (d[`field_${idadeField.id}`] || "") : "";
     const { error } = await supabase.from("crm_appointments").insert({
       lead_id: schedulingLead.id,
@@ -675,14 +679,16 @@ export default function LeadsPage() {
         leadName={(() => {
           if (!schedulingLead) return "";
           const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
-          const nf = formFields.find(f => f.is_name_field);
-          return (nf ? d[`field_${nf.id}`] : d.nome_lead) || "Lead";
+          const nameFields = formFields.filter(f => f.is_name_field);
+          for (const nf of nameFields) { const v = d[`field_${nf.id}`]; if (v) return v; }
+          return d.nome_lead || "Lead";
         })()}
         leadPhone={(() => {
           if (!schedulingLead) return "";
           const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
-          const pf = formFields.find(f => f.is_phone_field);
-          return (pf ? d[`field_${pf.id}`] : d.telefone) || "";
+          const phoneFields = formFields.filter(f => f.is_phone_field);
+          for (const pf of phoneFields) { const v = d[`field_${pf.id}`]; if (v) return v; }
+          return d.telefone || "";
         })()}
         saving={scheduleSaving}
         onSubmit={handleScheduleSubmit}
