@@ -191,9 +191,10 @@ export default function ImportLeadsPage() {
       const inserts = batch.map((row, batchIdx) => {
         const data: Record<string, string> = {};
 
-        // Map CSV columns to form field IDs
+        // Map CSV columns to form field IDs or CRM column keys
         Object.entries(colToFieldId).forEach(([csvCol, fieldId]) => {
-          if (row[csvCol]) data[fieldId] = row[csvCol];
+          const key = fieldId.startsWith("col__") ? fieldId.replace("col__", "") : fieldId;
+          if (row[csvCol]) data[key] = row[csvCol];
         });
 
         const csvStatus = row[statusCol] || "";
