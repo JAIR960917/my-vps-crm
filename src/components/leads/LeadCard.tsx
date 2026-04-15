@@ -1,12 +1,8 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus, ShoppingBag, X } from "lucide-react";
+import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 
