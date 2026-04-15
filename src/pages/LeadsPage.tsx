@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import LeadCard from "@/components/leads/LeadCard";
 import LeadFormDialog from "@/components/leads/LeadFormDialog";
+import ScheduleLeadDialog from "@/components/leads/ScheduleLeadDialog";
 import LeadHistoryDialog from "@/components/leads/LeadHistoryDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -78,6 +79,12 @@ export default function LeadsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [fullProfiles, setFullProfiles] = useState<Profile[]>([]);
 
+  // Schedule dialog
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [schedulingLead, setSchedulingLead] = useState<Lead | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
+
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
@@ -97,7 +104,7 @@ export default function LeadsPage() {
     if (!navigator.onLine) return;
 
     try {
-      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
+      const [{ data: cols }, { data: lds }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.from("crm_leads").select("*").order("updated_at", { ascending: true }),
         supabase.rpc("get_profile_names"),
@@ -106,6 +113,7 @@ export default function LeadsPage() {
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
         supabase.from("crm_form_fields").select("*").order("position"),
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
+        supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
       ]);
       setColumns(cols || []);
       const loadedLeads = (lds || []) as Lead[];
@@ -119,6 +127,7 @@ export default function LeadsPage() {
 
       setLeads(loadedLeads);
       setFullProfiles((fullProfs || []) as Profile[]);
+      setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
 
       // Cache for offline
       try {
@@ -316,29 +325,29 @@ export default function LeadsPage() {
     return lead.status;
   }, [statuses]);
 
-  const handleSchedule = async (leadId: string, date: Date | null) => {
-    if (date) {
-      // Set scheduled date and move to "agendados" status
-      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, scheduled_date: date.toISOString(), status: "agendados" } : l));
-      const { error } = await supabase.from("crm_leads").update({
-        scheduled_date: date.toISOString(),
-        status: "agendados",
-      } as any).eq("id", leadId);
-      if (error) { console.error("Schedule save error:", error); toast.error("Erro ao agendar"); fetchAll(); }
-      else toast.success("Lead agendado");
-    } else {
-      // Remove scheduling - recalculate status based on lead data (date fields, mappings)
-      const lead = leads.find((l) => l.id === leadId);
-      const leadData = lead ? (typeof lead.data === "object" ? lead.data as Record<string, any> : {}) : {};
-      const recalculatedStatus = resolveStatus(leadData);
-      setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, scheduled_date: null, status: recalculatedStatus } : l));
-      const { error } = await supabase.from("crm_leads").update({
-        scheduled_date: null,
-        status: recalculatedStatus,
-      } as any).eq("id", leadId);
-      if (error) { console.error("Unschedule error:", error); toast.error("Erro ao remover agendamento"); fetchAll(); }
-      else toast.success("Agendamento removido");
-    }
+  const openScheduleDialog = (lead: Lead) => {
+    setSchedulingLead(lead);
+    setScheduleOpen(true);
+  };
+
+  const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
+    if (!schedulingLead || !user) return;
+    setScheduleSaving(true);
+    const { error } = await supabase.from("crm_appointments").insert({
+      lead_id: schedulingLead.id,
+      scheduled_by: user.id,
+      scheduled_datetime: schedData.scheduled_datetime,
+      valor: schedData.valor,
+      forma_pagamento: schedData.forma_pagamento,
+      canal_agendamento: schedData.canal_agendamento,
+      previous_status: schedulingLead.status,
+    } as any);
+    if (error) toast.error("Erro ao agendar");
+    else toast.success("Lead agendado com sucesso!");
+    setScheduleSaving(false);
+    setScheduleOpen(false);
+    setSchedulingLead(null);
+    fetchAll();
   };
 
   const handleToggleComprou = async (leadId: string, value: boolean) => {
@@ -377,7 +386,7 @@ export default function LeadsPage() {
 
   // Apply filters to leads
   const filteredLeads = useMemo(() => {
-    let result = leads;
+    let result = leads.filter(l => !appointedLeadIds.has(l.id));
     if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
       result = result.filter(l => l.assigned_to === filterVendedor || l.created_by === filterVendedor);
     }
@@ -392,7 +401,7 @@ export default function LeadsPage() {
       result = result.filter(l => new Date(l.created_at) <= to);
     }
     return result;
-  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente]);
+  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds]);
 
   const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
 
@@ -540,7 +549,7 @@ export default function LeadsPage() {
                       setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                       setHistoryOpen(true);
                     }}
-                    onSchedule={(date) => handleSchedule(lead.id, date)}
+                    onSchedule={() => openScheduleDialog(lead)}
                     onToggleComprou={(value) => handleToggleComprou(lead.id, value)}
                   />
                 </div>
@@ -606,7 +615,7 @@ export default function LeadsPage() {
                                   setHistoryLeadName((nf ? data[`field_${nf.id}`] : null) || data.nome_lead || "Lead");
                                   setHistoryOpen(true);
                                 }}
-                                onSchedule={(date) => handleSchedule(lead.id, date)}
+                                onSchedule={() => openScheduleDialog(lead)}
                                 onToggleComprou={(value) => handleToggleComprou(lead.id, value)}
                               />
                             </div>
@@ -648,6 +657,25 @@ export default function LeadsPage() {
         onSubmit={handleSave}
         statusOptions={statusOptions}
         statusLabels={statusLabels}
+      />
+
+      <ScheduleLeadDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        leadName={(() => {
+          if (!schedulingLead) return "";
+          const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
+          const nf = formFields.find(f => f.is_name_field);
+          return (nf ? d[`field_${nf.id}`] : d.nome_lead) || "Lead";
+        })()}
+        leadPhone={(() => {
+          if (!schedulingLead) return "";
+          const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
+          const pf = formFields.find(f => f.is_phone_field);
+          return (pf ? d[`field_${pf.id}`] : d.telefone) || "";
+        })()}
+        saving={scheduleSaving}
+        onSubmit={handleScheduleSubmit}
       />
 
       <LeadHistoryDialog

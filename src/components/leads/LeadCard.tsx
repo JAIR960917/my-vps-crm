@@ -1,12 +1,8 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus, ShoppingBag, X } from "lucide-react";
+import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 
@@ -35,7 +31,7 @@ type LeadCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onHistory: () => void;
-  onSchedule?: (date: Date | null) => void;
+  onSchedule?: () => void;
   onToggleComprou?: (value: boolean) => void;
   syncStatus?: "offline" | "synced" | null;
 };
@@ -44,7 +40,6 @@ export default function LeadCard({
   lead, columns, formFields, profiles, isAdmin,
   onEdit, onDelete, onHistory, onSchedule, onToggleComprou, syncStatus,
 }: LeadCardProps) {
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
   const assignedProfile = profiles.find((p) => p.user_id === lead.assigned_to);
 
@@ -91,24 +86,6 @@ export default function LeadCard({
 
   return (
     <div className={`rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group ${cardBorderClass}`}>
-      {/* Scheduled badge */}
-      {isScheduled && scheduledDateFormatted && (
-        <div className="flex items-center gap-1 mb-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-primary text-primary-foreground">
-            <CalendarPlus className="h-3 w-3" />
-            Agendado: {scheduledDateFormatted}
-          </span>
-          {onSchedule && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onSchedule(null); }}
-              className="text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -132,28 +109,9 @@ export default function LeadCard({
           <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
             {/* Schedule button */}
             {onSchedule && (
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
-                    <CalendarPlus className="h-3.5 w-3.5 text-primary" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
-                  <Calendar
-                    mode="single"
-                    selected={lead.scheduled_date ? new Date(lead.scheduled_date) : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        onSchedule(date);
-                        setCalendarOpen(false);
-                      }
-                    }}
-                    initialFocus
-                    className={cn("p-3 pointer-events-auto")}
-                    locale={ptBR}
-                  />
-                </PopoverContent>
-              </Popover>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onSchedule(); }}>
+                <CalendarPlus className="h-3.5 w-3.5 text-primary" />
+              </Button>
             )}
 
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>

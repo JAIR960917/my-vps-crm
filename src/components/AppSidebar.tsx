@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare, CalendarCheck, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -15,6 +15,8 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { path: "/", label: "Leads", icon: LayoutDashboard },
+  { path: "/agendamentos", label: "Agendamentos", icon: CalendarCheck },
+  { path: "/clientes-ativos", label: "Clientes Ativos", icon: UserCheck },
   { path: "/usuarios", label: "Usuários", icon: Users, roles: ["admin", "gerente"] },
   { path: "/empresas", label: "Empresas", icon: Building2, roles: ["admin"] },
   { path: "/colunas", label: "Colunas CRM", icon: Columns3, roles: ["admin"] },
