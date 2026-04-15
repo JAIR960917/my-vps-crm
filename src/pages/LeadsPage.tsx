@@ -87,27 +87,16 @@ export default function LeadsPage() {
   const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
 
-  // Lazy rendering: track how many leads to show per status column
   const LEADS_PER_PAGE = 20;
-  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
-  const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || LEADS_PER_PAGE;
-  const loadMore = (statusKey: string) => {
-    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || LEADS_PER_PAGE) + LEADS_PER_PAGE }));
-  };
-
-  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-      loadMore(statusKey);
-    }
-  };
+  const [columnCounts, setColumnCounts] = useState<Record<string, number>>({});
+  const [columnOffsets, setColumnOffsets] = useState<Record<string, number>>({});
+  const [loadingColumns, setLoadingColumns] = useState<Record<string, boolean>>({});
+  const isLoadingColumnRef = useRef<Record<string, boolean>>({});
+  const hasScheduledColumn = useMemo(() => statuses.some((status) => status.key === "agendados"), [statuses]);
 
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
-      setLeads(JSON.parse(localStorage.getItem("crm_cache_leads") || "[]"));
       setProfiles(JSON.parse(localStorage.getItem("crm_cache_profiles") || "[]"));
       setStatuses(JSON.parse(localStorage.getItem("crm_cache_statuses_full") || "[]"));
       setCompanies(JSON.parse(localStorage.getItem("crm_cache_companies") || "[]"));
@@ -116,33 +105,81 @@ export default function LeadsPage() {
     } catch {}
   }, []);
 
-  const fetchAllLeads = async () => {
-    const PAGE_SIZE = 1000;
-    let allLeads: any[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from("crm_leads")
-        .select("*")
-        .order("updated_at", { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
-      if (error || !data) break;
-      allLeads = allLeads.concat(data);
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
+  const buildLeadQuery = useCallback((statusKey: string) => {
+    let query = supabase
+      .from("crm_leads")
+      .select("*", { count: "exact" })
+      .order("updated_at", { ascending: false });
+
+    if (statusKey === "agendados" && hasScheduledColumn) {
+      query = query.not("scheduled_date", "is", null);
+    } else {
+      query = query.eq("status", statusKey);
+      if (hasScheduledColumn) {
+        query = query.is("scheduled_date", null);
+      }
     }
-    return allLeads;
-  };
+
+    if ((isAdmin || isGerente) && filterVendedor !== "all") {
+      query = query.or(`assigned_to.eq.${filterVendedor},created_by.eq.${filterVendedor}`);
+    }
+
+    if (filterDateFrom) {
+      const from = new Date(filterDateFrom);
+      from.setHours(0, 0, 0, 0);
+      query = query.gte("created_at", from.toISOString());
+    }
+
+    if (filterDateTo) {
+      const to = new Date(filterDateTo);
+      to.setHours(23, 59, 59, 999);
+      query = query.lte("created_at", to.toISOString());
+    }
+
+    return query;
+  }, [filterDateFrom, filterDateTo, filterVendedor, hasScheduledColumn, isAdmin, isGerente]);
+
+  const fetchLeadsPage = useCallback(async (statusKey: string, offset = 0, append = false) => {
+    if (isLoadingColumnRef.current[statusKey]) return;
+
+    isLoadingColumnRef.current[statusKey] = true;
+    setLoadingColumns((prev) => ({ ...prev, [statusKey]: true }));
+
+    const { data, error, count } = await buildLeadQuery(statusKey).range(offset, offset + LEADS_PER_PAGE - 1);
+
+    isLoadingColumnRef.current[statusKey] = false;
+    setLoadingColumns((prev) => ({ ...prev, [statusKey]: false }));
+
+    if (error) {
+      toast.error(`Erro ao carregar leads da coluna ${statusKey}`);
+      return;
+    }
+
+    const incoming = ((data || []) as Lead[]).filter((lead) => !appointedLeadIds.has(lead.id));
+
+    setColumnCounts((prev) => ({ ...prev, [statusKey]: count || 0 }));
+    setColumnOffsets((prev) => ({ ...prev, [statusKey]: offset + (data?.length || 0) }));
+
+    setLeads((prev) => {
+      const remaining = prev.filter((lead) => {
+        if (statusKey === "agendados" && hasScheduledColumn) return !lead.scheduled_date;
+        if (hasScheduledColumn && lead.scheduled_date) return true;
+        return lead.status !== statusKey;
+      });
+
+      const base = append ? prev : remaining;
+      const seen = new Set(base.map((lead) => lead.id));
+      const mergedIncoming = incoming.filter((lead) => !seen.has(lead.id));
+      return [...base, ...mergedIncoming];
+    });
+  }, [appointedLeadIds, buildLeadQuery, hasScheduledColumn]);
 
   const fetchAll = async () => {
-    // Always load cache first for instant display
     loadFromCache();
-
     if (!navigator.onLine) return;
 
     try {
-      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
-        fetchAllLeads(),
+      const [{ data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
@@ -153,40 +190,32 @@ export default function LeadsPage() {
         supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
         supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
       ]);
+
       setColumns(cols || []);
-      const loadedLeads = (lds || []) as Lead[];
-      // Merge company_id from fullProfs into profiles
       const companyMap = new Map((fullProfs || []).map((p: any) => [p.user_id, p.company_id]));
       const enrichedProfiles = (profs || []).map((p: any) => ({ ...p, company_id: companyMap.get(p.user_id) || null }));
       setProfiles(enrichedProfiles);
       setStatuses((sts || []) as CrmStatus[]);
       setCompanies((comps || []) as Company[]);
-      const loadedFields = (ff || []) as unknown as FormFieldInfo[];
-      setFormFields(loadedFields);
-      const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
-      setCurrentUserName(me?.full_name || user?.email || "");
-
-      setLeads(loadedLeads);
+      setFormFields((ff || []) as unknown as FormFieldInfo[]);
       setFullProfiles((fullProfs || []) as Profile[]);
       setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
       setLeadActivities((actData || []) as LeadActivity[]);
 
-      // Cache for offline
+      const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
+      setCurrentUserName(me?.full_name || user?.email || "");
+
       try {
         localStorage.setItem("crm_cache_columns", JSON.stringify(cols || []));
-        // Don't cache leads in localStorage - too large for 9000+ leads
         localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
         localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
         localStorage.setItem("crm_cache_formfields", JSON.stringify(ff || []));
         localStorage.setItem("crm_cache_fields", JSON.stringify(ffFull || []));
         localStorage.setItem("crm_cache_statuses", JSON.stringify(sts || []));
-        const me2 = (profs || []).find((p: Profile) => p.user_id === user?.id);
-        localStorage.setItem("crm_cache_username", me2?.full_name || user?.email || "");
+        localStorage.setItem("crm_cache_username", me?.full_name || user?.email || "");
       } catch {}
-    } catch {
-      // Network failed, cache already loaded
-    }
+    } catch {}
   };
 
   const trySyncOffline = useCallback(async () => {
