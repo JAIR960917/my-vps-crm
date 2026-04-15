@@ -386,7 +386,7 @@ export default function LeadsPage() {
 
   // Apply filters to leads
   const filteredLeads = useMemo(() => {
-    let result = leads;
+    let result = leads.filter(l => !appointedLeadIds.has(l.id));
     if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
       result = result.filter(l => l.assigned_to === filterVendedor || l.created_by === filterVendedor);
     }
@@ -401,7 +401,7 @@ export default function LeadsPage() {
       result = result.filter(l => new Date(l.created_at) <= to);
     }
     return result;
-  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente]);
+  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds]);
 
   const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
 
