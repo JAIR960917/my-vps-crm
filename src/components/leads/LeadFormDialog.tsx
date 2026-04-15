@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
+type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null; company_id?: string | null };
 type Company = { id: string; name: string };
 
 type FormField = {
@@ -93,6 +93,16 @@ export default function LeadFormDialog({
   const [fields, setFields] = useState<FormField[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [profileRoles, setProfileRoles] = useState<Record<string, string>>({});
+
+  // Derive the company name for the assigned user (or current user)
+  const assignedCompanyName = useMemo(() => {
+    const targetUserId = formAssigned || user?.id;
+    if (!targetUserId) return "—";
+    const profile = profiles.find((p) => p.user_id === targetUserId);
+    if (!profile?.company_id) return "—";
+    const company = companies.find((c) => c.id === profile.company_id);
+    return company?.name || "—";
+  }, [formAssigned, user?.id, profiles, companies]);
 
   // Timeline state
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -494,7 +504,7 @@ export default function LeadFormDialog({
               <div className="rounded-lg border bg-muted/30 divide-y divide-border">
                 <div className="flex justify-between items-center px-4 py-2.5">
                   <span className="text-sm font-medium text-muted-foreground">Empresa</span>
-                  <span className="text-sm text-foreground font-medium">{companies.length > 0 ? companies.map(c => c.name).join(", ") : "—"}</span>
+                  <span className="text-sm text-foreground font-medium">{assignedCompanyName}</span>
                 </div>
                 <div className="flex justify-between items-center px-4 py-2.5">
                   <span className="text-sm font-medium text-muted-foreground">Vendedor</span>
@@ -526,7 +536,7 @@ export default function LeadFormDialog({
             <form onSubmit={(e) => { e.preventDefault(); if (fields.length > 0) handlePreview(); else onSubmit(e); }} className="space-y-4">
               <div className="space-y-2">
                 <Label>Empresa</Label>
-                <Input value={companies.length > 0 ? companies.map(c => c.name).join(", ") : "Nenhuma empresa"} readOnly className="bg-muted" />
+                <Input value={assignedCompanyName} readOnly className="bg-muted" />
               </div>
               <div className="space-y-2">
                 <Label>Vendedor Responsável</Label>
@@ -580,7 +590,7 @@ export default function LeadFormDialog({
               <form id="lead-edit-form" onSubmit={(e) => { e.preventDefault(); onSubmit(e); }} className="space-y-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Empresa</Label>
-                  <Input value={companies.length > 0 ? companies.map(c => c.name).join(", ") : "—"} readOnly className="bg-muted h-9 text-sm" />
+                  <Input value={assignedCompanyName} readOnly className="bg-muted h-9 text-sm" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Vendedor Responsável</Label>
