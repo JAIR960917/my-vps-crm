@@ -53,7 +53,7 @@ export type Database = {
           forma_pagamento: string
           id: string
           idade: string
-          lead_id: string
+          lead_id: string | null
           nome: string
           previous_status: string
           resumo: string | null
@@ -73,7 +73,7 @@ export type Database = {
           forma_pagamento?: string
           id?: string
           idade?: string
-          lead_id: string
+          lead_id?: string | null
           nome?: string
           previous_status?: string
           resumo?: string | null
@@ -93,7 +93,7 @@ export type Database = {
           forma_pagamento?: string
           id?: string
           idade?: string
-          lead_id?: string
+          lead_id?: string | null
           nome?: string
           previous_status?: string
           resumo?: string | null
