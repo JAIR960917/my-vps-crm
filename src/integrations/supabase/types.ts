@@ -896,6 +896,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_my_company: { Args: { _company_id: string }; Returns: boolean }
       is_same_company: { Args: { _user_id: string }; Returns: boolean }
       manage_whatsapp_cron: { Args: never; Returns: undefined }
     }
