@@ -321,7 +321,7 @@ export default function AppointmentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {appointments.map((appt) => {
+              {filteredAppointments.map((appt) => {
                 let dtFormatted = "—";
                 try { dtFormatted = format(new Date(appt.scheduled_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR }); } catch {}
                 return (
