@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatPhoneBR } from "@/lib/phoneFormat";
-import { ArrowLeft, Check, Eye, Plus, CalendarClock, CheckCircle2, AlertTriangle, Trash2, Clock, FileText } from "lucide-react";
+import { ArrowLeft, Check, Eye, Plus, CalendarClock, CheckCircle2, AlertTriangle, Trash2, Clock, FileText, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -101,6 +101,13 @@ export default function LeadFormDialog({
   const [actDescription, setActDescription] = useState("");
   const [actDate, setActDate] = useState("");
   const [actSaving, setActSaving] = useState(false);
+
+  // Edit activity
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [editActTitle, setEditActTitle] = useState("");
+  const [editActDescription, setEditActDescription] = useState("");
+  const [editActDate, setEditActDate] = useState("");
+  const [editActSaving, setEditActSaving] = useState(false);
 
   // New note
   const [newNote, setNewNote] = useState("");
@@ -348,6 +355,36 @@ export default function LeadFormDialog({
     const { error } = await supabase.from("lead_activities").delete().eq("id", id);
     if (error) toast.error("Erro ao remover");
     else { fetchActivities(); onActivityChange?.(); }
+  };
+
+  const startEditActivity = (act: Activity) => {
+    setEditingActivityId(act.id);
+    setEditActTitle(act.title);
+    setEditActDescription(act.description || "");
+    try {
+      const d = new Date(act.scheduled_date);
+      setEditActDate(format(d, "yyyy-MM-dd'T'HH:mm"));
+    } catch {
+      setEditActDate("");
+    }
+  };
+
+  const handleUpdateActivity = async () => {
+    if (!editingActivityId || !editActTitle.trim() || !editActDate) return;
+    setEditActSaving(true);
+    const { error } = await supabase.from("lead_activities").update({
+      title: editActTitle.trim(),
+      description: editActDescription.trim() || null,
+      scheduled_date: new Date(editActDate).toISOString(),
+    }).eq("id", editingActivityId);
+    if (error) toast.error("Erro ao atualizar: " + error.message);
+    else {
+      toast.success("Atividade atualizada!");
+      setEditingActivityId(null);
+      fetchActivities();
+      onActivityChange?.();
+    }
+    setEditActSaving(false);
   };
 
   // Note handlers
@@ -694,49 +731,86 @@ export default function LeadFormDialog({
                                       </Avatar>
                                     )}
                                     {canDelete && (
-                                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleDeleteActivity(act.id)}>
-                                        <Trash2 className="h-3 w-3 text-destructive" />
-                                      </Button>
+                                      <>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => startEditActivity(act)}>
+                                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleDeleteActivity(act.id)}>
+                                          <Trash2 className="h-3 w-3 text-destructive" />
+                                        </Button>
+                                      </>
                                     )}
                                   </div>
                                 </div>
 
-                                <div className="mt-2 rounded-md bg-background/50 p-2.5">
-                                  <div className="flex items-center gap-4 text-sm">
-                                    <div>
-                                      <span className="text-muted-foreground text-xs">Prazo</span>
-                                      <p className={`font-medium text-xs ${status === "overdue" ? "text-red-600" : ""}`}>
-                                        {scheduledFormatted}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground text-xs">Título</span>
-                                      <p className={`font-medium text-xs ${status === "completed" ? "line-through text-muted-foreground" : ""}`}>
-                                        {act.title}
-                                      </p>
+                                {editingActivityId === act.id ? (
+                                  <div className="mt-2 rounded-md bg-background/50 p-2.5 space-y-2">
+                                    <Input
+                                      value={editActTitle}
+                                      onChange={(e) => setEditActTitle(e.target.value)}
+                                      placeholder="Título..."
+                                      className="h-8 text-sm"
+                                    />
+                                    <Textarea
+                                      value={editActDescription}
+                                      onChange={(e) => setEditActDescription(e.target.value)}
+                                      placeholder="Descrição (opcional)..."
+                                      rows={2}
+                                      className="text-sm"
+                                    />
+                                    <Input
+                                      type="datetime-local"
+                                      value={editActDate}
+                                      onChange={(e) => setEditActDate(e.target.value)}
+                                      className="h-8 text-sm"
+                                    />
+                                    <div className="flex gap-2">
+                                      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setEditingActivityId(null)}>Cancelar</Button>
+                                      <Button size="sm" className="text-xs h-7" onClick={handleUpdateActivity} disabled={editActSaving || !editActTitle.trim() || !editActDate}>
+                                        {editActSaving ? "Salvando..." : "Salvar"}
+                                      </Button>
                                     </div>
                                   </div>
-                                  {act.description && (
-                                    <p className="text-xs text-muted-foreground mt-1.5">{act.description}</p>
-                                  )}
-                                  {profile && (
-                                    <div className="mt-1.5">
-                                      <span className="text-muted-foreground text-xs">Responsável</span>
-                                      <p className="text-xs font-medium text-primary">{profile.full_name}</p>
+                                ) : (
+                                  <>
+                                    <div className="mt-2 rounded-md bg-background/50 p-2.5">
+                                      <div className="flex items-center gap-4 text-sm">
+                                        <div>
+                                          <span className="text-muted-foreground text-xs">Prazo</span>
+                                          <p className={`font-medium text-xs ${status === "overdue" ? "text-red-600" : ""}`}>
+                                            {scheduledFormatted}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <span className="text-muted-foreground text-xs">Título</span>
+                                          <p className={`font-medium text-xs ${status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+                                            {act.title}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      {act.description && (
+                                        <p className="text-xs text-muted-foreground mt-1.5">{act.description}</p>
+                                      )}
+                                      {profile && (
+                                        <div className="mt-1.5">
+                                          <span className="text-muted-foreground text-xs">Responsável</span>
+                                          <p className="text-xs font-medium text-primary">{profile.full_name}</p>
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
 
-                                <div className="flex gap-2 mt-2">
-                                  <Button
-                                    size="sm"
-                                    variant={status === "completed" ? "outline" : "default"}
-                                    className="text-xs h-7"
-                                    onClick={() => handleToggleComplete(act)}
-                                  >
-                                    {status === "completed" ? "Reabrir" : "Concluir"}
-                                  </Button>
-                                </div>
+                                    <div className="flex gap-2 mt-2">
+                                      <Button
+                                        size="sm"
+                                        variant={status === "completed" ? "outline" : "default"}
+                                        className="text-xs h-7"
+                                        onClick={() => handleToggleComplete(act)}
+                                      >
+                                        {status === "completed" ? "Reabrir" : "Concluir"}
+                                      </Button>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
