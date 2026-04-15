@@ -39,6 +39,14 @@ export default function ImportLeadsPage() {
     },
   });
 
+  const { data: crmColumns = [] } = useQuery({
+    queryKey: ["import-crm-columns"],
+    queryFn: async () => {
+      const { data } = await supabase.from("crm_columns").select("id, name, field_key, field_type").order("position");
+      return data || [];
+    },
+  });
+
   const { data: statuses = [] } = useQuery({
     queryKey: ["import-statuses"],
     queryFn: async () => {
@@ -140,14 +148,16 @@ export default function ImportLeadsPage() {
 
   // Build field options for column mapping (add special entries)
   const fieldOptions = useMemo(() => {
-    const opts = formFields.map((f) => ({ value: f.id, label: f.label }));
+    const formOpts = formFields.map((f) => ({ value: f.id, label: `📝 ${f.label}`, group: "Campos do Formulário" }));
+    const colOpts = crmColumns.map((c) => ({ value: `col__${c.field_key}`, label: `📊 ${c.name}`, group: "Colunas CRM" }));
     return [
-      { value: "__status__", label: "📊 Status/Etapa" },
-      { value: "__assigned__", label: "👤 Responsável" },
-      { value: "__created_at__", label: "📅 Data de criação" },
-      ...opts,
+      { value: "__status__", label: "⚙️ Status/Etapa", group: "Sistema" },
+      { value: "__assigned__", label: "⚙️ Responsável", group: "Sistema" },
+      { value: "__created_at__", label: "⚙️ Data de criação", group: "Sistema" },
+      ...formOpts,
+      ...colOpts,
     ];
-  }, [formFields]);
+  }, [formFields, crmColumns]);
 
   // Import logic
   const startImport = async () => {
@@ -181,9 +191,10 @@ export default function ImportLeadsPage() {
       const inserts = batch.map((row, batchIdx) => {
         const data: Record<string, string> = {};
 
-        // Map CSV columns to form field IDs
+        // Map CSV columns to form field IDs or CRM column keys
         Object.entries(colToFieldId).forEach(([csvCol, fieldId]) => {
-          if (row[csvCol]) data[fieldId] = row[csvCol];
+          const key = fieldId.startsWith("col__") ? fieldId.replace("col__", "") : fieldId;
+          if (row[csvCol]) data[key] = row[csvCol];
         });
 
         const csvStatus = row[statusCol] || "";
