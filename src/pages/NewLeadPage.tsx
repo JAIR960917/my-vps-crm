@@ -282,19 +282,57 @@ export default function NewLeadPage() {
       return;
     }
 
-    const { error } = await supabase.from("crm_leads").insert({
-      data: formData,
-      status: resolvedStatus,
-      assigned_to: user?.id || null,
-      created_by: user!.id,
-    });
+    // Check for existing lead with same name + phone
+    let existingLead: any = null;
+    try {
+      const { data: ffMarkers } = await supabase.from("crm_form_fields").select("id, is_name_field, is_phone_field");
+      const nameIds = (ffMarkers || []).filter((f: any) => f.is_name_field).map((f: any) => f.id);
+      const phoneIds = (ffMarkers || []).filter((f: any) => f.is_phone_field).map((f: any) => f.id);
 
-    if (error) {
-      addToOfflineQueue(leadData);
-      toast.warning("Erro ao enviar. Salvo offline para sincronizar depois.");
+      const leadName = nameIds.reduce<string | null>((found: string | null, id: string) => found || formData[`field_${id}`] || null, null) || "";
+      const leadPhone = phoneIds.reduce<string | null>((found: string | null, id: string) => found || formData[`field_${id}`] || null, null) || "";
+
+      if (leadName && leadPhone) {
+        const { data: allLeads } = await supabase.from("crm_leads").select("*");
+        if (allLeads) {
+          existingLead = allLeads.find((l: any) => {
+            const d = typeof l.data === "object" ? (l.data as Record<string, any>) : {};
+            const eName = nameIds.reduce<string | null>((f: string | null, id: string) => f || d[`field_${id}`] || null, null) || d.nome_lead || "";
+            const ePhone = phoneIds.reduce<string | null>((f: string | null, id: string) => f || d[`field_${id}`] || null, null) || d.telefone || "";
+            return String(eName).trim().toLowerCase() === String(leadName).trim().toLowerCase()
+              && String(ePhone).replace(/\D/g, "") === String(leadPhone).replace(/\D/g, "");
+          }) || null;
+        }
+      }
+    } catch {}
+
+    if (existingLead) {
+      const { error } = await supabase.from("crm_leads").update({
+        data: formData,
+        status: resolvedStatus,
+        assigned_to: user?.id || null,
+      }).eq("id", existingLead.id);
+      if (error) {
+        addToOfflineQueue(leadData);
+        toast.warning("Erro ao atualizar. Salvo offline.");
+      } else {
+        toast.success("Lead já existia — informações atualizadas!");
+      }
     } else {
-      toast.success("Lead criado com sucesso!");
+      const { error } = await supabase.from("crm_leads").insert({
+        data: formData,
+        status: resolvedStatus,
+        assigned_to: user?.id || null,
+        created_by: user!.id,
+      });
+      if (error) {
+        addToOfflineQueue(leadData);
+        toast.warning("Erro ao enviar. Salvo offline para sincronizar depois.");
+      } else {
+        toast.success("Lead criado com sucesso!");
+      }
     }
+
     setSaving(false);
     setFormData({});
     setStep(0);
