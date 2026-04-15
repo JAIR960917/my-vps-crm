@@ -212,6 +212,16 @@ export default function LeadCard({
           </div>
         )}
 
+        {/* All clear badge */}
+        {!hasOverdue && !hasToday && !hasPending && (
+          <div className="mb-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-500 px-2 py-0.5 rounded-full uppercase">
+              <CheckCircle2 className="h-3 w-3" />
+              Em dia
+            </span>
+          </div>
+        )}
+
         {/* Next activity info */}
         {nextActivity && (
           <div className={`text-xs mb-1.5 ${hasOverdue ? "text-red-600" : hasToday ? "text-amber-600" : "text-muted-foreground"}`}>
