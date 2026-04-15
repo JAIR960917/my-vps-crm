@@ -202,6 +202,7 @@ const findLegacyFieldValue = (field: FormField, data: Record<string, any>) => {
 const normalizeLeadDataForFields = (data: Record<string, any>, fields: FormField[]) => {
   const nextData = { ...data };
 
+  // First pass: resolve values from legacy keys or direct field keys
   for (const field of fields) {
     const fieldKey = `field_${field.id}`;
     const currentValue = nextData[fieldKey];
@@ -210,6 +211,36 @@ const normalizeLeadDataForFields = (data: Record<string, any>, fields: FormField
 
     if (resolvedValue !== undefined) {
       nextData[fieldKey] = normalizeFieldValue(field, resolvedValue);
+    }
+  }
+
+  // Second pass: cross-reference sibling fields with same semantic role
+  // e.g., if there are two phone fields and one has data, copy to the other
+  const phoneFields = fields.filter((f) => f.is_phone_field);
+  const nameFields = fields.filter((f) => f.is_name_field);
+
+  const crossFill = (group: FormField[]) => {
+    if (group.length < 2) return;
+    const filledField = group.find((f) => isFilledValue(nextData[`field_${f.id}`]));
+    if (!filledField) return;
+    const filledValue = nextData[`field_${filledField.id}`];
+    for (const f of group) {
+      const key = `field_${f.id}`;
+      if (!isFilledValue(nextData[key])) {
+        nextData[key] = normalizeFieldValue(f, filledValue);
+      }
+    }
+  };
+
+  crossFill(phoneFields);
+  crossFill(nameFields);
+
+  // Normalize phone values: strip +55 country code prefix
+  for (const pf of phoneFields) {
+    const key = `field_${pf.id}`;
+    const val = nextData[key];
+    if (typeof val === "string" && val.startsWith("+55")) {
+      nextData[key] = val.slice(3).replace(/\D/g, "");
     }
   }
 
