@@ -302,12 +302,42 @@ export default function LeadsPage() {
       else toast.success("Lead atualizado");
     } else {
       const resolvedStatus = resolveStatus(formData);
-      const { error } = await supabase.from("crm_leads").insert({
-        data: formData, status: resolvedStatus,
-        assigned_to: formAssigned || null, created_by: user!.id,
-      });
-      if (error) toast.error("Erro ao criar lead");
-      else toast.success("Lead criado");
+
+      // Extract name and phone from form data for duplicate check
+      const nameFieldIds = formFields.filter(f => f.is_name_field).map(f => f.id);
+      const phoneFieldIds = formFields.filter(f => f.is_phone_field).map(f => f.id);
+      const leadName = nameFieldIds.reduce<string | null>((found, id) => found || formData[`field_${id}`] || null, null) || formData.nome_lead || "";
+      const leadPhone = phoneFieldIds.reduce<string | null>((found, id) => found || formData[`field_${id}`] || null, null) || formData.telefone || "";
+
+      let existingLead: Lead | null = null;
+      if (leadName && leadPhone) {
+        // Search for existing lead with same name+phone
+        const { data: allLeads } = await supabase.from("crm_leads").select("*");
+        if (allLeads) {
+          existingLead = (allLeads as Lead[]).find(l => {
+            const d = typeof l.data === "object" ? (l.data as Record<string, any>) : {};
+            const eName = nameFieldIds.reduce<string | null>((f, id) => f || d[`field_${id}`] || null, null) || d.nome_lead || "";
+            const ePhone = phoneFieldIds.reduce<string | null>((f, id) => f || d[`field_${id}`] || null, null) || d.telefone || "";
+            return String(eName).trim().toLowerCase() === String(leadName).trim().toLowerCase()
+              && String(ePhone).replace(/\D/g, "") === String(leadPhone).replace(/\D/g, "");
+          }) || null;
+        }
+      }
+
+      if (existingLead) {
+        const { error } = await supabase.from("crm_leads").update({
+          data: formData, status: resolvedStatus, assigned_to: formAssigned || null,
+        }).eq("id", existingLead.id);
+        if (error) toast.error("Erro ao atualizar lead existente");
+        else toast.success("Lead já existia — informações atualizadas!");
+      } else {
+        const { error } = await supabase.from("crm_leads").insert({
+          data: formData, status: resolvedStatus,
+          assigned_to: formAssigned || null, created_by: user!.id,
+        });
+        if (error) toast.error("Erro ao criar lead");
+        else toast.success("Lead criado");
+      }
     }
     setSaving(false);
     setOpen(false);
