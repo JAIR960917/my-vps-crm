@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { email, password, full_name, role } = await req.json();
+  const { email, password, full_name, role, company_id } = await req.json();
 
   const validRoles = ["admin", "vendedor", "gerente"];
   if (!email || !password || !role) {
