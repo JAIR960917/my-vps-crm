@@ -50,12 +50,18 @@ const FORMAS_PAGAMENTO = [
   "Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Convênio", "Boleto", "Cortesia",
 ];
 
+type Company = { id: string; name: string };
+type ProfileFull = { user_id: string; full_name: string; company_id: string | null };
+
 export default function AppointmentsPage() {
   const { user, isAdmin } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profilesFull, setProfilesFull] = useState<ProfileFull[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState<Date | undefined>(new Date());
+  const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   // Add/Edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -91,16 +97,31 @@ export default function AppointmentsPage() {
       dayEnd.setHours(23, 59, 59, 999);
       query = query.gte("scheduled_datetime", dayStart.toISOString()).lte("scheduled_datetime", dayEnd.toISOString());
     }
-    const [{ data: appts }, { data: profs }] = await Promise.all([
+    const [apptRes, profRes] = await Promise.all([
       query,
       supabase.rpc("get_profile_names"),
     ]);
-    setAppointments((appts || []) as unknown as Appointment[]);
-    setProfiles((profs || []) as Profile[]);
+    setAppointments((apptRes.data || []) as unknown as Appointment[]);
+    setProfiles((profRes.data || []) as Profile[]);
+    if (isAdmin) {
+      const [compRes, profFullRes] = await Promise.all([
+        supabase.from("companies").select("id, name").order("name"),
+        supabase.from("profiles").select("user_id, full_name, company_id"),
+      ]);
+      setCompanies((compRes.data || []) as Company[]);
+      setProfilesFull((profFullRes.data || []) as ProfileFull[]);
+    }
     setLoading(false);
   };
 
   useEffect(() => { fetchAll(); }, [filterDate]);
+
+  const filteredAppointments = isAdmin && filterCompanyId !== "all"
+    ? appointments.filter((appt) => {
+        const prof = profilesFull.find(p => p.user_id === appt.scheduled_by);
+        return prof?.company_id === filterCompanyId;
+      })
+    : appointments;
 
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
@@ -237,9 +258,22 @@ export default function AppointmentsPage() {
             <CalendarCheck className="h-6 w-6 text-primary" />
             <h1 className="text-xl sm:text-2xl font-bold">Agendamentos</h1>
           </div>
-          <p className="text-sm text-muted-foreground">{appointments.length} agendamento(s)</p>
+          <p className="text-sm text-muted-foreground">{filteredAppointments.length} agendamento(s)</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && companies.length > 0 && (
+            <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+              <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectValue placeholder="Todas empresas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas empresas</SelectItem>
+                {companies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className={cn("justify-start text-left font-normal", !filterDate && "text-muted-foreground")}>
@@ -264,7 +298,7 @@ export default function AppointmentsPage() {
 
       {loading ? (
         <p className="text-center text-muted-foreground py-8">Carregando...</p>
-      ) : appointments.length === 0 ? (
+      ) : filteredAppointments.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">Nenhum agendamento encontrado.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
@@ -287,7 +321,7 @@ export default function AppointmentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {appointments.map((appt) => {
+              {filteredAppointments.map((appt) => {
                 let dtFormatted = "—";
                 try { dtFormatted = format(new Date(appt.scheduled_datetime), "dd/MM/yyyy HH:mm", { locale: ptBR }); } catch {}
                 return (
