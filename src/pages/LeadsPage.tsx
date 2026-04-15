@@ -447,6 +447,8 @@ export default function LeadsPage() {
 
   const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
 
+  const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
+
   const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo;
   const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); };
 
