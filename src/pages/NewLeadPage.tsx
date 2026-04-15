@@ -9,10 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, WifiOff, ArrowLeft, Check, Eye } from "lucide-react";
+import { ChevronLeft, ChevronRight, WifiOff, ArrowLeft, Check, Eye, CalendarIcon, Clock } from "lucide-react";
 import { addToOfflineQueue, syncOfflineQueue, getOfflineQueue } from "@/lib/offlineSync";
 import { formatPhoneBR } from "@/lib/phoneFormat";
+import { format, parse } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 type DateStatusRange = { max_years: number; status_key: string };
 type DateStatusConfig = { ranges: DateStatusRange[]; above_all: string; no_answer: string };
@@ -400,7 +405,27 @@ export default function NewLeadPage() {
           />
         )}
 
-        {["text", "number", "date", "email"].includes(field.field_type) && (
+        {field.field_type === "date" && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !value && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4 text-destructive" />
+                {value ? format(new Date(value + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={value ? new Date(value + "T00:00:00") : undefined}
+                onSelect={(d) => set(fieldKey, d ? format(d, "yyyy-MM-dd") : "")}
+                locale={ptBR}
+                className="p-3 pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+        )}
+
+        {["text", "number", "email"].includes(field.field_type) && (
           <Input
             type={field.field_type}
             value={value}
