@@ -699,6 +699,8 @@ export default function LeadsPage() {
         onSubmit={handleSave}
         statusOptions={statusOptions}
         statusLabels={statusLabels}
+        leadId={editingLead?.id}
+        onActivityChange={fetchAll}
       />
 
       <ScheduleLeadDialog
