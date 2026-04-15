@@ -675,15 +675,26 @@ export default function LeadFormDialog({
                     rows={2}
                     className="text-sm"
                   />
-                  <Input
-                    type="datetime-local"
-                    value={actDate}
-                    onChange={(e) => setActDate(e.target.value)}
-                    className="h-9 text-sm"
-                  />
+                  <div className="flex gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="flex-1 justify-start text-left h-9 text-sm">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {actDatePart ? format(actDatePart, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={actDatePart} onSelect={setActDatePart} locale={ptBR} className="p-3 pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    <div className="relative">
+                      <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input type="time" value={actTimePart} onChange={(e) => setActTimePart(e.target.value)} className="h-9 text-sm pl-9 w-[120px]" />
+                    </div>
+                  </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => setShowNewActivity(false)}>Cancelar</Button>
-                    <Button size="sm" onClick={handleCreateActivity} disabled={actSaving || !actTitle.trim() || !actDate}>
+                    <Button size="sm" onClick={handleCreateActivity} disabled={actSaving || !actTitle.trim() || !actDatePart}>
                       {actSaving ? "Salvando..." : "Salvar"}
                     </Button>
                   </div>
@@ -791,15 +802,26 @@ export default function LeadFormDialog({
                                       rows={2}
                                       className="text-sm"
                                     />
-                                    <Input
-                                      type="datetime-local"
-                                      value={editActDate}
-                                      onChange={(e) => setEditActDate(e.target.value)}
-                                      className="h-8 text-sm"
-                                    />
+                                    <div className="flex gap-2">
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <Button variant="outline" className="flex-1 justify-start text-left h-8 text-sm">
+                                            <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                            {editActDatePart ? format(editActDatePart, "dd/MM/yyyy", { locale: ptBR }) : "Data"}
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                          <Calendar mode="single" selected={editActDatePart} onSelect={setEditActDatePart} locale={ptBR} className="p-3 pointer-events-auto" />
+                                        </PopoverContent>
+                                      </Popover>
+                                      <div className="relative">
+                                        <Clock className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                        <Input type="time" value={editActTimePart} onChange={(e) => setEditActTimePart(e.target.value)} className="h-8 text-sm pl-8 w-[110px]" />
+                                      </div>
+                                    </div>
                                     <div className="flex gap-2">
                                       <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setEditingActivityId(null)}>Cancelar</Button>
-                                      <Button size="sm" className="text-xs h-7" onClick={handleUpdateActivity} disabled={editActSaving || !editActTitle.trim() || !editActDate}>
+                                      <Button size="sm" className="text-xs h-7" onClick={handleUpdateActivity} disabled={editActSaving || !editActTitle.trim() || !editActDatePart}>
                                         {editActSaving ? "Salvando..." : "Salvar"}
                                       </Button>
                                     </div>
