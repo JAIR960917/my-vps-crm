@@ -659,7 +659,25 @@ export default function LeadsPage() {
         statusLabels={statusLabels}
       />
 
-      <LeadHistoryDialog
+      <ScheduleLeadDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        leadName={(() => {
+          if (!schedulingLead) return "";
+          const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
+          const nf = formFields.find(f => f.is_name_field);
+          return (nf ? d[`field_${nf.id}`] : d.nome_lead) || "Lead";
+        })()}
+        leadPhone={(() => {
+          if (!schedulingLead) return "";
+          const d = typeof schedulingLead.data === "object" ? schedulingLead.data as Record<string, any> : {};
+          const pf = formFields.find(f => f.is_phone_field);
+          return (pf ? d[`field_${pf.id}`] : d.telefone) || "";
+        })()}
+        saving={scheduleSaving}
+        onSubmit={handleScheduleSubmit}
+      />
+
         open={historyOpen}
         onOpenChange={setHistoryOpen}
         leadId={historyLeadId}
