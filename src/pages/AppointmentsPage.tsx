@@ -146,6 +146,7 @@ export default function AppointmentsPage() {
     fetchAll();
   };
 
+  const openAdd = () => {
     setEditingAppt(null);
     setFormNome(""); setFormTelefone(""); setFormIdade("");
     setFormDate(undefined); setFormTime("09:00");
