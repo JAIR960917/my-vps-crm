@@ -98,6 +98,14 @@ export default function AppointmentsPage() {
       return;
     }
 
+    if (field === "venda" && value === "Não Vendido" && appt) {
+      await supabase.from("crm_leads").update({ status: appt.previous_status } as any).eq("id", appt.lead_id);
+      await supabase.from("crm_appointments").update({ [field]: value, status: "nao_vendido" } as any).eq("id", id);
+      toast.success("Lead devolvido à coluna original");
+      fetchAll();
+      return;
+    }
+
     const { error } = await supabase.from("crm_appointments").update({ [field]: value } as any).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
