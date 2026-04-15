@@ -102,6 +102,13 @@ export default function LeadFormDialog({
   const [actDate, setActDate] = useState("");
   const [actSaving, setActSaving] = useState(false);
 
+  // Edit activity
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [editActTitle, setEditActTitle] = useState("");
+  const [editActDescription, setEditActDescription] = useState("");
+  const [editActDate, setEditActDate] = useState("");
+  const [editActSaving, setEditActSaving] = useState(false);
+
   // New note
   const [newNote, setNewNote] = useState("");
   const [noteSending, setNoteSending] = useState(false);
