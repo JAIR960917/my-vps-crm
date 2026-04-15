@@ -523,33 +523,29 @@ export default function LeadsPage() {
     return fullProfiles.filter(p => p.company_id === myProfile.company_id);
   }, [fullProfiles, isAdmin, isGerente, user?.id]);
 
-  // Apply filters to leads
-  const filteredLeads = useMemo(() => {
-    let result = leads.filter(l => !appointedLeadIds.has(l.id));
-    if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
-      result = result.filter(l => l.assigned_to === filterVendedor || l.created_by === filterVendedor);
-    }
-    if (filterDateFrom) {
-      const from = new Date(filterDateFrom);
-      from.setHours(0, 0, 0, 0);
-      result = result.filter(l => new Date(l.created_at) >= from);
-    }
-    if (filterDateTo) {
-      const to = new Date(filterDateTo);
-      to.setHours(23, 59, 59, 999);
-      result = result.filter(l => new Date(l.created_at) <= to);
-    }
-    return result;
-  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds]);
+  const filteredLeads = useMemo(() => leads.filter((l) => !appointedLeadIds.has(l.id)), [leads, appointedLeadIds]);
 
-  // Reset visible counts when filters change
   useEffect(() => {
-    setVisibleCounts({});
-  }, [filterVendedor, filterDateFrom, filterDateTo]);
+    if (!statuses.length) return;
+    setColumnOffsets({});
+    setColumnCounts({});
+    setLeads((prev) => prev.filter((lead) => offlineIds.has(lead.id)));
+    Promise.all(statuses.map((status) => fetchLeadsPage(status.key, 0, false)));
+  }, [statuses, filterVendedor, filterDateFrom, filterDateTo, appointedLeadIds, offlineIds, fetchLeadsPage]);
 
   const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
 
+  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const offset = columnOffsets[statusKey] || 0;
+    const total = columnCounts[statusKey] || 0;
+    if (el.scrollTop + el.clientHeight < el.scrollHeight - 100) return;
+    if (offset >= total || loadingColumns[statusKey]) return;
+    fetchLeadsPage(statusKey, offset, true);
+  };
+
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
+  const totalAvailableLeads = Object.values(columnCounts).reduce((sum, count) => sum + count, 0);
 
   const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo;
   const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); };
