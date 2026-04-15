@@ -99,8 +99,8 @@ export default function LeadFormDialog({
     const targetUserId = formAssigned || user?.id;
     if (!targetUserId) return "—";
     const profile = profiles.find((p) => p.user_id === targetUserId);
-    if (!profile) return "—";
-    const company = companies.find((c) => c.id === (profile as any).company_id);
+    if (!profile?.company_id) return "—";
+    const company = companies.find((c) => c.id === profile.company_id);
     return company?.name || "—";
   }, [formAssigned, user?.id, profiles, companies]);
 
