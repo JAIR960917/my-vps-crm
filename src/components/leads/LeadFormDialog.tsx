@@ -312,7 +312,12 @@ export default function LeadFormDialog({
 
   // Activity handlers
   const handleCreateActivity = async () => {
-    if (!actTitle.trim() || !actDate || !leadId || !user) return;
+    if (!actTitle.trim() || !actDate || !leadId || !user) {
+      console.log("Missing data:", { actTitle, actDate, leadId, userId: user?.id });
+      if (!actTitle.trim()) toast.error("Preencha o título");
+      if (!actDate) toast.error("Preencha a data");
+      return;
+    }
     setActSaving(true);
     const { error } = await supabase.from("lead_activities").insert({
       lead_id: leadId,
@@ -320,8 +325,8 @@ export default function LeadFormDialog({
       description: actDescription.trim() || null,
       scheduled_date: new Date(actDate).toISOString(),
       created_by: user.id,
-    });
-    if (error) toast.error("Erro ao criar atividade");
+    } as any);
+    if (error) { console.error("Activity insert error:", error); toast.error("Erro ao criar atividade: " + error.message); }
     else {
       toast.success("Atividade criada!");
       setActTitle(""); setActDescription(""); setActDate("");
@@ -347,13 +352,17 @@ export default function LeadFormDialog({
 
   // Note handlers
   const handleSendNote = async () => {
-    if (!newNote.trim() || !leadId || !user) return;
+    if (!newNote.trim() || !leadId || !user) {
+      console.log("Note missing data:", { newNote: newNote.trim(), leadId, userId: user?.id });
+      return;
+    }
     setNoteSending(true);
     const { error } = await supabase.from("crm_lead_notes").insert({
       lead_id: leadId, user_id: user.id, content: newNote.trim(),
     });
-    if (error) toast.error("Erro ao adicionar comentário");
+    if (error) { console.error("Note insert error:", error); toast.error("Erro ao adicionar comentário: " + error.message); }
     else {
+      toast.success("Comentário adicionado!");
       setNewNote("");
       fetchNotes();
     }
