@@ -92,6 +92,7 @@ export default function LeadFormDialog({
   const { user, isAdmin } = useAuth();
   const [fields, setFields] = useState<FormField[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [profileRoles, setProfileRoles] = useState<Record<string, string>>({});
 
   // Timeline state
   const [activities, setActivities] = useState<Activity[]>([]);
