@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatPhoneBR } from "@/lib/phoneFormat";
-import { ArrowLeft, Check, Eye, Plus, CalendarClock, CheckCircle2, AlertTriangle, Trash2, Clock, FileText } from "lucide-react";
+import { ArrowLeft, Check, Eye, Plus, CalendarClock, CheckCircle2, AlertTriangle, Trash2, Clock, FileText, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
