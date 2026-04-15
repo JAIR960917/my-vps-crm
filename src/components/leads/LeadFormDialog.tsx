@@ -606,9 +606,14 @@ export default function LeadFormDialog({
                       <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Ninguém" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Ninguém</SelectItem>
-                        {profiles.map((p) => (
-                          <SelectItem key={p.user_id} value={p.user_id}>{p.full_name || p.email}</SelectItem>
-                        ))}
+                        {profiles.map((p) => {
+                          const roleLabel = profileRoles[p.user_id] ? ` (${profileRoles[p.user_id]})` : "";
+                          return (
+                            <SelectItem key={p.user_id} value={p.user_id}>
+                              {(p.full_name || p.email)}{roleLabel}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
