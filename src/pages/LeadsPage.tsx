@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { syncOfflineQueue, getOfflineQueue } from "@/lib/offlineSync";
 import { useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -87,6 +87,23 @@ export default function LeadsPage() {
   const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
 
+  // Lazy rendering: track how many leads to show per status column
+  const LEADS_PER_PAGE = 20;
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || LEADS_PER_PAGE;
+  const loadMore = (statusKey: string) => {
+    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || LEADS_PER_PAGE) + LEADS_PER_PAGE }));
+  };
+
+  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+      loadMore(statusKey);
+    }
+  };
+
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
@@ -157,7 +174,7 @@ export default function LeadsPage() {
       // Cache for offline
       try {
         localStorage.setItem("crm_cache_columns", JSON.stringify(cols || []));
-        localStorage.setItem("crm_cache_leads", JSON.stringify(lds || []));
+        // Don't cache leads in localStorage - too large for 9000+ leads
         localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
         localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
@@ -496,6 +513,11 @@ export default function LeadsPage() {
     return result;
   }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds]);
 
+  // Reset visible counts when filters change
+  useEffect(() => {
+    setVisibleCounts({});
+  }, [filterVendedor, filterDateFrom, filterDateTo]);
+
   const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
 
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
@@ -618,15 +640,17 @@ export default function LeadsPage() {
       </div>
 
       {/* Mobile: Active column cards */}
-      <div className="lg:hidden space-y-2 mb-4">
+      <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }} onScroll={(e) => handleColumnScroll(mobileTab, e)}>
         {statuses.filter(s => s.key === mobileTab).map((status) => {
           const statusLeads = getLeadsByStatus(status.key);
+          const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
+          const hasMore = statusLeads.length > visibleLeads.length;
           return (
             <div key={status.key}>
               {statusLeads.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhum lead nesta coluna</p>
               )}
-              {statusLeads.map((lead) => (
+              {visibleLeads.map((lead) => (
                 <div key={lead.id} className="mb-2">
                   <LeadCard
                     lead={lead}
@@ -648,6 +672,11 @@ export default function LeadsPage() {
                   />
                 </div>
               ))}
+              {hasMore && (
+                <p className="text-center text-xs text-muted-foreground py-2">
+                  Mostrando {visibleLeads.length} de {statusLeads.length} — role para carregar mais
+                </p>
+              )}
               <button
                 onClick={() => navigate(`/novo-lead?status=${status.key}`)}
                 className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors"
@@ -661,13 +690,15 @@ export default function LeadsPage() {
 
       {/* Desktop: Kanban board with drag & drop */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "calc(100vh - 200px)" }}>
+        <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map((status) => {
             const statusLeads = getLeadsByStatus(status.key);
+            const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
+            const hasMore = statusLeads.length > visibleLeads.length;
             const colors = colorMap[status.color] || colorMap.blue;
             return (
-              <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col">
-                <div className="flex items-center gap-2 mb-2 px-1">
+              <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
+                <div className="flex items-center gap-2 mb-2 px-1 flex-shrink-0">
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
@@ -678,13 +709,17 @@ export default function LeadsPage() {
                 <Droppable droppableId={status.key}>
                   {(provided, snapshot) => (
                     <div
-                      ref={provided.innerRef}
+                      ref={(el) => {
+                        provided.innerRef(el);
+                        columnRefs.current[status.key] = el;
+                      }}
                       {...provided.droppableProps}
-                      className={`flex-1 rounded-xl p-2 space-y-2 transition-colors ${
+                      onScroll={(e) => handleColumnScroll(status.key, e)}
+                      className={`flex-1 rounded-xl p-2 space-y-2 transition-colors overflow-y-auto min-h-0 ${
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
                       }`}
                     >
-                      {statusLeads.map((lead, index) => (
+                      {visibleLeads.map((lead, index) => (
                         <Draggable key={lead.id} draggableId={lead.id} index={index}>
                           {(provided, snapshot) => (
                             <div
@@ -716,6 +751,12 @@ export default function LeadsPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
+
+                      {hasMore && (
+                        <p className="text-center text-xs text-muted-foreground py-1">
+                          Mostrando {visibleLeads.length} de {statusLeads.length} — role para carregar mais
+                        </p>
+                      )}
 
                       <button
                         onClick={() => navigate(`/novo-lead?status=${status.key}`)}
