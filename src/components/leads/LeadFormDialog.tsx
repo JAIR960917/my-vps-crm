@@ -92,6 +92,7 @@ export default function LeadFormDialog({
   const { user, isAdmin } = useAuth();
   const [fields, setFields] = useState<FormField[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [profileRoles, setProfileRoles] = useState<Record<string, string>>({});
 
   // Timeline state
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -128,6 +129,14 @@ export default function LeadFormDialog({
         .select("*")
         .order("position")
         .then(({ data }) => setFields((data || []) as unknown as FormField[]));
+      supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .then(({ data }) => {
+          const map: Record<string, string> = {};
+          (data || []).forEach((r) => { map[r.user_id] = r.role; });
+          setProfileRoles(map);
+        });
       if (isEditing && leadId) {
         fetchActivities();
         fetchNotes();
@@ -597,9 +606,14 @@ export default function LeadFormDialog({
                       <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Ninguém" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Ninguém</SelectItem>
-                        {profiles.map((p) => (
-                          <SelectItem key={p.user_id} value={p.user_id}>{p.full_name || p.email}</SelectItem>
-                        ))}
+                        {profiles.map((p) => {
+                          const roleLabel = profileRoles[p.user_id] ? ` (${profileRoles[p.user_id]})` : "";
+                          return (
+                            <SelectItem key={p.user_id} value={p.user_id}>
+                              {(p.full_name || p.email)}{roleLabel}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
