@@ -561,8 +561,8 @@ export default function LeadsPage() {
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold">Leads</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            {filteredLeads.length} lead{filteredLeads.length !== 1 ? "s" : ""}
-            {hasActiveFilters && ` (filtrado de ${leads.length})`}
+            {totalAvailableLeads} lead{totalAvailableLeads !== 1 ? "s" : ""}
+            {hasActiveFilters && ` (com filtros aplicados)`}
           </p>
         </div>
         <div className="flex items-center gap-2">
