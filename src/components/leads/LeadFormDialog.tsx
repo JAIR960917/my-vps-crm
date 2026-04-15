@@ -344,24 +344,27 @@ export default function LeadFormDialog({
 
   // Activity handlers
   const handleCreateActivity = async () => {
-    if (!actTitle.trim() || !actDate || !leadId || !user) {
-      console.log("Missing data:", { actTitle, actDate, leadId, userId: user?.id });
+    if (!actTitle.trim() || !actDatePart || !leadId || !user) {
+      console.log("Missing data:", { actTitle, actDatePart, leadId, userId: user?.id });
       if (!actTitle.trim()) toast.error("Preencha o título");
-      if (!actDate) toast.error("Preencha a data");
+      if (!actDatePart) toast.error("Preencha a data");
       return;
     }
     setActSaving(true);
+    const [hh, mm] = actTimePart.split(":").map(Number);
+    const scheduledDate = new Date(actDatePart);
+    scheduledDate.setHours(hh || 0, mm || 0, 0, 0);
     const { error } = await supabase.from("lead_activities").insert({
       lead_id: leadId,
       title: actTitle.trim(),
       description: actDescription.trim() || null,
-      scheduled_date: new Date(actDate).toISOString(),
+      scheduled_date: scheduledDate.toISOString(),
       created_by: user.id,
     } as any);
     if (error) { console.error("Activity insert error:", error); toast.error("Erro ao criar atividade: " + error.message); }
     else {
       toast.success("Atividade criada!");
-      setActTitle(""); setActDescription(""); setActDate("");
+      setActTitle(""); setActDescription(""); setActDatePart(undefined); setActTimePart("09:00");
       setShowNewActivity(false);
       fetchActivities();
       onActivityChange?.();
@@ -388,19 +391,24 @@ export default function LeadFormDialog({
     setEditActDescription(act.description || "");
     try {
       const d = new Date(act.scheduled_date);
-      setEditActDate(format(d, "yyyy-MM-dd'T'HH:mm"));
+      setEditActDatePart(d);
+      setEditActTimePart(format(d, "HH:mm"));
     } catch {
-      setEditActDate("");
+      setEditActDatePart(undefined);
+      setEditActTimePart("09:00");
     }
   };
 
   const handleUpdateActivity = async () => {
-    if (!editingActivityId || !editActTitle.trim() || !editActDate) return;
+    if (!editingActivityId || !editActTitle.trim() || !editActDatePart) return;
     setEditActSaving(true);
+    const [hh, mm] = editActTimePart.split(":").map(Number);
+    const scheduledDate = new Date(editActDatePart);
+    scheduledDate.setHours(hh || 0, mm || 0, 0, 0);
     const { error } = await supabase.from("lead_activities").update({
       title: editActTitle.trim(),
       description: editActDescription.trim() || null,
-      scheduled_date: new Date(editActDate).toISOString(),
+      scheduled_date: scheduledDate.toISOString(),
     }).eq("id", editingActivityId);
     if (error) toast.error("Erro ao atualizar: " + error.message);
     else {
