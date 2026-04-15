@@ -29,6 +29,8 @@ type FormField = {
   options: string[] | null;
   position: number;
   is_required: boolean;
+  is_name_field?: boolean;
+  is_phone_field?: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
   status_mapping: Record<string, string> | null;
@@ -81,6 +83,143 @@ type Props = {
   statusLabels: Record<string, string>;
   leadId?: string | null;
   onActivityChange?: () => void;
+};
+
+const normalizeKey = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+
+const isFilledValue = (value: unknown) => {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  return true;
+};
+
+const parseStoredDate = (value: unknown): Date | undefined => {
+  if (!value) return undefined;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return undefined;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const parsed = new Date(`${raw}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (brMatch) {
+    const parsed = new Date(`${brMatch[3]}-${brMatch[2]}-${brMatch[1]}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+
+const normalizeCheckboxValue = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value !== "string") return [];
+
+  const raw = value.trim();
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item).trim()).filter(Boolean);
+    }
+  } catch {
+    // noop
+  }
+
+  const splitValues = raw.split(/\s*[;,|]\s*/).map((item) => item.trim()).filter(Boolean);
+  return splitValues.length > 1 ? splitValues : [raw];
+};
+
+const normalizeFieldValue = (field: FormField, value: unknown) => {
+  if (!isFilledValue(value)) return field.field_type === "checkbox_group" ? [] : "";
+
+  if (field.field_type === "checkbox_group") {
+    return normalizeCheckboxValue(value);
+  }
+
+  if (field.field_type === "date") {
+    const parsed = parseStoredDate(value);
+    if (!parsed) return typeof value === "string" ? value : "";
+    return format(parsed, "yyyy-MM-dd");
+  }
+
+  return typeof value === "string" ? value : String(value);
+};
+
+const findLegacyFieldValue = (field: FormField, data: Record<string, any>) => {
+  const entries = Object.entries(data);
+  const labelKey = normalizeKey(field.label);
+
+  const directCandidates = [field.label, labelKey];
+  for (const candidate of directCandidates) {
+    if (isFilledValue(data[candidate])) return data[candidate];
+  }
+
+  const exactMatch = entries.find(([key]) => normalizeKey(key) === labelKey);
+  if (exactMatch && isFilledValue(exactMatch[1])) return exactMatch[1];
+
+  if (field.is_name_field) {
+    const nameEntry = entries.find(([key]) => /nome|cliente|lead/.test(normalizeKey(key)));
+    if (nameEntry && isFilledValue(nameEntry[1])) return nameEntry[1];
+    if (isFilledValue(data.nome_lead)) return data.nome_lead;
+  }
+
+  if (field.is_phone_field) {
+    const phoneEntry = entries.find(([key]) => /telefone|celular|whatsapp|fone/.test(normalizeKey(key)));
+    if (phoneEntry && isFilledValue(phoneEntry[1])) return phoneEntry[1];
+    if (isFilledValue(data.telefone)) return data.telefone;
+  }
+
+  if (labelKey.length > 3) {
+    const fuzzyMatch = entries.find(([key]) => {
+      const normalized = normalizeKey(key);
+      return normalized.includes(labelKey) || labelKey.includes(normalized);
+    });
+    if (fuzzyMatch && isFilledValue(fuzzyMatch[1])) return fuzzyMatch[1];
+  }
+
+  return undefined;
+};
+
+const normalizeLeadDataForFields = (data: Record<string, any>, fields: FormField[]) => {
+  const nextData = { ...data };
+
+  for (const field of fields) {
+    const fieldKey = `field_${field.id}`;
+    const currentValue = nextData[fieldKey];
+    const fallbackValue = findLegacyFieldValue(field, data);
+    const resolvedValue = isFilledValue(currentValue) ? currentValue : fallbackValue;
+
+    if (resolvedValue !== undefined) {
+      nextData[fieldKey] = normalizeFieldValue(field, resolvedValue);
+    }
+  }
+
+  return nextData;
+};
+
+const formatStoredDateLabel = (value: unknown) => {
+  const parsed = parseStoredDate(value);
+  if (!parsed) return typeof value === "string" ? value : "Selecionar data";
+  return format(parsed, "dd/MM/yyyy", { locale: ptBR });
 };
 
 export default function LeadFormDialog({
@@ -154,6 +293,14 @@ export default function LeadFormDialog({
     }
   }, [open, leadId]);
 
+  useEffect(() => {
+    if (!open || fields.length === 0) return;
+    const normalizedData = normalizeLeadDataForFields(formData, fields);
+    if (JSON.stringify(normalizedData) !== JSON.stringify(formData)) {
+      setFormData(normalizedData);
+    }
+  }, [open, fields, leadId, formData, setFormData]);
+
   const fetchActivities = async () => {
     if (!leadId) return;
     const { data } = await supabase
@@ -216,7 +363,10 @@ export default function LeadFormDialog({
   const renderFormField = (field: FormField) => {
     if (!isFieldVisible(field)) return null;
     const fieldKey = `field_${field.id}`;
-    const value = formData[fieldKey] || "";
+    const rawValue = formData[fieldKey];
+    const value = typeof rawValue === "string" ? rawValue : rawValue == null ? "" : String(rawValue);
+    const checkboxValues = normalizeCheckboxValue(rawValue);
+    const selectedDate = parseStoredDate(rawValue);
 
     return (
       <div key={field.id} className={`space-y-2 ${field.parent_field_id ? "ml-4 pl-3 border-l-2 border-primary/20" : ""}`}>
@@ -246,8 +396,7 @@ export default function LeadFormDialog({
         {field.field_type === "checkbox_group" && field.options && (
           <div className="flex flex-wrap gap-1.5">
             {field.options.map((opt) => {
-              const arr: string[] = formData[fieldKey] || [];
-              const checked = arr.includes(opt);
+              const checked = checkboxValues.includes(opt);
               return (
                 <label
                   key={opt}
@@ -288,13 +437,13 @@ export default function LeadFormDialog({
             <PopoverTrigger asChild>
               <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-9 text-sm", !value && "text-muted-foreground")}>
                 <CalendarIcon className="mr-2 h-4 w-4 text-destructive" />
-                {value ? format(new Date(value + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                {value ? formatStoredDateLabel(rawValue) : "Selecionar data"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="single"
-                selected={value ? new Date(value + "T00:00:00") : undefined}
+                selected={selectedDate}
                 onSelect={(d) => set(fieldKey, d ? format(d, "yyyy-MM-dd") : "")}
                 locale={ptBR}
                 className="p-3 pointer-events-auto"
