@@ -35,7 +35,7 @@ type LeadCardProps = {
   onEdit: () => void;
   onDelete: () => void;
   onHistory: () => void;
-  onSchedule?: (date: Date | null) => void;
+  onSchedule?: () => void;
   onToggleComprou?: (value: boolean) => void;
   syncStatus?: "offline" | "synced" | null;
 };
