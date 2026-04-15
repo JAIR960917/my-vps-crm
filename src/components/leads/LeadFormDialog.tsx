@@ -352,13 +352,17 @@ export default function LeadFormDialog({
 
   // Note handlers
   const handleSendNote = async () => {
-    if (!newNote.trim() || !leadId || !user) return;
+    if (!newNote.trim() || !leadId || !user) {
+      console.log("Note missing data:", { newNote: newNote.trim(), leadId, userId: user?.id });
+      return;
+    }
     setNoteSending(true);
     const { error } = await supabase.from("crm_lead_notes").insert({
       lead_id: leadId, user_id: user.id, content: newNote.trim(),
     });
-    if (error) toast.error("Erro ao adicionar comentário");
+    if (error) { console.error("Note insert error:", error); toast.error("Erro ao adicionar comentário: " + error.message); }
     else {
+      toast.success("Comentário adicionado!");
       setNewNote("");
       fetchNotes();
     }
