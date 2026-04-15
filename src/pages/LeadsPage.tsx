@@ -552,8 +552,7 @@ export default function LeadsPage() {
   }, [fullProfiles, isAdmin, isGerente, user?.id]);
 
   const filteredLeads = useMemo(() => leads.filter((l) => !appointedLeadIds.has(l.id)), [leads, appointedLeadIds]);
-  const filteredLeadMap = useMemo(() => new Map(filteredLeads.map((lead) => [lead.id, lead])), [filteredLeads]);
-
+  
   useEffect(() => {
     if (!statuses.length) return;
     setColumnOffsets({});
@@ -564,17 +563,12 @@ export default function LeadsPage() {
   }, [statuses, filterVendedor, filterDateFrom, filterDateTo, appointedLeadIds, offlineIds, fetchLeadsPage]);
 
   const getLeadsByStatus = useCallback((status: string) => {
-    const orderedIds = (columnLeads[status] || []).map((lead) => lead.id);
-    const orderedLeads = orderedIds
-      .map((id) => filteredLeadMap.get(id))
-      .filter((lead): lead is Lead => !!lead && getLeadDisplayStatus(lead) === status);
+    const visibleIds = new Set((columnLeads[status] || []).map((lead) => lead.id));
 
-    const missingLeads = filteredLeads.filter(
-      (lead) => getLeadDisplayStatus(lead) === status && !orderedIds.includes(lead.id)
+    return filteredLeads.filter(
+      (lead) => visibleIds.has(lead.id) && getLeadDisplayStatus(lead) === status
     );
-
-    return [...orderedLeads, ...missingLeads];
-  }, [columnLeads, filteredLeadMap, filteredLeads, getLeadDisplayStatus]);
+  }, [columnLeads, filteredLeads, getLeadDisplayStatus]);
 
   const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
