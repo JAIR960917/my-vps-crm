@@ -513,6 +513,11 @@ export default function LeadsPage() {
     return result;
   }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds]);
 
+  // Reset visible counts when filters change
+  useEffect(() => {
+    setVisibleCounts({});
+  }, [filterVendedor, filterDateFrom, filterDateTo]);
+
   const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
 
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
