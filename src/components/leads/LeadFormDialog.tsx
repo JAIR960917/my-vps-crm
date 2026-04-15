@@ -413,7 +413,7 @@ export default function LeadFormDialog({
         )}
 
         {field.field_type === "textarea" && (
-          <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={2} className="text-sm" />
+          <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={5} className="text-sm min-h-[120px]" />
         )}
 
         {field.field_type === "phone" && (
