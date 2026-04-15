@@ -72,6 +72,13 @@ export default function AppointmentsPage() {
   // Delete
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Sale dialog (when "Vendido" is selected)
+  const [saleDialogOpen, setSaleDialogOpen] = useState(false);
+  const [saleApptId, setSaleApptId] = useState<string | null>(null);
+  const [saleValor, setSaleValor] = useState("");
+  const [salePagamento, setSalePagamento] = useState("");
+  const [saleSaving, setSaleSaving] = useState(false);
+
   const fetchAll = async () => {
     setLoading(true);
     const [{ data: appts }, { data: profs }] = await Promise.all([
