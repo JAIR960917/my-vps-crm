@@ -29,6 +29,8 @@ type FormField = {
   options: string[] | null;
   position: number;
   is_required: boolean;
+  is_name_field?: boolean;
+  is_phone_field?: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
   status_mapping: Record<string, string> | null;
@@ -293,8 +295,11 @@ export default function LeadFormDialog({
 
   useEffect(() => {
     if (!open || fields.length === 0) return;
-    setFormData(normalizeLeadDataForFields(formData, fields));
-  }, [open, fields, leadId]);
+    const normalizedData = normalizeLeadDataForFields(formData, fields);
+    if (JSON.stringify(normalizedData) !== JSON.stringify(formData)) {
+      setFormData(normalizedData);
+    }
+  }, [open, fields, leadId, formData, setFormData]);
 
   const fetchActivities = async () => {
     if (!leadId) return;
