@@ -1,0 +1,1 @@
+ALTER TABLE public.crm_appointments ADD COLUMN valor_entrada numeric NOT NULL DEFAULT 0;
