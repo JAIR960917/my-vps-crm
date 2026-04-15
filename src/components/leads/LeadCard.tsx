@@ -62,7 +62,6 @@ export default function LeadCard({
 
   const isOffline = syncStatus === "offline";
   const isSynced = syncStatus === "synced";
-  const isComprou = lead.comprou === true;
   const isScheduled = !!lead.scheduled_date;
 
   let createdDate = "";
@@ -84,10 +83,7 @@ export default function LeadCard({
   const nameFieldIds = new Set(nameFields.map((f) => f.id));
   const phoneFieldIds = new Set(phoneFields.map((f) => f.id));
 
-  // Card styling based on comprou status (only when not scheduled)
-  const cardBorderClass = isComprou && !isScheduled
-    ? "border-emerald-500 bg-emerald-500/10"
-    : isOffline
+  const cardBorderClass = isOffline
       ? "border-amber-500/50 bg-amber-500/5"
       : isSynced
         ? "border-emerald-500/50 bg-emerald-500/5"
@@ -95,16 +91,6 @@ export default function LeadCard({
 
   return (
     <div className={`rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group ${cardBorderClass}`}>
-      {/* Comprou badge */}
-      {isComprou && (
-        <div className="flex items-center gap-1 mb-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-500 text-white">
-            <ShoppingBag className="h-3 w-3" />
-            Cliente ativo
-          </span>
-        </div>
-      )}
-
       {/* Scheduled badge */}
       {isScheduled && scheduledDateFormatted && (
         <div className="flex items-center gap-1 mb-1.5">
@@ -168,18 +154,6 @@ export default function LeadCard({
                   />
                 </PopoverContent>
               </Popover>
-            )}
-
-            {/* Comprou toggle */}
-            {onToggleComprou && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-7 w-7 ${isComprou ? "text-emerald-500" : ""}`}
-                onClick={(e) => { e.stopPropagation(); onToggleComprou(!isComprou); }}
-              >
-                <ShoppingBag className="h-3.5 w-3.5" />
-              </Button>
             )}
 
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>
