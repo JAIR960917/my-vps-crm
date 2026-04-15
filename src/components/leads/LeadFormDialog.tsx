@@ -19,7 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
+type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null; company_id?: string | null };
 type Company = { id: string; name: string };
 
 type FormField = {
