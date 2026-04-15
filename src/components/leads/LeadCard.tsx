@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle } from "lucide-react";
+import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -76,7 +76,7 @@ export default function LeadCard({
   const nameFieldIds = new Set(nameFields.map((f) => f.id));
   const phoneFieldIds = new Set(phoneFields.map((f) => f.id));
 
-  // Activity status for the card
+  // Activity status
   const pendingActivities = (activities || []).filter(a => !a.completed_at);
   const overdueActivities = pendingActivities.filter(a => new Date(a.scheduled_date) < new Date());
   const todayActivities = pendingActivities.filter(a => {
@@ -95,15 +95,14 @@ export default function LeadCard({
   } else if (isSynced) {
     cardBorderClass = "border-emerald-500/50 bg-emerald-500/5";
   } else if (hasOverdue) {
-    cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20";
+    cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
   } else if (hasToday) {
     cardBorderClass = "border-amber-400 bg-amber-500/5";
   } else if (hasPending) {
     cardBorderClass = "border-blue-400/50 bg-blue-500/5";
   }
 
-  // Next activity to show
-  const nextActivity = pendingActivities.sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())[0];
+  const nextActivity = [...pendingActivities].sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())[0];
 
   return (
     <div className={`rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group ${cardBorderClass}`}>
@@ -133,7 +132,6 @@ export default function LeadCard({
                 <CalendarPlus className="h-3.5 w-3.5 text-primary" />
               </Button>
             )}
-
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>
               <MessageSquare className="h-3.5 w-3.5 text-primary" />
             </Button>
@@ -178,32 +176,6 @@ export default function LeadCard({
           );
         })}
 
-      {/* Next activity indicator */}
-      {nextActivity && (
-        <div className={`mt-2 pt-2 border-t flex items-center gap-1.5 ${
-          hasOverdue ? "text-red-500" : hasToday ? "text-amber-600" : "text-blue-500"
-        }`}>
-          {hasOverdue ? (
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          ) : (
-            <CalendarClock className="h-3.5 w-3.5 shrink-0" />
-          )}
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium truncate">{nextActivity.title}</p>
-            <p className="text-[10px] opacity-80">
-              {(() => {
-                try {
-                  return format(new Date(nextActivity.scheduled_date), "dd/MM 'às' HH:mm", { locale: ptBR });
-                } catch {
-                  return "";
-                }
-              })()}
-              {hasOverdue && " · Atrasada"}
-            </p>
-          </div>
-        </div>
-      )}
-
       {assignedProfile && (
         <div className="mt-2 pt-2 border-t">
           <p className="text-[11px] text-muted-foreground leading-tight">Pessoa responsável</p>
@@ -220,6 +192,51 @@ export default function LeadCard({
           </div>
         </div>
       )}
+
+      {/* Activity section */}
+      <div className="mt-2 pt-2 border-t">
+        {/* Overdue badge */}
+        {hasOverdue && (
+          <div className="mb-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full uppercase">
+              <AlertTriangle className="h-3 w-3" />
+              Atrasada
+            </span>
+          </div>
+        )}
+
+        {/* Today badge */}
+        {hasToday && !hasOverdue && (
+          <div className="mb-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <CalendarClock className="h-3 w-3" />
+              Hoje
+            </span>
+          </div>
+        )}
+
+        {/* Next activity info */}
+        {nextActivity && (
+          <div className={`text-xs mb-1.5 ${hasOverdue ? "text-red-600" : hasToday ? "text-amber-600" : "text-muted-foreground"}`}>
+            <p className="font-medium truncate">{nextActivity.title}</p>
+            <p className="text-[10px]">
+              {(() => {
+                try { return format(new Date(nextActivity.scheduled_date), "dd/MM 'às' HH:mm", { locale: ptBR }); }
+                catch { return ""; }
+              })()}
+            </p>
+          </div>
+        )}
+
+        {/* + Atividade button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Atividade
+        </button>
+      </div>
     </div>
   );
 }
