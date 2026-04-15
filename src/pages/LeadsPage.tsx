@@ -35,6 +35,7 @@ type CrmStatus = {
 };
 type Company = { id: string; name: string };
 type FormFieldInfo = { id: string; label: string; is_name_field: boolean; is_phone_field: boolean; show_on_card?: boolean; status_mapping?: Record<string, string> | null; date_status_ranges?: { ranges: { max_years: number; status_key: string }[]; above_all: string; no_answer: string } | null };
+type LeadActivity = { id: string; lead_id: string; title: string; scheduled_date: string; completed_at: string | null };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
