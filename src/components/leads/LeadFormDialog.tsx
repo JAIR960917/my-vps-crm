@@ -225,16 +225,23 @@ export default function LeadFormDialog({
           {field.is_required && <span className="text-destructive ml-1">*</span>}
         </Label>
 
-        {field.field_type === "select" && field.options && (
-          <Select value={value} onValueChange={(v) => set(fieldKey, v)}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione" /></SelectTrigger>
-            <SelectContent>
-              {field.options.map((opt) => (
-                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        {field.field_type === "select" && field.options && (() => {
+          const opts = field.options!;
+          const hasValueInOptions = !value || opts.includes(value);
+          return (
+            <Select value={value} onValueChange={(v) => set(fieldKey, v)}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {!hasValueInOptions && value && (
+                  <SelectItem key={`__saved_${value}`} value={value}>{value}</SelectItem>
+                )}
+                {opts.map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          );
+        })()}
 
         {field.field_type === "checkbox_group" && field.options && (
           <div className="flex flex-wrap gap-1.5">
