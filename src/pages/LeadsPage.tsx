@@ -678,13 +678,15 @@ export default function LeadsPage() {
 
       {/* Desktop: Kanban board with drag & drop */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ minHeight: "calc(100vh - 200px)" }}>
+        <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map((status) => {
             const statusLeads = getLeadsByStatus(status.key);
+            const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
+            const hasMore = statusLeads.length > visibleLeads.length;
             const colors = colorMap[status.color] || colorMap.blue;
             return (
-              <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col">
-                <div className="flex items-center gap-2 mb-2 px-1">
+              <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
+                <div className="flex items-center gap-2 mb-2 px-1 flex-shrink-0">
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
@@ -695,13 +697,17 @@ export default function LeadsPage() {
                 <Droppable droppableId={status.key}>
                   {(provided, snapshot) => (
                     <div
-                      ref={provided.innerRef}
+                      ref={(el) => {
+                        provided.innerRef(el);
+                        columnRefs.current[status.key] = el;
+                      }}
                       {...provided.droppableProps}
-                      className={`flex-1 rounded-xl p-2 space-y-2 transition-colors ${
+                      onScroll={(e) => handleColumnScroll(status.key, e)}
+                      className={`flex-1 rounded-xl p-2 space-y-2 transition-colors overflow-y-auto min-h-0 ${
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
                       }`}
                     >
-                      {statusLeads.map((lead, index) => (
+                      {visibleLeads.map((lead, index) => (
                         <Draggable key={lead.id} draggableId={lead.id} index={index}>
                           {(provided, snapshot) => (
                             <div
@@ -733,6 +739,12 @@ export default function LeadsPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
+
+                      {hasMore && (
+                        <p className="text-center text-xs text-muted-foreground py-1">
+                          Mostrando {visibleLeads.length} de {statusLeads.length} — role para carregar mais
+                        </p>
+                      )}
 
                       <button
                         onClick={() => navigate(`/novo-lead?status=${status.key}`)}
