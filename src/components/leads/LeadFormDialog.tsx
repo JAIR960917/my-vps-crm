@@ -731,49 +731,86 @@ export default function LeadFormDialog({
                                       </Avatar>
                                     )}
                                     {canDelete && (
-                                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleDeleteActivity(act.id)}>
-                                        <Trash2 className="h-3 w-3 text-destructive" />
-                                      </Button>
+                                      <>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => startEditActivity(act)}>
+                                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleDeleteActivity(act.id)}>
+                                          <Trash2 className="h-3 w-3 text-destructive" />
+                                        </Button>
+                                      </>
                                     )}
                                   </div>
                                 </div>
 
-                                <div className="mt-2 rounded-md bg-background/50 p-2.5">
-                                  <div className="flex items-center gap-4 text-sm">
-                                    <div>
-                                      <span className="text-muted-foreground text-xs">Prazo</span>
-                                      <p className={`font-medium text-xs ${status === "overdue" ? "text-red-600" : ""}`}>
-                                        {scheduledFormatted}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <span className="text-muted-foreground text-xs">Título</span>
-                                      <p className={`font-medium text-xs ${status === "completed" ? "line-through text-muted-foreground" : ""}`}>
-                                        {act.title}
-                                      </p>
+                                {editingActivityId === act.id ? (
+                                  <div className="mt-2 rounded-md bg-background/50 p-2.5 space-y-2">
+                                    <Input
+                                      value={editActTitle}
+                                      onChange={(e) => setEditActTitle(e.target.value)}
+                                      placeholder="Título..."
+                                      className="h-8 text-sm"
+                                    />
+                                    <Textarea
+                                      value={editActDescription}
+                                      onChange={(e) => setEditActDescription(e.target.value)}
+                                      placeholder="Descrição (opcional)..."
+                                      rows={2}
+                                      className="text-sm"
+                                    />
+                                    <Input
+                                      type="datetime-local"
+                                      value={editActDate}
+                                      onChange={(e) => setEditActDate(e.target.value)}
+                                      className="h-8 text-sm"
+                                    />
+                                    <div className="flex gap-2">
+                                      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setEditingActivityId(null)}>Cancelar</Button>
+                                      <Button size="sm" className="text-xs h-7" onClick={handleUpdateActivity} disabled={editActSaving || !editActTitle.trim() || !editActDate}>
+                                        {editActSaving ? "Salvando..." : "Salvar"}
+                                      </Button>
                                     </div>
                                   </div>
-                                  {act.description && (
-                                    <p className="text-xs text-muted-foreground mt-1.5">{act.description}</p>
-                                  )}
-                                  {profile && (
-                                    <div className="mt-1.5">
-                                      <span className="text-muted-foreground text-xs">Responsável</span>
-                                      <p className="text-xs font-medium text-primary">{profile.full_name}</p>
+                                ) : (
+                                  <>
+                                    <div className="mt-2 rounded-md bg-background/50 p-2.5">
+                                      <div className="flex items-center gap-4 text-sm">
+                                        <div>
+                                          <span className="text-muted-foreground text-xs">Prazo</span>
+                                          <p className={`font-medium text-xs ${status === "overdue" ? "text-red-600" : ""}`}>
+                                            {scheduledFormatted}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <span className="text-muted-foreground text-xs">Título</span>
+                                          <p className={`font-medium text-xs ${status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+                                            {act.title}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      {act.description && (
+                                        <p className="text-xs text-muted-foreground mt-1.5">{act.description}</p>
+                                      )}
+                                      {profile && (
+                                        <div className="mt-1.5">
+                                          <span className="text-muted-foreground text-xs">Responsável</span>
+                                          <p className="text-xs font-medium text-primary">{profile.full_name}</p>
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
 
-                                <div className="flex gap-2 mt-2">
-                                  <Button
-                                    size="sm"
-                                    variant={status === "completed" ? "outline" : "default"}
-                                    className="text-xs h-7"
-                                    onClick={() => handleToggleComplete(act)}
-                                  >
-                                    {status === "completed" ? "Reabrir" : "Concluir"}
-                                  </Button>
-                                </div>
+                                    <div className="flex gap-2 mt-2">
+                                      <Button
+                                        size="sm"
+                                        variant={status === "completed" ? "outline" : "default"}
+                                        className="text-xs h-7"
+                                        onClick={() => handleToggleComplete(act)}
+                                      >
+                                        {status === "completed" ? "Reabrir" : "Concluir"}
+                                      </Button>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
