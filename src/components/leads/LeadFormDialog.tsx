@@ -504,7 +504,7 @@ export default function LeadFormDialog({
               <div className="rounded-lg border bg-muted/30 divide-y divide-border">
                 <div className="flex justify-between items-center px-4 py-2.5">
                   <span className="text-sm font-medium text-muted-foreground">Empresa</span>
-                  <span className="text-sm text-foreground font-medium">{companies.length > 0 ? companies.map(c => c.name).join(", ") : "—"}</span>
+                  <span className="text-sm text-foreground font-medium">{assignedCompanyName}</span>
                 </div>
                 <div className="flex justify-between items-center px-4 py-2.5">
                   <span className="text-sm font-medium text-muted-foreground">Vendedor</span>
