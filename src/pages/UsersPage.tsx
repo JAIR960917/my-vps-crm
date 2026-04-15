@@ -324,7 +324,7 @@ export default function UsersPage() {
               <th className="text-left p-3 text-sm font-medium text-muted-foreground">Nome</th>
               <th className="text-left p-3 text-sm font-medium text-muted-foreground">Email</th>
               <th className="text-left p-3 text-sm font-medium text-muted-foreground">Papel</th>
-              {isAdmin && <th className="text-left p-3 text-sm font-medium text-muted-foreground">Empresas</th>}
+              <th className="text-left p-3 text-sm font-medium text-muted-foreground">Empresa</th>
               <th className="text-right p-3 text-sm font-medium text-muted-foreground">Ações</th>
             </tr>
           </thead>
@@ -342,11 +342,9 @@ export default function UsersPage() {
                       ))}
                     </div>
                   </td>
-                  {isAdmin && (
-                    <td className="p-3 text-sm text-muted-foreground">
-                      {companyNames.length > 0 ? companyNames.join(", ") : "—"}
-                    </td>
-                  )}
+                  <td className="p-3 text-sm text-muted-foreground">
+                    {companyNames.length > 0 ? companyNames.join(", ") : "—"}
+                  </td>
                   <td className="p-3 text-right"><ActionMenu profile={p} /></td>
                 </tr>
               );
