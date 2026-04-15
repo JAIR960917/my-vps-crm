@@ -221,7 +221,7 @@ export default function ImportLeadsPage() {
           data: data as any,
           status,
           assigned_to: assignedTo,
-          created_by: assignedTo,
+          created_by: user?.id || null,
           ...(createdAt ? { created_at: createdAt } : {}),
         };
       });
