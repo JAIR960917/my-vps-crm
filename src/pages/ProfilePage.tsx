@@ -198,6 +198,69 @@ export default function ProfilePage() {
             Salvar
           </Button>
         </div>
+
+        {/* Alterar Senha */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Lock className="h-5 w-5" />
+            Alterar Senha
+          </h2>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="newPassword">Nova senha</Label>
+            <Input
+              id="newPassword"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              maxLength={128}
+              placeholder="Mínimo 8 caracteres"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              maxLength={128}
+              placeholder="Repita a nova senha"
+            />
+          </div>
+
+          <Button
+            onClick={async () => {
+              if (newPassword.length < 8) {
+                toast.error("A senha deve ter no mínimo 8 caracteres");
+                return;
+              }
+              if (newPassword !== confirmPassword) {
+                toast.error("As senhas não coincidem");
+                return;
+              }
+              setChangingPassword(true);
+              try {
+                const { error } = await supabase.auth.updateUser({ password: newPassword });
+                if (error) throw error;
+                toast.success("Senha alterada com sucesso!");
+                setNewPassword("");
+                setConfirmPassword("");
+              } catch {
+                toast.error("Erro ao alterar senha");
+              } finally {
+                setChangingPassword(false);
+              }
+            }}
+            disabled={changingPassword || !newPassword || !confirmPassword}
+            className="w-full"
+            variant="outline"
+          >
+            {changingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
+            Alterar Senha
+          </Button>
+        </div>
       </div>
     </AppLayout>
   );
