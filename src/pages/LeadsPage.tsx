@@ -144,7 +144,7 @@ export default function LeadsPage() {
     if (!navigator.onLine) return;
 
     try {
-      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
+      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }, { data: noteData }] = await Promise.all([
         fetchAllLeads(),
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
@@ -155,6 +155,7 @@ export default function LeadsPage() {
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
         supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
         supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
+        supabase.from("crm_lead_notes").select("lead_id"),
       ]);
       setColumns(cols || []);
       const loadedLeads = (lds || []) as Lead[];
