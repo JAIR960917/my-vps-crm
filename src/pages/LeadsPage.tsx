@@ -7,7 +7,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Plus, Filter, X } from "lucide-react";
+import { Plus, Filter, X, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import LeadCard from "@/components/leads/LeadCard";
@@ -79,6 +80,7 @@ export default function LeadsPage() {
   const [filterDateTo, setFilterDateTo] = useState<Date | undefined>();
   const [showFilters, setShowFilters] = useState(false);
   const [fullProfiles, setFullProfiles] = useState<Profile[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Schedule dialog
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -86,6 +88,7 @@ export default function LeadsPage() {
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
+  const [leadNoteIds, setLeadNoteIds] = useState<Set<string>>(new Set());
 
   // Lazy rendering: track how many leads to show per status column
   const LEADS_PER_PAGE = 20;
@@ -141,7 +144,7 @@ export default function LeadsPage() {
     if (!navigator.onLine) return;
 
     try {
-      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }] = await Promise.all([
+      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }, { data: activeAppts }, { data: actData }, { data: noteData }] = await Promise.all([
         fetchAllLeads(),
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
@@ -152,6 +155,7 @@ export default function LeadsPage() {
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
         supabase.from("crm_appointments").select("lead_id").eq("status", "agendado"),
         supabase.from("lead_activities").select("id, lead_id, title, scheduled_date, completed_at"),
+        supabase.from("crm_lead_notes").select("lead_id"),
       ]);
       setColumns(cols || []);
       const loadedLeads = (lds || []) as Lead[];
@@ -170,6 +174,7 @@ export default function LeadsPage() {
       setFullProfiles((fullProfs || []) as Profile[]);
       setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
       setLeadActivities((actData || []) as LeadActivity[]);
+      setLeadNoteIds(new Set((noteData || []).map((n: any) => n.lead_id)));
 
       // Cache for offline
       try {
@@ -494,6 +499,16 @@ export default function LeadsPage() {
     return fullProfiles.filter(p => p.company_id === myProfile.company_id);
   }, [fullProfiles, isAdmin, isGerente, user?.id]);
 
+  // Helper to get lead name/phone for search
+  const getLeadSearchText = useCallback((lead: Lead) => {
+    const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
+    const nameFields = formFields.filter((f) => f.is_name_field);
+    const phoneFields = formFields.filter((f) => f.is_phone_field);
+    const nome = nameFields.reduce<string>((found, f) => found || data[`field_${f.id}`] || "", null as any) || data.nome_lead || "";
+    const telefone = phoneFields.reduce<string>((found, f) => found || data[`field_${f.id}`] || "", null as any) || data.telefone || "";
+    return `${nome} ${telefone}`.toLowerCase();
+  }, [formFields]);
+
   // Apply filters to leads
   const filteredLeads = useMemo(() => {
     let result = leads.filter(l => !appointedLeadIds.has(l.id));
@@ -510,20 +525,46 @@ export default function LeadsPage() {
       to.setHours(23, 59, 59, 999);
       result = result.filter(l => new Date(l.created_at) <= to);
     }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase().replace(/\D/g, "") || searchQuery.trim().toLowerCase();
+      const qText = searchQuery.trim().toLowerCase();
+      result = result.filter(l => {
+        const text = getLeadSearchText(l);
+        return text.includes(qText) || text.replace(/\D/g, "").includes(q);
+      });
+    }
     return result;
-  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds]);
+  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds, searchQuery, getLeadSearchText]);
 
   // Reset visible counts when filters change
   useEffect(() => {
     setVisibleCounts({});
-  }, [filterVendedor, filterDateFrom, filterDateTo]);
+  }, [filterVendedor, filterDateFrom, filterDateTo, searchQuery]);
 
-  const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
+  // Build a set of lead IDs that have recent activity (completed task or note)
+  const leadsWithRecentActivity = useMemo(() => {
+    const ids = new Set<string>();
+    // Leads with completed activities
+    leadActivities.filter(a => a.completed_at).forEach(a => ids.add(a.lead_id));
+    // Leads with notes
+    leadNoteIds.forEach(id => ids.add(id));
+    return ids;
+  }, [leadActivities, leadNoteIds]);
+
+  const getLeadsByStatus = (status: string) => {
+    const statusLeads = filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
+    // Sort: leads WITH recent activity go to the end
+    return statusLeads.sort((a, b) => {
+      const aHasActivity = leadsWithRecentActivity.has(a.id) ? 1 : 0;
+      const bHasActivity = leadsWithRecentActivity.has(b.id) ? 1 : 0;
+      return aHasActivity - bHasActivity;
+    });
+  };
 
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
 
-  const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo;
-  const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); };
+  const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo || searchQuery.trim();
+  const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSearchQuery(""); };
 
   const getSyncStatus = (leadId: string): "offline" | "synced" | null => {
     if (offlineIds.has(leadId)) return "offline";
@@ -557,6 +598,22 @@ export default function LeadsPage() {
             <Plus className="mr-1 h-4 w-4" />Lead
           </Button>
         </div>
+      </div>
+
+      {/* Search bar */}
+      <div className="mb-3 relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por nome ou telefone..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-9 text-sm"
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
       </div>
 
       {/* Filter bar */}
