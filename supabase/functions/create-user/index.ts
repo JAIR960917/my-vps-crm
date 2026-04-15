@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { email, password, full_name, role } = await req.json();
+  const { email, password, full_name, role, company_id } = await req.json();
 
   const validRoles = ["admin", "vendedor", "gerente"];
   if (!email || !password || !role) {
@@ -123,10 +123,12 @@ Deno.serve(async (req) => {
   });
 
   // If created by gerente, auto-assign to same company
-  if (companyId) {
+  // If admin provided a company_id, use that instead
+  const finalCompanyId = isAdmin && company_id ? company_id : companyId;
+  if (finalCompanyId) {
     await supabaseAdmin
       .from("profiles")
-      .update({ company_id: companyId })
+      .update({ company_id: finalCompanyId })
       .eq("user_id", newUser.user.id);
   }
 

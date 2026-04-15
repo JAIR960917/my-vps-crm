@@ -39,8 +39,8 @@ export default function UsersPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState("vendedor");
+  const [createCompanyId, setCreateCompanyId] = useState<string>("__none__");
   const [creating, setCreating] = useState(false);
 
   // Edit dialog
@@ -95,15 +95,17 @@ export default function UsersPage() {
     e.preventDefault();
     if (!canManage) return;
     setCreating(true);
-    const { data, error } = await supabase.functions.invoke("create-user", {
-      body: { email, password, full_name: name, role },
-    });
+    const body: Record<string, any> = { email, password: "joonker2026", full_name: name, role };
+    if (isAdmin && createCompanyId !== "__none__") {
+      body.company_id = createCompanyId;
+    }
+    const { data, error } = await supabase.functions.invoke("create-user", { body });
     if (error || data?.error) {
       toast.error(data?.error || "Erro ao criar usuário");
     } else {
-      toast.success("Usuário criado");
+      toast.success("Usuário criado com senha padrão: joonker2026");
       setOpenCreate(false);
-      setName(""); setEmail(""); setPassword(""); setRole("vendedor");
+      setName(""); setEmail(""); setRole("vendedor"); setCreateCompanyId("__none__");
       fetchData();
     }
     setCreating(false);
@@ -251,10 +253,6 @@ export default function UsersPage() {
                 <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label>Senha</Label>
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
-              </div>
-              <div className="space-y-2">
                 <Label>Papel</Label>
                 <Select value={role} onValueChange={setRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -265,6 +263,21 @@ export default function UsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {isAdmin && (
+                <div className="space-y-2">
+                  <Label>Empresa</Label>
+                  <Select value={createCompanyId} onValueChange={setCreateCompanyId}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Nenhuma</SelectItem>
+                      {companies.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">Senha padrão: <strong>joonker2026</strong></p>
               <Button type="submit" className="w-full" disabled={creating}>
                 {creating ? "Criando..." : "Criar Usuário"}
               </Button>
