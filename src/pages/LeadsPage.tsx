@@ -88,6 +88,7 @@ export default function LeadsPage() {
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
+  const [leadNoteIds, setLeadNoteIds] = useState<Set<string>>(new Set());
 
   // Lazy rendering: track how many leads to show per status column
   const LEADS_PER_PAGE = 20;
