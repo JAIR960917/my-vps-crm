@@ -288,8 +288,11 @@ export default function LeadsPage() {
     e.preventDefault();
     setSaving(true);
     if (editingLead) {
+      // Recalculate status based on date/mapping fields if they exist
+      const hasMappingField = formFields.some(f => (f.status_mapping && Object.keys(f.status_mapping).length > 0) || f.date_status_ranges);
+      const finalStatus = hasMappingField ? resolveStatus(formData) : formStatus;
       const { error } = await supabase.from("crm_leads").update({
-        data: formData, status: formStatus, assigned_to: formAssigned || null,
+        data: formData, status: finalStatus, assigned_to: formAssigned || null,
       }).eq("id", editingLead.id);
       if (error) toast.error("Erro ao atualizar");
       else toast.success("Lead atualizado");
