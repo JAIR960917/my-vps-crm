@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Sem permissão" }, 403);
   }
 
-  const { action, target_user_id, full_name, new_password, role, company_id } = await req.json();
+  const { action, target_user_id, full_name, email, new_password, role, company_id } = await req.json();
 
   if (!action || !target_user_id) {
     return jsonResponse({ error: "action e target_user_id são obrigatórios" }, 400);
@@ -106,6 +106,9 @@ Deno.serve(async (req) => {
     if (typeof full_name === "string" && full_name.trim().length > 0 && full_name.length <= 100) {
       updates.full_name = full_name.trim();
     }
+    if (typeof email === "string" && email.trim().length > 0 && email.length <= 255) {
+      updates.email = email.trim().toLowerCase();
+    }
 
     if (Object.keys(updates).length > 0) {
       const { error } = await supabaseAdmin
@@ -113,6 +116,14 @@ Deno.serve(async (req) => {
         .update(updates)
         .eq("user_id", target_user_id);
       if (error) return jsonResponse({ error: "Falha ao atualizar perfil" }, 400);
+    }
+
+    // Update auth email if changed
+    if (typeof email === "string" && email.trim().length > 0) {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(target_user_id, {
+        email: email.trim().toLowerCase(),
+      });
+      if (error) return jsonResponse({ error: "Falha ao atualizar email de autenticação" }, 400);
     }
 
     // Update role if provided (admin only, or gerente for vendedor)

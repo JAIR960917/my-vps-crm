@@ -47,6 +47,7 @@ export default function UsersPage() {
   const [openEdit, setOpenEdit] = useState(false);
   const [editTarget, setEditTarget] = useState<Profile | null>(null);
   const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editCompanyId, setEditCompanyId] = useState<string>("__none__");
   const [saving, setSaving] = useState(false);
@@ -115,6 +116,7 @@ export default function UsersPage() {
   const openEditDialog = (p: Profile) => {
     setEditTarget(p);
     setEditName(p.full_name);
+    setEditEmail(p.email);
     const roles = getRoles(p.user_id);
     setEditRole(roles[0] || "vendedor");
     setEditCompanyId(p.company_id || "__none__");
@@ -130,6 +132,7 @@ export default function UsersPage() {
         action: "update",
         target_user_id: editTarget.user_id,
         full_name: editName,
+        email: editEmail,
         role: editRole,
         ...(isAdmin ? { company_id: editCompanyId === "__none__" ? null : editCompanyId } : {}),
       },
@@ -362,6 +365,10 @@ export default function UsersPage() {
             <div className="space-y-2">
               <Label>Nome completo</Label>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required />
             </div>
             <div className="space-y-2">
               <Label>Papel</Label>
