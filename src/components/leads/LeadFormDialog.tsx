@@ -102,14 +102,16 @@ export default function LeadFormDialog({
   const [showNewActivity, setShowNewActivity] = useState(false);
   const [actTitle, setActTitle] = useState("");
   const [actDescription, setActDescription] = useState("");
-  const [actDate, setActDate] = useState("");
+  const [actDatePart, setActDatePart] = useState<Date | undefined>(undefined);
+  const [actTimePart, setActTimePart] = useState("09:00");
   const [actSaving, setActSaving] = useState(false);
 
   // Edit activity
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [editActTitle, setEditActTitle] = useState("");
   const [editActDescription, setEditActDescription] = useState("");
-  const [editActDate, setEditActDate] = useState("");
+  const [editActDatePart, setEditActDatePart] = useState<Date | undefined>(undefined);
+  const [editActTimePart, setEditActTimePart] = useState("09:00");
   const [editActSaving, setEditActSaving] = useState(false);
 
   // New note
@@ -342,24 +344,27 @@ export default function LeadFormDialog({
 
   // Activity handlers
   const handleCreateActivity = async () => {
-    if (!actTitle.trim() || !actDate || !leadId || !user) {
-      console.log("Missing data:", { actTitle, actDate, leadId, userId: user?.id });
+    if (!actTitle.trim() || !actDatePart || !leadId || !user) {
+      console.log("Missing data:", { actTitle, actDatePart, leadId, userId: user?.id });
       if (!actTitle.trim()) toast.error("Preencha o título");
-      if (!actDate) toast.error("Preencha a data");
+      if (!actDatePart) toast.error("Preencha a data");
       return;
     }
     setActSaving(true);
+    const [hh, mm] = actTimePart.split(":").map(Number);
+    const scheduledDate = new Date(actDatePart);
+    scheduledDate.setHours(hh || 0, mm || 0, 0, 0);
     const { error } = await supabase.from("lead_activities").insert({
       lead_id: leadId,
       title: actTitle.trim(),
       description: actDescription.trim() || null,
-      scheduled_date: new Date(actDate).toISOString(),
+      scheduled_date: scheduledDate.toISOString(),
       created_by: user.id,
     } as any);
     if (error) { console.error("Activity insert error:", error); toast.error("Erro ao criar atividade: " + error.message); }
     else {
       toast.success("Atividade criada!");
-      setActTitle(""); setActDescription(""); setActDate("");
+      setActTitle(""); setActDescription(""); setActDatePart(undefined); setActTimePart("09:00");
       setShowNewActivity(false);
       fetchActivities();
       onActivityChange?.();
@@ -386,19 +391,24 @@ export default function LeadFormDialog({
     setEditActDescription(act.description || "");
     try {
       const d = new Date(act.scheduled_date);
-      setEditActDate(format(d, "yyyy-MM-dd'T'HH:mm"));
+      setEditActDatePart(d);
+      setEditActTimePart(format(d, "HH:mm"));
     } catch {
-      setEditActDate("");
+      setEditActDatePart(undefined);
+      setEditActTimePart("09:00");
     }
   };
 
   const handleUpdateActivity = async () => {
-    if (!editingActivityId || !editActTitle.trim() || !editActDate) return;
+    if (!editingActivityId || !editActTitle.trim() || !editActDatePart) return;
     setEditActSaving(true);
+    const [hh, mm] = editActTimePart.split(":").map(Number);
+    const scheduledDate = new Date(editActDatePart);
+    scheduledDate.setHours(hh || 0, mm || 0, 0, 0);
     const { error } = await supabase.from("lead_activities").update({
       title: editActTitle.trim(),
       description: editActDescription.trim() || null,
-      scheduled_date: new Date(editActDate).toISOString(),
+      scheduled_date: scheduledDate.toISOString(),
     }).eq("id", editingActivityId);
     if (error) toast.error("Erro ao atualizar: " + error.message);
     else {
@@ -665,15 +675,26 @@ export default function LeadFormDialog({
                     rows={2}
                     className="text-sm"
                   />
-                  <Input
-                    type="datetime-local"
-                    value={actDate}
-                    onChange={(e) => setActDate(e.target.value)}
-                    className="h-9 text-sm"
-                  />
+                  <div className="flex gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="flex-1 justify-start text-left h-9 text-sm">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {actDatePart ? format(actDatePart, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar mode="single" selected={actDatePart} onSelect={setActDatePart} locale={ptBR} className="p-3 pointer-events-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    <div className="relative">
+                      <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input type="time" value={actTimePart} onChange={(e) => setActTimePart(e.target.value)} className="h-9 text-sm pl-9 w-[120px]" />
+                    </div>
+                  </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => setShowNewActivity(false)}>Cancelar</Button>
-                    <Button size="sm" onClick={handleCreateActivity} disabled={actSaving || !actTitle.trim() || !actDate}>
+                    <Button size="sm" onClick={handleCreateActivity} disabled={actSaving || !actTitle.trim() || !actDatePart}>
                       {actSaving ? "Salvando..." : "Salvar"}
                     </Button>
                   </div>
@@ -781,15 +802,26 @@ export default function LeadFormDialog({
                                       rows={2}
                                       className="text-sm"
                                     />
-                                    <Input
-                                      type="datetime-local"
-                                      value={editActDate}
-                                      onChange={(e) => setEditActDate(e.target.value)}
-                                      className="h-8 text-sm"
-                                    />
+                                    <div className="flex gap-2">
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <Button variant="outline" className="flex-1 justify-start text-left h-8 text-sm">
+                                            <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                            {editActDatePart ? format(editActDatePart, "dd/MM/yyyy", { locale: ptBR }) : "Data"}
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                          <Calendar mode="single" selected={editActDatePart} onSelect={setEditActDatePart} locale={ptBR} className="p-3 pointer-events-auto" />
+                                        </PopoverContent>
+                                      </Popover>
+                                      <div className="relative">
+                                        <Clock className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                        <Input type="time" value={editActTimePart} onChange={(e) => setEditActTimePart(e.target.value)} className="h-8 text-sm pl-8 w-[110px]" />
+                                      </div>
+                                    </div>
                                     <div className="flex gap-2">
                                       <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setEditingActivityId(null)}>Cancelar</Button>
-                                      <Button size="sm" className="text-xs h-7" onClick={handleUpdateActivity} disabled={editActSaving || !editActTitle.trim() || !editActDate}>
+                                      <Button size="sm" className="text-xs h-7" onClick={handleUpdateActivity} disabled={editActSaving || !editActTitle.trim() || !editActDatePart}>
                                         {editActSaving ? "Salvando..." : "Salvar"}
                                       </Button>
                                     </div>
