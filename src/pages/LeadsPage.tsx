@@ -332,8 +332,8 @@ export default function LeadsPage() {
 
       let existingLead: Lead | null = null;
       if (leadName && leadPhone) {
-        // Search for existing lead with same name+phone
-        const { data: allLeads } = await supabase.from("crm_leads").select("*");
+        // Search for existing lead with same name+phone using already loaded leads
+        const allLeads = leads;
         if (allLeads) {
           existingLead = (allLeads as Lead[]).find(l => {
             const d = typeof l.data === "object" ? (l.data as Record<string, any>) : {};
