@@ -151,15 +151,17 @@ export default function ImportLeadsPage() {
     const formOpts = formFields.map((f) => ({ value: f.id, label: `📝 ${f.label}`, group: "Campos do Formulário" }));
     const colOpts = crmColumns.map((c) => ({ value: `col__${c.field_key}`, label: `📊 ${c.name}`, group: "Colunas CRM" }));
     const userOpts = profiles.map((p) => ({ value: `user__${p.user_id}`, label: `👤 ${p.full_name || p.email}`, group: "Usuários" }));
+    const statusOpts = statuses.map((s) => ({ value: `status__${s.key}`, label: `🏷️ ${s.label}`, group: "Status" }));
     return [
       { value: "__status__", label: "⚙️ Status/Etapa", group: "Sistema" },
       { value: "__assigned__", label: "⚙️ Responsável", group: "Sistema" },
       { value: "__created_at__", label: "⚙️ Data de criação", group: "Sistema" },
       ...formOpts,
       ...colOpts,
+      ...statusOpts,
       ...userOpts,
     ];
-  }, [formFields, crmColumns, profiles]);
+  }, [formFields, crmColumns, profiles, statuses]);
 
   // Import logic
   const startImport = async () => {
