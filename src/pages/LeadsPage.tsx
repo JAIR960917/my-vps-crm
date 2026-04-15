@@ -496,6 +496,16 @@ export default function LeadsPage() {
     return fullProfiles.filter(p => p.company_id === myProfile.company_id);
   }, [fullProfiles, isAdmin, isGerente, user?.id]);
 
+  // Helper to get lead name/phone for search
+  const getLeadSearchText = useCallback((lead: Lead) => {
+    const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
+    const nameFields = formFields.filter((f) => f.is_name_field);
+    const phoneFields = formFields.filter((f) => f.is_phone_field);
+    const nome = nameFields.reduce<string>((found, f) => found || data[`field_${f.id}`] || "", null as any) || data.nome_lead || "";
+    const telefone = phoneFields.reduce<string>((found, f) => found || data[`field_${f.id}`] || "", null as any) || data.telefone || "";
+    return `${nome} ${telefone}`.toLowerCase();
+  }, [formFields]);
+
   // Apply filters to leads
   const filteredLeads = useMemo(() => {
     let result = leads.filter(l => !appointedLeadIds.has(l.id));
@@ -512,15 +522,39 @@ export default function LeadsPage() {
       to.setHours(23, 59, 59, 999);
       result = result.filter(l => new Date(l.created_at) <= to);
     }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase().replace(/\D/g, "") || searchQuery.trim().toLowerCase();
+      const qText = searchQuery.trim().toLowerCase();
+      result = result.filter(l => {
+        const text = getLeadSearchText(l);
+        return text.includes(qText) || text.replace(/\D/g, "").includes(q);
+      });
+    }
     return result;
-  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds]);
+  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds, searchQuery, getLeadSearchText]);
 
   // Reset visible counts when filters change
   useEffect(() => {
     setVisibleCounts({});
-  }, [filterVendedor, filterDateFrom, filterDateTo]);
+  }, [filterVendedor, filterDateFrom, filterDateTo, searchQuery]);
 
-  const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
+  // Build a set of lead IDs that have recent activity (completed task or note)
+  const leadsWithRecentActivity = useMemo(() => {
+    const ids = new Set<string>();
+    // Leads with completed activities
+    leadActivities.filter(a => a.completed_at).forEach(a => ids.add(a.lead_id));
+    return ids;
+  }, [leadActivities]);
+
+  const getLeadsByStatus = (status: string) => {
+    const statusLeads = filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
+    // Sort: leads WITH recent activity go to the end
+    return statusLeads.sort((a, b) => {
+      const aHasActivity = leadsWithRecentActivity.has(a.id) ? 1 : 0;
+      const bHasActivity = leadsWithRecentActivity.has(b.id) ? 1 : 0;
+      return aHasActivity - bHasActivity;
+    });
+  };
 
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
 
