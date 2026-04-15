@@ -53,13 +53,17 @@ export default function LeadCard({
 
   const nameFields = formFields.filter((f) => f.is_name_field);
   const phoneFields = formFields.filter((f) => f.is_phone_field);
+  const fallbackNameFields = formFields.filter((f) => /nome/i.test(f.label) && !f.is_phone_field);
+  const fallbackPhoneFields = formFields.filter((f) => /telefone|celular|whatsapp|fone/i.test(f.label));
 
   const displayName = nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
+    || fallbackNameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
     || data.nome_lead
     || (columns[0] && data[columns[0].field_key])
     || "Sem nome";
 
   const displayPhone = phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
+    || fallbackPhoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
     || data.telefone
     || null;
 
