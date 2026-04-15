@@ -452,11 +452,22 @@ export default function LeadFormDialog({
           </Popover>
         )}
 
-        {["text", "number", "email"].includes(field.field_type) && (
+        {["text", "number", "email"].includes(field.field_type) && !field.is_phone_field && (
           <Input
             type={field.field_type}
             value={value}
             onChange={(e) => set(fieldKey, e.target.value)}
+            required={field.is_required}
+            className="h-9 text-sm"
+          />
+        )}
+
+        {field.is_phone_field && (
+          <Input
+            type="tel"
+            value={typeof value === "string" ? formatPhoneBR(value) : value}
+            onChange={(e) => set(fieldKey, e.target.value.replace(/\D/g, ""))}
+            placeholder="(00) 00000-0000"
             required={field.is_required}
             className="h-9 text-sm"
           />
