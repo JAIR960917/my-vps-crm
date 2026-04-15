@@ -50,6 +50,7 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Calculate today's range in BR timezone
     const brOffset = -3 * 60 * 60 * 1000;
     const brNow = new Date(now.getTime() + brOffset);
     const todayStart = new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()));
@@ -57,22 +58,23 @@ Deno.serve(async (req) => {
     const utcStart = new Date(todayStart.getTime() - brOffset).toISOString();
     const utcEnd = new Date(todayEnd.getTime() - brOffset).toISOString();
 
-    const { data: scheduledLeads, error: leadsErr } = await supabaseAdmin
-      .from("crm_leads")
-      .select("id, data, assigned_to, scheduled_date")
-      .not("scheduled_date", "is", null)
-      .gte("scheduled_date", utcStart)
-      .lt("scheduled_date", utcEnd);
+    // Query crm_appointments for today's active appointments
+    const { data: todayAppointments, error: apptsErr } = await supabaseAdmin
+      .from("crm_appointments")
+      .select("id, nome, telefone, scheduled_by, scheduled_datetime, lead_id")
+      .eq("status", "agendado")
+      .gte("scheduled_datetime", utcStart)
+      .lt("scheduled_datetime", utcEnd);
 
-    if (leadsErr) throw leadsErr;
-    if (!scheduledLeads || scheduledLeads.length === 0) {
-      console.log("No scheduled leads for today");
-      return new Response(JSON.stringify({ message: "Nenhum lead agendado para hoje", notified: 0 }), {
+    if (apptsErr) throw apptsErr;
+    if (!todayAppointments || todayAppointments.length === 0) {
+      console.log("No appointments for today");
+      return new Response(JSON.stringify({ message: "Nenhum agendamento para hoje", notified: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log(`Found ${scheduledLeads.length} scheduled leads for today`);
+    console.log(`Found ${todayAppointments.length} appointments for today`);
 
     // Dedup: check if already notified today
     const scheduledMarker = "📅";
@@ -92,17 +94,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    const leadsByUser: Record<string, typeof scheduledLeads> = {};
-    for (const lead of scheduledLeads) {
-      if (!lead.assigned_to) continue;
-      if (!leadsByUser[lead.assigned_to]) leadsByUser[lead.assigned_to] = [];
-      leadsByUser[lead.assigned_to].push(lead);
+    // Group appointments by scheduled_by user
+    const apptsByUser: Record<string, typeof todayAppointments> = {};
+    for (const appt of todayAppointments) {
+      if (!appt.scheduled_by) continue;
+      if (!apptsByUser[appt.scheduled_by]) apptsByUser[appt.scheduled_by] = [];
+      apptsByUser[appt.scheduled_by].push(appt);
     }
 
     const vapidPublicKey = (Deno.env.get("VAPID_PUBLIC_KEY") || "").trim();
     const vapidPrivateKey = (Deno.env.get("VAPID_PRIVATE_KEY") || "").trim();
 
-    // Configure web-push with VAPID
     if (vapidPublicKey && vapidPrivateKey) {
       webpush.setVapidDetails(
         "mailto:noreply@crm.qualinetdigital.site",
@@ -118,34 +120,21 @@ Deno.serve(async (req) => {
     let pushSentCount = 0;
     let pushErrorCount = 0;
 
-    const { data: formFields } = await supabaseAdmin
-      .from("crm_form_fields")
-      .select("id, is_name_field")
-      .eq("is_name_field", true);
-    const nameFieldIds = (formFields || []).map((f: { id: string }) => f.id);
+    for (const [userId, userAppts] of Object.entries(apptsByUser)) {
+      const apptNames = userAppts.map((a) => a.nome || "Cliente");
 
-    for (const [userId, userLeads] of Object.entries(leadsByUser)) {
-      const leadNames = userLeads.map((lead) => {
-        const data = (typeof lead.data === "object" && lead.data !== null) ? lead.data as Record<string, any> : {};
-        for (const fid of nameFieldIds) {
-          const name = data[`field_${fid}`];
-          if (name) return String(name);
-        }
-        return data.nome_lead || "Lead";
-      });
-
-      const title = `${scheduledMarker} ${userLeads.length} lead(s) agendado(s) para hoje`;
+      const title = `${scheduledMarker} ${userAppts.length} agendamento(s) para hoje`;
 
       // Insert in-app notifications
-      const notificationInserts = userLeads.map((lead, idx) => ({
+      const notificationInserts = userAppts.map((appt, idx) => ({
         user_id: userId,
         title,
-        message: leadNames[idx] || "Lead agendado",
-        lead_id: lead.id,
+        message: apptNames[idx] || "Agendamento",
+        lead_id: appt.lead_id || null,
       }));
       await supabaseAdmin.from("notifications").insert(notificationInserts);
 
-      // Send native push notifications via web-push library
+      // Send native push notifications
       if (vapidPublicKey && vapidPrivateKey) {
         const { data: subs } = await supabaseAdmin
           .from("push_subscriptions")
@@ -157,10 +146,10 @@ Deno.serve(async (req) => {
         if (subs && subs.length > 0) {
           const payload = JSON.stringify({
             title,
-            body: `Leads: ${leadNames.join(", ")}`,
+            body: `Clientes: ${apptNames.join(", ")}`,
             icon: "/pwa-192x192.png",
             badge: "/pwa-192x192.png",
-            data: { url: "/" },
+            data: { url: "/agendamentos" },
           });
 
           for (const sub of subs) {
@@ -182,7 +171,6 @@ Deno.serve(async (req) => {
               const errMsg = pushErr?.message || String(pushErr);
               console.error(`Push error for ${sub.endpoint.substring(0, 60)}: [${statusCode}] ${errMsg}`);
               
-              // Remove stale/expired subscriptions
               if (statusCode === 410 || statusCode === 404) {
                 console.log("Removing stale subscription:", sub.endpoint.substring(0, 60));
                 await supabaseAdmin
@@ -197,7 +185,7 @@ Deno.serve(async (req) => {
       notifiedCount++;
     }
 
-    // Mark today as notified (only for scheduled runs)
+    // Mark today as notified
     if (!forceRun) {
       const brNowForMark = new Date(now.getTime() + brOffset);
       const todayStr = `${brNowForMark.getUTCFullYear()}-${String(brNowForMark.getUTCMonth() + 1).padStart(2, "0")}-${String(brNowForMark.getUTCDate()).padStart(2, "0")}`;
