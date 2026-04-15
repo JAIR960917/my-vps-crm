@@ -325,8 +325,8 @@ export default function LeadFormDialog({
       description: actDescription.trim() || null,
       scheduled_date: new Date(actDate).toISOString(),
       created_by: user.id,
-    });
-    if (error) toast.error("Erro ao criar atividade");
+    } as any);
+    if (error) { console.error("Activity insert error:", error); toast.error("Erro ao criar atividade: " + error.message); }
     else {
       toast.success("Atividade criada!");
       setActTitle(""); setActDescription(""); setActDate("");
