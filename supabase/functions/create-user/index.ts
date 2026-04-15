@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { email, password, full_name, role, company_id } = await req.json();
+  const { email, password, full_name, role, company_id, extra_company_ids } = await req.json();
 
   const validRoles = ["admin", "vendedor", "gerente"];
   if (!email || !password || !role) {
@@ -130,6 +130,16 @@ Deno.serve(async (req) => {
       .from("profiles")
       .update({ company_id: finalCompanyId })
       .eq("user_id", newUser.user.id);
+  }
+
+  // Insert extra companies for gerentes (admin only)
+  if (isAdmin && Array.isArray(extra_company_ids) && extra_company_ids.length > 0) {
+    const inserts = extra_company_ids
+      .filter((id: string) => id && id !== "__none__")
+      .map((cid: string) => ({ user_id: newUser.user.id, company_id: cid }));
+    if (inserts.length > 0) {
+      await supabaseAdmin.from("manager_companies").insert(inserts);
+    }
   }
 
   return new Response(JSON.stringify({ message: "Usuário criado", userId: newUser.user.id }), {
