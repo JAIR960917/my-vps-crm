@@ -18,7 +18,7 @@ type Step = "upload" | "columns" | "status" | "users" | "preview" | "importing";
 const IGNORE_VALUE = "__ignore__";
 
 export default function ImportLeadsPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep] = useState<Step>("upload");
@@ -221,7 +221,7 @@ export default function ImportLeadsPage() {
           data: data as any,
           status,
           assigned_to: assignedTo,
-          created_by: assignedTo,
+          created_by: user?.id || null,
           ...(createdAt ? { created_at: createdAt } : {}),
         };
       });
