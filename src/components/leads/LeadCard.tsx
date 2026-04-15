@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Pencil, Trash2, MessageSquare, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus } from "lucide-react";
+import { Pencil, Trash2, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
