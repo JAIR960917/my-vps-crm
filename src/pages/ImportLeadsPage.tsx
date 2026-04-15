@@ -11,7 +11,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Upload, ArrowRight, ArrowLeft, Check, AlertTriangle, FileSpreadsheet } from "lucide-react";
+import { Upload, ArrowRight, ArrowLeft, Check, AlertTriangle, FileSpreadsheet, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type Step = "upload" | "columns" | "status" | "users" | "preview" | "importing";
 
