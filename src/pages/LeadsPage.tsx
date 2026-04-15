@@ -563,8 +563,8 @@ export default function LeadsPage() {
 
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
 
-  const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo;
-  const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); };
+  const hasActiveFilters = filterVendedor !== "all" || filterDateFrom || filterDateTo || searchQuery.trim();
+  const clearFilters = () => { setFilterVendedor("all"); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSearchQuery(""); };
 
   const getSyncStatus = (leadId: string): "offline" | "synced" | null => {
     if (offlineIds.has(leadId)) return "offline";
