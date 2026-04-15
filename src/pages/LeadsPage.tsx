@@ -600,6 +600,22 @@ export default function LeadsPage() {
         </div>
       </div>
 
+      {/* Search bar */}
+      <div className="mb-3 relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por nome ou telefone..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 h-9 text-sm"
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
+      </div>
+
       {/* Filter bar */}
       {(isAdmin || isGerente) && showFilters && (
         <div className="mb-4 p-3 bg-muted/50 rounded-lg border flex flex-wrap items-end gap-3">
