@@ -11,10 +11,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatPhoneBR } from "@/lib/phoneFormat";
-import { ArrowLeft, Check, Eye, Plus, CalendarClock, CheckCircle2, AlertTriangle, Trash2, Clock, FileText, Pencil } from "lucide-react";
+import { ArrowLeft, Check, Eye, Plus, CalendarClock, CheckCircle2, AlertTriangle, Trash2, Clock, FileText, Pencil, CalendarIcon } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 type Company = { id: string; name: string };
