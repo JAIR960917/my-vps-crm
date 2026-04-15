@@ -11,9 +11,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatPhoneBR } from "@/lib/phoneFormat";
-import { ArrowLeft, Check, Eye, Plus, CalendarClock, CheckCircle2, AlertTriangle, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Eye, Plus, CalendarClock, CheckCircle2, AlertTriangle, Trash2, Clock, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
@@ -41,6 +41,21 @@ type Activity = {
   completed_at: string | null;
   created_by: string;
   created_at: string;
+};
+
+type Note = {
+  id: string;
+  lead_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+};
+
+type TimelineItem = {
+  id: string;
+  type: "activity" | "note";
+  date: string;
+  data: Activity | Note;
 };
 
 type Props = {
@@ -74,21 +89,28 @@ export default function LeadFormDialog({
   const { user, isAdmin } = useAuth();
   const [fields, setFields] = useState<FormField[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dados" | "atividades">("dados");
 
-  // Activity state
+  // Timeline state
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [timelineFilter, setTimelineFilter] = useState<"all" | "activity" | "note">("all");
+
+  // New activity form
   const [showNewActivity, setShowNewActivity] = useState(false);
   const [actTitle, setActTitle] = useState("");
   const [actDescription, setActDescription] = useState("");
   const [actDate, setActDate] = useState("");
   const [actSaving, setActSaving] = useState(false);
 
+  // New note
+  const [newNote, setNewNote] = useState("");
+  const [noteSending, setNoteSending] = useState(false);
+
   useEffect(() => {
     if (open) {
       setShowPreview(false);
-      setActiveTab("dados");
       setShowNewActivity(false);
+      setTimelineFilter("all");
       supabase
         .from("crm_form_fields")
         .select("*")
@@ -96,6 +118,7 @@ export default function LeadFormDialog({
         .then(({ data }) => setFields((data || []) as unknown as FormField[]));
       if (isEditing && leadId) {
         fetchActivities();
+        fetchNotes();
       }
     }
   }, [open, leadId]);
@@ -106,9 +129,31 @@ export default function LeadFormDialog({
       .from("lead_activities")
       .select("*")
       .eq("lead_id", leadId)
-      .order("scheduled_date", { ascending: false });
+      .order("created_at", { ascending: false });
     setActivities((data || []) as Activity[]);
   };
+
+  const fetchNotes = async () => {
+    if (!leadId) return;
+    const { data } = await supabase
+      .from("crm_lead_notes")
+      .select("*")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false });
+    setNotes((data || []) as Note[]);
+  };
+
+  // Build timeline
+  const timeline: TimelineItem[] = (() => {
+    let items: TimelineItem[] = [];
+    if (timelineFilter === "all" || timelineFilter === "activity") {
+      items = items.concat(activities.map(a => ({ id: a.id, type: "activity" as const, date: a.created_at, data: a })));
+    }
+    if (timelineFilter === "all" || timelineFilter === "note") {
+      items = items.concat(notes.map(n => ({ id: n.id, type: "note" as const, date: n.created_at, data: n })));
+    }
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  })();
 
   const set = (key: string, val: any) => setFormData({ ...formData, [key]: val });
 
@@ -144,14 +189,14 @@ export default function LeadFormDialog({
 
     return (
       <div key={field.id} className={`space-y-2 ${field.parent_field_id ? "ml-4 pl-3 border-l-2 border-primary/20" : ""}`}>
-        <Label>
+        <Label className="text-xs">
           {field.label}
           {field.is_required && <span className="text-destructive ml-1">*</span>}
         </Label>
 
         {field.field_type === "select" && field.options && (
           <Select value={value} onValueChange={(v) => set(fieldKey, v)}>
-            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione" /></SelectTrigger>
             <SelectContent>
               {field.options.map((opt) => (
                 <SelectItem key={opt} value={opt}>{opt}</SelectItem>
@@ -161,18 +206,18 @@ export default function LeadFormDialog({
         )}
 
         {field.field_type === "checkbox_group" && field.options && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {field.options.map((opt) => {
               const arr: string[] = formData[fieldKey] || [];
               const checked = arr.includes(opt);
               return (
                 <label
                   key={opt}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm cursor-pointer transition-colors ${
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md border text-xs cursor-pointer transition-colors ${
                     checked ? "bg-primary/10 border-primary text-primary" : "bg-muted/50 border-border text-foreground hover:bg-muted"
                   }`}
                 >
-                  <Checkbox checked={checked} onCheckedChange={() => toggleArray(fieldKey, opt)} className="h-3.5 w-3.5" />
+                  <Checkbox checked={checked} onCheckedChange={() => toggleArray(fieldKey, opt)} className="h-3 w-3" />
                   {opt}
                 </label>
               );
@@ -181,7 +226,7 @@ export default function LeadFormDialog({
         )}
 
         {field.field_type === "textarea" && (
-          <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={3} />
+          <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={2} className="text-sm" />
         )}
 
         {field.field_type === "phone" && (
@@ -196,6 +241,7 @@ export default function LeadFormDialog({
             }}
             required={field.is_required}
             maxLength={16}
+            className="h-9 text-sm"
           />
         )}
 
@@ -205,6 +251,7 @@ export default function LeadFormDialog({
             value={value}
             onChange={(e) => set(fieldKey, e.target.value)}
             required={field.is_required}
+            className="h-9 text-sm"
           />
         )}
 
@@ -214,6 +261,7 @@ export default function LeadFormDialog({
             value={value}
             onChange={(e) => set(fieldKey, e.target.value)}
             required={field.is_required}
+            className="h-9 text-sm"
           />
         )}
       </div>
@@ -226,7 +274,6 @@ export default function LeadFormDialog({
     const children = fields
       .filter((f) => f.parent_field_id === field.id)
       .sort((a, b) => a.position - b.position);
-
     return (
       <div key={field.id}>
         {renderFormField(field)}
@@ -261,11 +308,7 @@ export default function LeadFormDialog({
 
   const handlePreview = () => setShowPreview(true);
   const handleBackToForm = () => setShowPreview(false);
-
-  const handleConfirmSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmit(e);
-  };
+  const handleConfirmSubmit = (e: React.FormEvent) => { e.preventDefault(); onSubmit(e); };
 
   // Activity handlers
   const handleCreateActivity = async () => {
@@ -278,13 +321,10 @@ export default function LeadFormDialog({
       scheduled_date: new Date(actDate).toISOString(),
       created_by: user.id,
     });
-    if (error) {
-      toast.error("Erro ao criar atividade");
-    } else {
+    if (error) toast.error("Erro ao criar atividade");
+    else {
       toast.success("Atividade criada!");
-      setActTitle("");
-      setActDescription("");
-      setActDate("");
+      setActTitle(""); setActDescription(""); setActDate("");
       setShowNewActivity(false);
       fetchActivities();
       onActivityChange?.();
@@ -296,19 +336,34 @@ export default function LeadFormDialog({
     const newVal = activity.completed_at ? null : new Date().toISOString();
     const { error } = await supabase.from("lead_activities").update({ completed_at: newVal }).eq("id", activity.id);
     if (error) toast.error("Erro ao atualizar atividade");
-    else {
-      fetchActivities();
-      onActivityChange?.();
-    }
+    else { fetchActivities(); onActivityChange?.(); }
   };
 
   const handleDeleteActivity = async (id: string) => {
     const { error } = await supabase.from("lead_activities").delete().eq("id", id);
-    if (error) toast.error("Erro ao remover atividade");
+    if (error) toast.error("Erro ao remover");
+    else { fetchActivities(); onActivityChange?.(); }
+  };
+
+  // Note handlers
+  const handleSendNote = async () => {
+    if (!newNote.trim() || !leadId || !user) return;
+    setNoteSending(true);
+    const { error } = await supabase.from("crm_lead_notes").insert({
+      lead_id: leadId, user_id: user.id, content: newNote.trim(),
+    });
+    if (error) toast.error("Erro ao adicionar comentário");
     else {
-      fetchActivities();
-      onActivityChange?.();
+      setNewNote("");
+      fetchNotes();
     }
+    setNoteSending(false);
+  };
+
+  const handleDeleteNote = async (id: string) => {
+    const { error } = await supabase.from("crm_lead_notes").delete().eq("id", id);
+    if (error) toast.error("Erro ao remover");
+    else fetchNotes();
   };
 
   const getActivityStatus = (act: Activity) => {
@@ -316,300 +371,417 @@ export default function LeadFormDialog({
     const now = new Date();
     const scheduled = new Date(act.scheduled_date);
     if (scheduled < now) return "overdue";
-    // Same day
     if (scheduled.toDateString() === now.toDateString()) return "today";
     return "pending";
   };
 
   const getProfile = (userId: string) => profiles.find(p => p.user_id === userId);
 
+  const formatTimelineDate = (dateStr: string) => {
+    try {
+      return format(new Date(dateStr), "dd/MM/yyyy, HH:mm", { locale: ptBR });
+    } catch { return dateStr; }
+  };
+
+  const formatRelative = (dateStr: string) => {
+    try {
+      return formatDistanceToNow(new Date(dateStr), { addSuffix: true, locale: ptBR });
+    } catch { return ""; }
+  };
+
+  // ========== RENDER ==========
+
+  // CREATE MODE — simple dialog
+  if (!isEditing) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{showPreview ? "📋 Revisão das Respostas" : "Novo Lead"}</DialogTitle>
+          </DialogHeader>
+
+          {showPreview ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Confira as respostas antes de salvar o lead:</p>
+              <div className="rounded-lg border bg-muted/30 divide-y divide-border">
+                <div className="flex justify-between items-center px-4 py-2.5">
+                  <span className="text-sm font-medium text-muted-foreground">Empresa</span>
+                  <span className="text-sm text-foreground font-medium">{companies.length > 0 ? companies.map(c => c.name).join(", ") : "—"}</span>
+                </div>
+                <div className="flex justify-between items-center px-4 py-2.5">
+                  <span className="text-sm font-medium text-muted-foreground">Vendedor</span>
+                  <span className="text-sm text-foreground font-medium">{currentUserName || "—"}</span>
+                </div>
+                {!hasMappingField && (
+                  <div className="flex justify-between items-center px-4 py-2.5">
+                    <span className="text-sm font-medium text-muted-foreground">Coluna</span>
+                    <span className="text-sm text-foreground font-medium">{statusLabels[formStatus] || formStatus}</span>
+                  </div>
+                )}
+                {getVisibleAnswers().map((item, i) => (
+                  <div key={i} className="flex justify-between items-start px-4 py-2.5 gap-4">
+                    <span className="text-sm font-medium text-muted-foreground shrink-0">{item.label}</span>
+                    <span className="text-sm text-foreground font-medium text-right">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={handleBackToForm}>
+                  <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
+                </Button>
+                <Button type="button" className="flex-1" disabled={saving} onClick={handleConfirmSubmit}>
+                  {saving ? "Salvando..." : <><Check className="h-4 w-4 mr-1" /> Confirmar</>}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={(e) => { e.preventDefault(); if (fields.length > 0) handlePreview(); else onSubmit(e); }} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Empresa</Label>
+                <Input value={companies.length > 0 ? companies.map(c => c.name).join(", ") : "Nenhuma empresa"} readOnly className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label>Vendedor Responsável</Label>
+                <Input value={currentUserName || "—"} readOnly className="bg-muted" />
+              </div>
+              {!hasMappingField && (
+                <div className="space-y-2">
+                  <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
+                  <Select value={formStatus} onValueChange={setFormStatus}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((s) => (
+                        <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {hasMappingField && (
+                <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+                  ℹ️ A coluna será definida automaticamente com base nas respostas.
+                </p>
+              )}
+              {rootFields.map((field) => renderFieldTree(field))}
+              {fields.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhuma pergunta configurada. Vá em "Formulário" no menu para criar perguntas.
+                </p>
+              )}
+              <Button type="submit" className="w-full" disabled={saving}>
+                {fields.length > 0 ? <><Eye className="h-4 w-4 mr-1" /> Revisar Respostas</> : "Enviar"}
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // EDIT MODE — split layout
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>
-            {showPreview
-              ? "📋 Revisão das Respostas"
-              : isEditing ? "Editar Lead" : "Novo Lead"}
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-5xl p-0">
+        <div className="flex flex-col md:flex-row h-[85vh] max-h-[85vh]">
+          {/* LEFT PANEL — Lead Data */}
+          <div className="md:w-[380px] md:min-w-[380px] border-r flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b">
+              <DialogTitle className="text-lg font-bold">Editar Lead</DialogTitle>
+            </div>
+            <ScrollArea className="flex-1 px-5 py-4">
+              <form id="lead-edit-form" onSubmit={(e) => { e.preventDefault(); onSubmit(e); }} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Empresa</Label>
+                  <Input value={companies.length > 0 ? companies.map(c => c.name).join(", ") : "—"} readOnly className="bg-muted h-9 text-sm" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Vendedor Responsável</Label>
+                  <Input value={currentUserName || "—"} readOnly className="bg-muted h-9 text-sm" />
+                </div>
 
-        {/* Tabs when editing */}
-        {isEditing && !showPreview && (
-          <div className="flex border-b mb-2">
-            <button
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === "dados"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setActiveTab("dados")}
-            >
-              Dados
-            </button>
-            <button
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-                activeTab === "atividades"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setActiveTab("atividades")}
-            >
-              <CalendarClock className="h-4 w-4" />
-              Atividades
-              {activities.length > 0 && (
-                <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">{activities.length}</span>
-              )}
-            </button>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Coluna (Status)</Label>
+                  <Select value={formStatus} onValueChange={setFormStatus}>
+                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((s) => (
+                        <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {canReassign && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Atribuído a</Label>
+                    <Select value={formAssigned || "__none__"} onValueChange={(v) => setFormAssigned(v === "__none__" ? "" : v)}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Ninguém" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Ninguém</SelectItem>
+                        {profiles.map((p) => (
+                          <SelectItem key={p.user_id} value={p.user_id}>{p.full_name || p.email}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="border-t pt-3 mt-3" />
+                {rootFields.map((field) => renderFieldTree(field))}
+
+                <Button type="submit" className="w-full mt-4" disabled={saving}>
+                  {saving ? "Salvando..." : "Atualizar"}
+                </Button>
+              </form>
+            </ScrollArea>
           </div>
-        )}
 
-        {showPreview ? (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Confira as respostas antes de salvar o lead:
-            </p>
-
-            <div className="rounded-lg border bg-muted/30 divide-y divide-border">
-              <div className="flex justify-between items-center px-4 py-2.5">
-                <span className="text-sm font-medium text-muted-foreground">Empresa</span>
-                <span className="text-sm text-foreground font-medium">
-                  {companies.length > 0 ? companies.map(c => c.name).join(", ") : "—"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center px-4 py-2.5">
-                <span className="text-sm font-medium text-muted-foreground">Vendedor</span>
-                <span className="text-sm text-foreground font-medium">{currentUserName || "—"}</span>
-              </div>
-              {(isEditing || !hasMappingField) && (
-                <div className="flex justify-between items-center px-4 py-2.5">
-                  <span className="text-sm font-medium text-muted-foreground">Coluna</span>
-                  <span className="text-sm text-foreground font-medium">{statusLabels[formStatus] || formStatus}</span>
-                </div>
-              )}
-              {getVisibleAnswers().map((item, i) => (
-                <div key={i} className="flex justify-between items-start px-4 py-2.5 gap-4">
-                  <span className="text-sm font-medium text-muted-foreground shrink-0">{item.label}</span>
-                  <span className="text-sm text-foreground font-medium text-right">{item.value}</span>
-                </div>
+          {/* RIGHT PANEL — Timeline */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Tabs */}
+            <div className="px-5 py-3 border-b flex items-center gap-1 flex-wrap">
+              {[
+                { key: "all", label: "Atividade" },
+                { key: "note", label: "Comentário" },
+                { key: "activity", label: "Tarefa" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setTimelineFilter(tab.key as any)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    timelineFilter === tab.key
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {tab.label}
+                </button>
               ))}
             </div>
 
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={handleBackToForm}>
-                <ArrowLeft className="h-4 w-4 mr-1" /> Voltar e Editar
-              </Button>
-              <Button type="button" className="flex-1" disabled={saving} onClick={handleConfirmSubmit}>
-                {saving ? "Salvando..." : <><Check className="h-4 w-4 mr-1" /> Confirmar</>}
-              </Button>
-            </div>
-          </div>
-        ) : activeTab === "atividades" && isEditing ? (
-          /* ====== ACTIVITIES TAB ====== */
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Gerencie as atividades deste lead
-              </p>
-              <Button size="sm" variant="outline" onClick={() => setShowNewActivity(!showNewActivity)}>
-                <Plus className="h-4 w-4 mr-1" />
-                Nova Atividade
-              </Button>
-            </div>
-
-            {/* New activity form */}
-            {showNewActivity && (
-              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-                <div className="space-y-2">
-                  <Label>Título da atividade <span className="text-destructive">*</span></Label>
+            {/* New activity / comment input */}
+            <div className="px-5 py-3 border-b space-y-3">
+              {!showNewActivity ? (
+                <div className="flex gap-2">
+                  <Input
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    placeholder="Adicionar comentário..."
+                    className="h-9 text-sm"
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendNote(); } }}
+                  />
+                  <Button size="sm" onClick={handleSendNote} disabled={noteSending || !newNote.trim()} className="shrink-0">
+                    Enviar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowNewActivity(true)} className="shrink-0">
+                    <Plus className="h-4 w-4 mr-1" /> Tarefa
+                  </Button>
+                </div>
+              ) : (
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CalendarClock className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Nova Atividade</span>
+                  </div>
                   <Input
                     value={actTitle}
                     onChange={(e) => setActTitle(e.target.value)}
-                    placeholder="Ex: Contatar cliente, Apresentar orçamento..."
+                    placeholder="Título da atividade..."
+                    className="h-9 text-sm"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>Descrição</Label>
                   <Textarea
                     value={actDescription}
                     onChange={(e) => setActDescription(e.target.value)}
-                    placeholder="Detalhes da atividade..."
+                    placeholder="Descrição (opcional)..."
                     rows={2}
+                    className="text-sm"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>Data prevista <span className="text-destructive">*</span></Label>
                   <Input
                     type="datetime-local"
                     value={actDate}
                     onChange={(e) => setActDate(e.target.value)}
+                    className="h-9 text-sm"
                   />
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setShowNewActivity(false)}>Cancelar</Button>
-                  <Button size="sm" onClick={handleCreateActivity} disabled={actSaving || !actTitle.trim() || !actDate}>
-                    {actSaving ? "Salvando..." : "Salvar"}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Activities list */}
-            <ScrollArea className="max-h-[45vh]">
-              {activities.length === 0 ? (
-                <p className="text-center text-muted-foreground text-sm py-8">
-                  Nenhuma atividade registrada.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {activities.map((act) => {
-                    const status = getActivityStatus(act);
-                    const profile = getProfile(act.created_by);
-                    const canDelete = act.created_by === user?.id || isAdmin;
-
-                    let borderClass = "border-border";
-                    let iconEl = <CalendarClock className="h-4 w-4 text-muted-foreground" />;
-                    if (status === "completed") {
-                      borderClass = "border-emerald-300 bg-emerald-500/5";
-                      iconEl = <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-                    } else if (status === "overdue") {
-                      borderClass = "border-red-400 bg-red-500/10";
-                      iconEl = <AlertTriangle className="h-4 w-4 text-red-500" />;
-                    } else if (status === "today") {
-                      borderClass = "border-amber-300 bg-amber-500/5";
-                      iconEl = <CalendarClock className="h-4 w-4 text-amber-500" />;
-                    }
-
-                    let scheduledFormatted = "";
-                    try {
-                      scheduledFormatted = format(new Date(act.scheduled_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-                    } catch {
-                      scheduledFormatted = act.scheduled_date;
-                    }
-
-                    return (
-                      <div key={act.id} className={`group rounded-lg border p-3 ${borderClass}`}>
-                        <div className="flex items-start gap-2">
-                          <button
-                            onClick={() => handleToggleComplete(act)}
-                            className="shrink-0 mt-0.5"
-                            title={status === "completed" ? "Marcar como pendente" : "Marcar como concluída"}
-                          >
-                            {iconEl}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                              {act.title}
-                            </p>
-                            {act.description && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{act.description}</p>
-                            )}
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <span className="text-[11px] text-muted-foreground">📅 {scheduledFormatted}</span>
-                              {status === "overdue" && (
-                                <span className="text-[10px] font-medium text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">Atrasada</span>
-                              )}
-                              {status === "today" && (
-                                <span className="text-[10px] font-medium text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">Hoje</span>
-                              )}
-                              {status === "completed" && (
-                                <span className="text-[10px] font-medium text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">Concluída</span>
-                              )}
-                            </div>
-                            {profile && (
-                              <div className="flex items-center gap-1.5 mt-1.5">
-                                <Avatar className="h-4 w-4">
-                                  <AvatarImage src={profile.avatar_url ?? undefined} />
-                                  <AvatarFallback className="bg-primary/10 text-primary text-[8px]">
-                                    {(profile.full_name || "?").slice(0, 2).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-[11px] text-muted-foreground">{profile.full_name}</span>
-                              </div>
-                            )}
-                          </div>
-                          {canDelete && (
-                            <Button
-                              variant="ghost" size="icon"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                              onClick={() => handleDeleteActivity(act.id)}
-                            >
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setShowNewActivity(false)}>Cancelar</Button>
+                    <Button size="sm" onClick={handleCreateActivity} disabled={actSaving || !actTitle.trim() || !actDate}>
+                      {actSaving ? "Salvando..." : "Salvar"}
+                    </Button>
+                  </div>
                 </div>
               )}
+            </div>
+
+            {/* Timeline */}
+            <ScrollArea className="flex-1">
+              <div className="px-5 py-4">
+                {timeline.length === 0 ? (
+                  <p className="text-center text-muted-foreground text-sm py-12">
+                    Nenhuma atividade registrada ainda.
+                  </p>
+                ) : (
+                  <div className="relative">
+                    {/* Timeline line */}
+                    <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
+
+                    <div className="space-y-4">
+                      {timeline.map((item) => {
+                        if (item.type === "activity") {
+                          const act = item.data as Activity;
+                          const status = getActivityStatus(act);
+                          const profile = getProfile(act.created_by);
+                          const canDelete = act.created_by === user?.id || isAdmin;
+
+                          let iconBg = "bg-muted text-muted-foreground";
+                          let statusBadge: React.ReactNode = null;
+
+                          if (status === "completed") {
+                            iconBg = "bg-emerald-100 text-emerald-600";
+                            statusBadge = <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">CONCLUÍDA</span>;
+                          } else if (status === "overdue") {
+                            iconBg = "bg-red-100 text-red-600";
+                            statusBadge = <span className="text-[10px] font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">ATRASADA</span>;
+                          } else if (status === "today") {
+                            iconBg = "bg-amber-100 text-amber-600";
+                            statusBadge = <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">HOJE</span>;
+                          } else {
+                            iconBg = "bg-blue-100 text-blue-600";
+                            statusBadge = <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">PENDENTE</span>;
+                          }
+
+                          let scheduledFormatted = "";
+                          try {
+                            scheduledFormatted = format(new Date(act.scheduled_date), "EEE, dd 'de' MMM, HH:mm", { locale: ptBR });
+                          } catch { scheduledFormatted = act.scheduled_date; }
+
+                          return (
+                            <div key={item.id} className="relative pl-10 group">
+                              {/* Timeline dot */}
+                              <div className={`absolute left-1.5 top-1 w-5 h-5 rounded-full flex items-center justify-center ${iconBg}`}>
+                                {status === "completed" ? <CheckCircle2 className="h-3 w-3" /> : 
+                                 status === "overdue" ? <AlertTriangle className="h-3 w-3" /> :
+                                 <CalendarClock className="h-3 w-3" />}
+                              </div>
+
+                              <div className={`rounded-lg border p-3 ${
+                                status === "overdue" ? "border-red-300 bg-red-50/50 dark:bg-red-950/20" :
+                                status === "today" ? "border-amber-300 bg-amber-50/50 dark:bg-amber-950/20" :
+                                status === "completed" ? "border-emerald-200 bg-emerald-50/30 dark:bg-emerald-950/10" :
+                                "border-border bg-card"
+                              }`}>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-sm font-semibold text-foreground">Tarefa</span>
+                                    {statusBadge}
+                                    <span className="text-xs text-muted-foreground">{formatTimelineDate(act.created_at)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    {profile && (
+                                      <Avatar className="h-5 w-5">
+                                        <AvatarImage src={profile.avatar_url ?? undefined} />
+                                        <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+                                          {(profile.full_name || "?").slice(0, 2).toUpperCase()}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                    )}
+                                    {canDelete && (
+                                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleDeleteActivity(act.id)}>
+                                        <Trash2 className="h-3 w-3 text-destructive" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="mt-2 rounded-md bg-background/50 p-2.5">
+                                  <div className="flex items-center gap-4 text-sm">
+                                    <div>
+                                      <span className="text-muted-foreground text-xs">Prazo</span>
+                                      <p className={`font-medium text-xs ${status === "overdue" ? "text-red-600" : ""}`}>
+                                        {scheduledFormatted}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground text-xs">Título</span>
+                                      <p className={`font-medium text-xs ${status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+                                        {act.title}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {act.description && (
+                                    <p className="text-xs text-muted-foreground mt-1.5">{act.description}</p>
+                                  )}
+                                  {profile && (
+                                    <div className="mt-1.5">
+                                      <span className="text-muted-foreground text-xs">Responsável</span>
+                                      <p className="text-xs font-medium text-primary">{profile.full_name}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2 mt-2">
+                                  <Button
+                                    size="sm"
+                                    variant={status === "completed" ? "outline" : "default"}
+                                    className="text-xs h-7"
+                                    onClick={() => handleToggleComplete(act)}
+                                  >
+                                    {status === "completed" ? "Reabrir" : "Concluir"}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Note item
+                        const note = item.data as Note;
+                        const profile = getProfile(note.user_id);
+                        const canDelete = note.user_id === user?.id || isAdmin;
+
+                        return (
+                          <div key={item.id} className="relative pl-10 group">
+                            <div className="absolute left-1.5 top-1 w-5 h-5 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                              <FileText className="h-3 w-3" />
+                            </div>
+                            <div className="rounded-lg border border-border bg-card p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold">Comentário</span>
+                                  <span className="text-xs text-muted-foreground">{formatTimelineDate(note.created_at)}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {profile && (
+                                    <Avatar className="h-5 w-5">
+                                      <AvatarImage src={profile.avatar_url ?? undefined} />
+                                      <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+                                        {(profile.full_name || "?").slice(0, 2).toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  )}
+                                  {canDelete && (
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleDeleteNote(note.id)}>
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-sm text-foreground whitespace-pre-wrap mt-2">{note.content}</p>
+                              {profile && (
+                                <p className="text-xs text-muted-foreground mt-1.5">
+                                  — {profile.full_name}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </ScrollArea>
           </div>
-        ) : (
-          /* ====== FORM STEP ====== */
-          <form onSubmit={(e) => { e.preventDefault(); if (!isEditing && fields.length > 0) { handlePreview(); } else { onSubmit(e); } }} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Empresa</Label>
-              <Input value={companies.length > 0 ? companies.map(c => c.name).join(", ") : "Nenhuma empresa"} readOnly className="bg-muted" />
-            </div>
-            <div className="space-y-2">
-              <Label>Vendedor Responsável</Label>
-              <Input value={currentUserName || "—"} readOnly className="bg-muted" />
-            </div>
-
-            {(isEditing || !hasMappingField) && (
-              <div className="space-y-2">
-                <Label>Coluna (Status) <span className="text-destructive">*</span></Label>
-                <Select value={formStatus} onValueChange={setFormStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map((s) => (
-                      <SelectItem key={s} value={s}>{statusLabels[s]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {!isEditing && hasMappingField && (
-              <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
-                ℹ️ A coluna será definida automaticamente com base nas respostas.
-              </p>
-            )}
-
-            {isEditing && canReassign && (
-              <div className="space-y-2">
-                <Label>Atribuído a</Label>
-                <Select value={formAssigned || "__none__"} onValueChange={(v) => setFormAssigned(v === "__none__" ? "" : v)}>
-                  <SelectTrigger><SelectValue placeholder="Ninguém" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Ninguém</SelectItem>
-                    {profiles.map((p) => (
-                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name || p.email}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {rootFields.map((field) => renderFieldTree(field))}
-
-            {fields.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Nenhuma pergunta configurada. Vá em "Formulário" no menu para criar perguntas.
-              </p>
-            )}
-
-            <Button type="submit" className="w-full" disabled={saving}>
-              {saving
-                ? "Salvando..."
-                : isEditing
-                  ? "Atualizar"
-                  : fields.length > 0
-                    ? <><Eye className="h-4 w-4 mr-1" /> Revisar Respostas</>
-                    : "Enviar"}
-            </Button>
-          </form>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   );
