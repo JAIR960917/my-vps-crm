@@ -113,6 +113,14 @@ export default function AppointmentsPage() {
       return;
     }
 
+    if (field === "venda" && value === "Vendido") {
+      setSaleApptId(id);
+      setSaleValor("");
+      setSalePagamento("");
+      setSaleDialogOpen(true);
+      return;
+    }
+
     const { error } = await supabase.from("crm_appointments").update({ [field]: value } as any).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
