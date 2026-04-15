@@ -283,21 +283,6 @@ export default function NewLeadPage() {
     }
 
     // Check for existing lead with same name + phone
-    const nameFieldIds = fields.filter(f => f.label && fields.find(ff => ff.id === f.id)).filter(f => {
-      // Use the raw fields to find name/phone markers
-      return false; // will use cached full fields
-    });
-    const nameIds = fields.filter(f => {
-      // We don't have is_name_field in this component's FormField type directly from DB
-      // Let's query it
-      return false;
-    });
-
-    // Extract name and phone using field types from the loaded fields
-    const phoneFieldCandidates = fields.filter(f => f.field_type === "phone");
-    const nameFieldCandidates = fields.filter(f => f.field_type === "text" && f.position === Math.min(...fields.filter(ff => ff.field_type === "text" && !ff.parent_field_id).map(ff => ff.position)));
-
-    // Better approach: query crm_form_fields for is_name_field / is_phone_field
     let existingLead: any = null;
     try {
       const { data: ffMarkers } = await supabase.from("crm_form_fields").select("id, is_name_field, is_phone_field");
