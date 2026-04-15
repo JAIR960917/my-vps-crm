@@ -174,6 +174,7 @@ export default function LeadsPage() {
       setFullProfiles((fullProfs || []) as Profile[]);
       setAppointedLeadIds(new Set((activeAppts || []).map((a: any) => a.lead_id)));
       setLeadActivities((actData || []) as LeadActivity[]);
+      setLeadNoteIds(new Set((noteData || []).map((n: any) => n.lead_id)));
 
       // Cache for offline
       try {
