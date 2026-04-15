@@ -464,16 +464,13 @@ export default function LeadFormDialog({
           <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={5} className="text-sm min-h-[120px]" />
         )}
 
-        {field.field_type === "phone" && (
+        {(field.field_type === "phone" || field.is_phone_field) && (
           <Input
             type="tel"
             inputMode="numeric"
             placeholder="(00) 00000-0000"
-            value={formatPhoneBR(value)}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
-              set(fieldKey, digits);
-            }}
+            value={formatPhoneBR(normalizePhoneDigits(rawValue))}
+            onChange={(e) => set(fieldKey, normalizePhoneDigits(e.target.value))}
             required={field.is_required}
             maxLength={16}
             className="h-9 text-sm"
@@ -510,18 +507,7 @@ export default function LeadFormDialog({
           />
         )}
 
-        {field.is_phone_field && (
-          <Input
-            type="tel"
-            value={typeof value === "string" ? formatPhoneBR(value) : value}
-            onChange={(e) => set(fieldKey, e.target.value.replace(/\D/g, ""))}
-            placeholder="(00) 00000-0000"
-            required={field.is_required}
-            className="h-9 text-sm"
-          />
-        )}
-
-        {!["select", "checkbox_group", "textarea", "phone", "text", "number", "date", "email"].includes(field.field_type) && (
+        {!['select', 'checkbox_group', 'textarea', 'phone', 'text', 'number', 'date', 'email'].includes(field.field_type) && !field.is_phone_field && (
           <Input
             type="text"
             value={value}
