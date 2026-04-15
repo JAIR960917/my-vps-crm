@@ -143,6 +143,7 @@ export default function AppointmentsPage() {
     await supabase.from("crm_appointments").update({
       venda: "Vendido",
       valor_venda: parseFloat(saleValor) || 0,
+      valor_entrada: parseFloat(saleEntrada) || 0,
       forma_pagamento_venda: salePagamento,
       status: "vendido",
     } as any).eq("id", saleApptId);
