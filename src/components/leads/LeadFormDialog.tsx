@@ -129,6 +129,14 @@ export default function LeadFormDialog({
         .select("*")
         .order("position")
         .then(({ data }) => setFields((data || []) as unknown as FormField[]));
+      supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .then(({ data }) => {
+          const map: Record<string, string> = {};
+          (data || []).forEach((r) => { map[r.user_id] = r.role; });
+          setProfileRoles(map);
+        });
       if (isEditing && leadId) {
         fetchActivities();
         fetchNotes();
