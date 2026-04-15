@@ -678,6 +678,7 @@ export default function LeadsPage() {
         onSubmit={handleScheduleSubmit}
       />
 
+      <LeadHistoryDialog
         open={historyOpen}
         onOpenChange={setHistoryOpen}
         leadId={historyLeadId}
