@@ -82,8 +82,16 @@ export default function AppointmentsPage() {
 
   const fetchAll = async () => {
     setLoading(true);
+    let query = supabase.from("crm_appointments").select("*").eq("status", "agendado").order("scheduled_datetime");
+    if (filterDate) {
+      const dayStart = new Date(filterDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(filterDate);
+      dayEnd.setHours(23, 59, 59, 999);
+      query = query.gte("scheduled_datetime", dayStart.toISOString()).lte("scheduled_datetime", dayEnd.toISOString());
+    }
     const [{ data: appts }, { data: profs }] = await Promise.all([
-      supabase.from("crm_appointments").select("*").eq("status", "agendado").order("scheduled_datetime"),
+      query,
       supabase.rpc("get_profile_names"),
     ]);
     setAppointments((appts || []) as unknown as Appointment[]);
