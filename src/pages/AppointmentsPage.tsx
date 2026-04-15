@@ -79,6 +79,7 @@ export default function AppointmentsPage() {
   const [saleValor, setSaleValor] = useState("");
   const [salePagamento, setSalePagamento] = useState("");
   const [saleSaving, setSaleSaving] = useState(false);
+  const [saleEntrada, setSaleEntrada] = useState("");
 
   const fetchAll = async () => {
     setLoading(true);
