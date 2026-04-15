@@ -39,8 +39,8 @@ export default function UsersPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState("vendedor");
+  const [createCompanyId, setCreateCompanyId] = useState<string>("__none__");
   const [creating, setCreating] = useState(false);
 
   // Edit dialog
