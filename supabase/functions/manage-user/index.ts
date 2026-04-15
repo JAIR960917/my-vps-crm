@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Sem permissão" }, 403);
   }
 
-  const { action, target_user_id, full_name, email, new_password, role, company_id } = await req.json();
+  const { action, target_user_id, full_name, email, new_password, role, company_id, extra_company_ids } = await req.json();
 
   if (!action || !target_user_id) {
     return jsonResponse({ error: "action e target_user_id são obrigatórios" }, 400);
@@ -143,6 +143,19 @@ Deno.serve(async (req) => {
     if (isAdmin && company_id !== undefined) {
       const cid = company_id === null || company_id === "__none__" ? null : company_id;
       await supabaseAdmin.from("profiles").update({ company_id: cid }).eq("user_id", target_user_id);
+    }
+
+    // Update extra companies for gerentes (admin only)
+    if (isAdmin && Array.isArray(extra_company_ids)) {
+      // Remove existing extra companies
+      await supabaseAdmin.from("manager_companies").delete().eq("user_id", target_user_id);
+      // Insert new ones
+      const inserts = extra_company_ids
+        .filter((id: string) => id && id !== "__none__")
+        .map((cid: string) => ({ user_id: target_user_id, company_id: cid }));
+      if (inserts.length > 0) {
+        await supabaseAdmin.from("manager_companies").insert(inserts);
+      }
     }
 
     return jsonResponse({ message: "Usuário atualizado" });
