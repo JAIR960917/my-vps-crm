@@ -114,28 +114,9 @@ export default function LeadCard({
           <div className="flex gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
             {/* Schedule button */}
             {onSchedule && (
-              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => e.stopPropagation()}>
-                    <CalendarPlus className="h-3.5 w-3.5 text-primary" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start" onClick={(e) => e.stopPropagation()}>
-                  <Calendar
-                    mode="single"
-                    selected={lead.scheduled_date ? new Date(lead.scheduled_date) : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        onSchedule(date);
-                        setCalendarOpen(false);
-                      }
-                    }}
-                    initialFocus
-                    className={cn("p-3 pointer-events-auto")}
-                    locale={ptBR}
-                  />
-                </PopoverContent>
-              </Popover>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onSchedule(); }}>
+                <CalendarPlus className="h-3.5 w-3.5 text-primary" />
+              </Button>
             )}
 
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onHistory(); }}>
