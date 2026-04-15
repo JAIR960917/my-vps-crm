@@ -584,6 +584,7 @@ export default function LeadsPage() {
                     profiles={profiles}
                     isAdmin={isAdmin}
                     syncStatus={getSyncStatus(lead.id)}
+                    activities={getActivitiesForLead(lead.id)}
                     onEdit={() => openEdit(lead)}
                     onDelete={() => handleDelete(lead.id)}
                     onHistory={() => {
