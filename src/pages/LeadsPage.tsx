@@ -87,6 +87,23 @@ export default function LeadsPage() {
   const [appointedLeadIds, setAppointedLeadIds] = useState<Set<string>>(new Set());
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
 
+  // Lazy rendering: track how many leads to show per status column
+  const LEADS_PER_PAGE = 20;
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || LEADS_PER_PAGE;
+  const loadMore = (statusKey: string) => {
+    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || LEADS_PER_PAGE) + LEADS_PER_PAGE }));
+  };
+
+  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+      loadMore(statusKey);
+    }
+  };
+
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
