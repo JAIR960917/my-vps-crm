@@ -88,6 +88,7 @@ export default function LeadsPage() {
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
 
   const LEADS_PER_PAGE = 20;
+  const [columnLeads, setColumnLeads] = useState<Record<string, Lead[]>>({});
   const [columnCounts, setColumnCounts] = useState<Record<string, number>>({});
   const [columnOffsets, setColumnOffsets] = useState<Record<string, number>>({});
   const [loadingColumns, setLoadingColumns] = useState<Record<string, boolean>>({});
@@ -159,18 +160,16 @@ export default function LeadsPage() {
 
     setColumnCounts((prev) => ({ ...prev, [statusKey]: count || 0 }));
     setColumnOffsets((prev) => ({ ...prev, [statusKey]: offset + (data?.length || 0) }));
-
-    setLeads((prev) => {
-      const remaining = prev.filter((lead) => {
-        if (statusKey === "agendados" && hasScheduledColumn) return !lead.scheduled_date;
-        if (hasScheduledColumn && lead.scheduled_date) return true;
-        return lead.status !== statusKey;
-      });
-
-      const base = append ? prev : remaining;
-      const seen = new Set(base.map((lead) => lead.id));
+    setColumnLeads((prev) => {
+      const existing = append ? (prev[statusKey] || []) : [];
+      const seen = new Set(existing.map((lead) => lead.id));
       const mergedIncoming = incoming.filter((lead) => !seen.has(lead.id));
-      return [...base, ...mergedIncoming];
+      return { ...prev, [statusKey]: [...existing, ...mergedIncoming] };
+    });
+    setLeads((prev) => {
+      const byId = new Map(prev.map((lead) => [lead.id, lead]));
+      incoming.forEach((lead) => byId.set(lead.id, lead));
+      return Array.from(byId.values());
     });
   }, [appointedLeadIds, buildLeadQuery, hasScheduledColumn]);
 
@@ -254,6 +253,23 @@ export default function LeadsPage() {
           }));
         if (newOfflineLeads.length === 0) return prev;
         return [...prev, ...newOfflineLeads];
+      });
+      setColumnLeads(prev => {
+        const next = { ...prev };
+        queue.forEach((lead) => {
+          const list = next[lead.status] || [];
+          if (!list.some((item) => item.id === lead.id)) {
+            next[lead.status] = [{
+              id: lead.id,
+              data: lead.data,
+              assigned_to: lead.assigned_to,
+              created_by: lead.created_by,
+              status: lead.status,
+              created_at: lead.created_at,
+            }, ...list];
+          }
+        });
+        return next;
       });
     }
   }, []);
@@ -500,12 +516,24 @@ export default function LeadsPage() {
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const newStatus = result.destination.droppableId;
+    const oldStatus = result.source.droppableId;
     const leadId = result.draggableId;
-    if (newStatus === result.source.droppableId) return;
+    if (newStatus === oldStatus) return;
 
-    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, status: newStatus } : l));
+    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, status: newStatus, scheduled_date: null } : l));
+    setColumnLeads((prev) => {
+      const sourceList = prev[oldStatus] || [];
+      const targetList = prev[newStatus] || [];
+      const movedLead = sourceList.find((l) => l.id === leadId) || targetList.find((l) => l.id === leadId);
+      if (!movedLead) return prev;
+      return {
+        ...prev,
+        [oldStatus]: sourceList.filter((l) => l.id !== leadId),
+        [newStatus]: [{ ...movedLead, status: newStatus, scheduled_date: null }, ...targetList.filter((l) => l.id !== leadId)],
+      };
+    });
 
-    const { error } = await supabase.from("crm_leads").update({ status: newStatus }).eq("id", leadId);
+    const { error } = await supabase.from("crm_leads").update({ status: newStatus, scheduled_date: null }).eq("id", leadId);
     if (error) {
       toast.error("Erro ao mover lead");
       fetchAll();
@@ -529,11 +557,12 @@ export default function LeadsPage() {
     if (!statuses.length) return;
     setColumnOffsets({});
     setColumnCounts({});
+    setColumnLeads({});
     setLeads((prev) => prev.filter((lead) => offlineIds.has(lead.id)));
     Promise.all(statuses.map((status) => fetchLeadsPage(status.key, 0, false)));
   }, [statuses, filterVendedor, filterDateFrom, filterDateTo, appointedLeadIds, offlineIds, fetchLeadsPage]);
 
-  const getLeadsByStatus = (status: string) => filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
+  const getLeadsByStatus = (status: string) => columnLeads[status] || [];
 
   const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -642,7 +671,7 @@ export default function LeadsPage() {
         <div className="flex gap-1.5 min-w-max">
           {statuses.map((status) => {
             const colors = colorMap[status.color] || colorMap.blue;
-            const count = getLeadsByStatus(status.key).length;
+            const count = columnCounts[status.key] || 0;
             return (
               <button
                 key={status.key}
