@@ -120,7 +120,10 @@ export default function LeadsPage() {
       ]);
       setColumns(cols || []);
       const loadedLeads = (lds || []) as Lead[];
-      setProfiles(profs || []);
+      // Merge company_id from fullProfs into profiles
+      const companyMap = new Map((fullProfs || []).map((p: any) => [p.user_id, p.company_id]));
+      const enrichedProfiles = (profs || []).map((p: any) => ({ ...p, company_id: companyMap.get(p.user_id) || null }));
+      setProfiles(enrichedProfiles);
       setStatuses((sts || []) as CrmStatus[]);
       setCompanies((comps || []) as Company[]);
       const loadedFields = (ff || []) as unknown as FormFieldInfo[];
