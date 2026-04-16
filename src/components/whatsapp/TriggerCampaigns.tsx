@@ -138,6 +138,7 @@ export default function TriggerCampaigns({ instances }: Props) {
 
   const resetForm = () => {
     setName("");
+    setModuleKey("leads");
     setStatusId("");
     setInstanceId("");
     setCompanyId("");
@@ -149,6 +150,7 @@ export default function TriggerCampaigns({ instances }: Props) {
 
   const handleEdit = (c: TriggerCampaign) => {
     setName(c.name);
+    setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || "");
     setCompanyId(c.company_id || "");
@@ -181,8 +183,8 @@ export default function TriggerCampaigns({ instances }: Props) {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !statusId || !companyId) {
-      toast.error("Preencha empresa, nome e coluna");
+    if (!name.trim() || !moduleKey || !statusId || !companyId) {
+      toast.error("Preencha empresa, página, nome e coluna");
       return;
     }
     if (steps.some((s) => !s.message.trim())) {
@@ -195,6 +197,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     try {
       const payload: any = {
         name: name.trim(),
+        module: moduleKey,
         status_id: statusId,
         daily_limit: parseInt(dailyLimit) || 15,
         created_by: user.id,
