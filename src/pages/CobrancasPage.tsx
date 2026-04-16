@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, DollarSign, User, FileText } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, User, Building2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatPhoneBR } from "@/lib/phoneFormat";
@@ -21,6 +21,7 @@ type Cobranca = {
   status: string;
   assigned_to: string | null;
   created_by: string | null;
+  company_id: string | null;
   valor: number;
   created_at: string;
   updated_at: string;
@@ -31,6 +32,7 @@ type CrmStatus = {
 };
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
+type Company = { id: string; name: string };
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -46,26 +48,31 @@ export default function CobrancasPage() {
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCobranca, setEditingCobranca] = useState<Cobranca | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({ nome: "", telefone: "", descricao: "" });
   const [formStatus, setFormStatus] = useState("");
   const [formAssigned, setFormAssigned] = useState("");
   const [formValor, setFormValor] = useState("");
+  const [formCompanyId, setFormCompanyId] = useState("");
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterCompanyId, setFilterCompanyId] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: cobs }, { data: sts }, { data: profs }] = await Promise.all([
+    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }] = await Promise.all([
       supabase.from("crm_cobrancas").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
+      supabase.from("companies").select("id, name").order("name"),
     ]);
     setCobrancas((cobs || []) as Cobranca[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
+    setCompanies((comps || []) as Company[]);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -75,7 +82,6 @@ export default function CobrancasPage() {
   }, [statuses]);
 
   const statusOptions = statuses.map(s => s.key);
-  const statusLabels = Object.fromEntries(statuses.map(s => [s.key, s.label]));
 
   const openCreate = (status?: string) => {
     setEditingCobranca(null);
@@ -83,6 +89,7 @@ export default function CobrancasPage() {
     setFormStatus(status || statusOptions[0] || "pendente");
     setFormAssigned("");
     setFormValor("");
+    setFormCompanyId(filterCompanyId !== "all" ? filterCompanyId : "");
     setDialogOpen(true);
   };
 
@@ -92,6 +99,7 @@ export default function CobrancasPage() {
     setFormStatus(cobranca.status);
     setFormAssigned(cobranca.assigned_to || "");
     setFormValor(String(cobranca.valor || ""));
+    setFormCompanyId(cobranca.company_id || "");
     setDialogOpen(true);
   };
 
@@ -103,13 +111,14 @@ export default function CobrancasPage() {
     if (editingCobranca) {
       const { error } = await supabase.from("crm_cobrancas").update({
         data: formData, status: formStatus, assigned_to: formAssigned || null, valor,
+        company_id: formCompanyId || null,
       }).eq("id", editingCobranca.id);
       if (error) toast.error("Erro ao atualizar");
       else toast.success("Cobrança atualizada");
     } else {
       const { error } = await supabase.from("crm_cobrancas").insert({
         data: formData, status: formStatus, assigned_to: formAssigned || null,
-        created_by: user?.id, valor,
+        created_by: user?.id, valor, company_id: formCompanyId || null,
       });
       if (error) toast.error("Erro ao criar cobrança");
       else toast.success("Cobrança criada");
@@ -143,17 +152,26 @@ export default function CobrancasPage() {
     return profiles.find(p => p.user_id === userId)?.full_name || "";
   };
 
+  const getCompanyName = (companyId: string | null) => {
+    if (!companyId) return "";
+    return companies.find(c => c.id === companyId)?.name || "";
+  };
+
   const filteredCobrancas = useMemo(() => {
-    if (!searchQuery.trim()) return cobrancas;
+    let list = cobrancas;
+    if (filterCompanyId && filterCompanyId !== "all") {
+      list = list.filter(c => c.company_id === filterCompanyId);
+    }
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return cobrancas.filter(c => {
+    return list.filter(c => {
       const d = c.data as Record<string, any>;
       return (d.nome || "").toLowerCase().includes(q)
         || (d.telefone || "").includes(q)
         || (d.descricao || "").toLowerCase().includes(q)
         || String(c.valor).includes(q);
     });
-  }, [cobrancas, searchQuery]);
+  }, [cobrancas, searchQuery, filterCompanyId]);
 
   const getByStatus = (key: string) => filteredCobrancas.filter(c => c.status === key);
 
@@ -174,6 +192,12 @@ export default function CobrancasPage() {
             R$ {Number(cobranca.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
           </Badge>
         </div>
+
+        {cobranca.company_id && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Building2 className="h-3 w-3" />{getCompanyName(cobranca.company_id)}
+          </p>
+        )}
 
         {d.descricao && (
           <p className="text-xs text-muted-foreground line-clamp-2">{d.descricao}</p>
@@ -208,7 +232,19 @@ export default function CobrancasPage() {
             Gerencie as cobranças do sistema — {filteredCobrancas.length} registro{filteredCobrancas.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+            <SelectTrigger className="h-9 w-[180px]">
+              <Building2 className="h-4 w-4 mr-1 text-muted-foreground" />
+              <SelectValue placeholder="Todas empresas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas empresas</SelectItem>
+              {companies.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="relative flex-1 sm:flex-initial">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -325,6 +361,19 @@ export default function CobrancasPage() {
             <DialogTitle>{editingCobranca ? "Editar Cobrança" : "Nova Cobrança"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Empresa</Label>
+              <Select value={formCompanyId} onValueChange={setFormCompanyId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar empresa..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Nome</Label>
               <Input value={formData.nome || ""} onChange={e => setFormData(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do cliente" required />
