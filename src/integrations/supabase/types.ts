@@ -782,6 +782,7 @@ export type Database = {
           instance_id: string | null
           is_active: boolean
           message: string
+          module: string
           name: string
           start_date: string
           status_id: string
@@ -798,6 +799,7 @@ export type Database = {
           instance_id?: string | null
           is_active?: boolean
           message: string
+          module?: string
           name: string
           start_date: string
           status_id: string
@@ -814,6 +816,7 @@ export type Database = {
           instance_id?: string | null
           is_active?: boolean
           message?: string
+          module?: string
           name?: string
           start_date?: string
           status_id?: string
@@ -890,6 +893,7 @@ export type Database = {
           id: string
           instance_id: string | null
           is_active: boolean
+          module: string
           name: string
           status_id: string
           updated_at: string
@@ -902,6 +906,7 @@ export type Database = {
           id?: string
           instance_id?: string | null
           is_active?: boolean
+          module?: string
           name: string
           status_id: string
           updated_at?: string
@@ -914,6 +919,7 @@ export type Database = {
           id?: string
           instance_id?: string | null
           is_active?: boolean
+          module?: string
           name?: string
           status_id?: string
           updated_at?: string
