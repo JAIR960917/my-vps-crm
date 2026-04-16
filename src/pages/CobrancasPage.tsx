@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { Plus, Search, Pencil, Trash2, Phone, DollarSign, User, FileText } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { formatPhone } from "@/lib/phoneFormat";
+import { formatPhoneBR } from "@/lib/phoneFormat";
 
 type Cobranca = {
   id: string;
