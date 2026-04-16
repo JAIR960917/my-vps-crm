@@ -8,11 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, User, Building2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, User, Building2, AlertTriangle, CalendarClock, CheckCircle2, Clock } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import CobrancaEditSheet from "@/components/cobrancas/CobrancaEditSheet";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
+type CobrancaActivity = {
+  id: string;
+  cobranca_id: string;
+  title: string;
+  scheduled_date: string;
+  completed_at: string | null;
+};
 
 type Cobranca = {
   id: string;
@@ -50,6 +60,7 @@ export default function CobrancasPage() {
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [activities, setActivities] = useState<CobrancaActivity[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCobranca, setEditingCobranca] = useState<Cobranca | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({ nome: "", telefone: "", descricao: "" });
@@ -64,18 +75,20 @@ export default function CobrancasPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }, { data: roles }] = await Promise.all([
+    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
       supabase.from("crm_cobrancas").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
+      supabase.from("cobranca_activities").select("id, cobranca_id, title, scheduled_date, completed_at"),
     ]);
     setCobrancas((cobs || []) as Cobranca[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
     setFinanceiroIds(new Set((roles || []).map((r: any) => r.user_id)));
+    setActivities((acts || []) as CobrancaActivity[]);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -182,8 +195,35 @@ export default function CobrancasPage() {
 
   const renderCard = (cobranca: Cobranca) => {
     const d = cobranca.data as Record<string, any>;
+
+    // Activity status (em dia / hoje / atrasada)
+    const cobActivities = activities.filter(a => a.cobranca_id === cobranca.id);
+    const pending = cobActivities.filter(a => !a.completed_at);
+    const overdue = pending.filter(a => new Date(a.scheduled_date) < new Date());
+    const today = pending.filter(a => {
+      const dt = new Date(a.scheduled_date);
+      const now = new Date();
+      return dt.toDateString() === now.toDateString() && dt >= now;
+    });
+    const hasOverdue = overdue.length > 0;
+    const hasToday = today.length > 0;
+    const hasPending = pending.length > 0 && !hasOverdue && !hasToday;
+
+    let cardBorderClass = "";
+    if (hasOverdue) {
+      cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
+    } else if (hasToday) {
+      cardBorderClass = "border-amber-400 bg-amber-500/5";
+    } else if (hasPending) {
+      cardBorderClass = "border-blue-400/50 bg-blue-500/5";
+    }
+
+    const nextActivity = [...pending].sort(
+      (a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
+    )[0];
+
     return (
-      <div className="bg-card border rounded-xl p-3 space-y-2 shadow-sm">
+      <div className={`bg-card border rounded-xl p-3 space-y-2 shadow-sm group ${cardBorderClass}`}>
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-sm truncate">{d.nome || "Sem nome"}</p>
@@ -214,13 +254,53 @@ export default function CobrancasPage() {
           </p>
         )}
 
+        {/* Activity status badges */}
+        <div className="pt-2 border-t">
+          {hasOverdue && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full uppercase">
+              <AlertTriangle className="h-3 w-3" />
+              Atrasada
+            </span>
+          )}
+          {hasToday && !hasOverdue && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <CalendarClock className="h-3 w-3" />
+              Hoje
+            </span>
+          )}
+          {hasPending && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <Clock className="h-3 w-3" />
+              Pendente
+            </span>
+          )}
+          {!hasOverdue && !hasToday && !hasPending && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-500 px-2 py-0.5 rounded-full uppercase">
+              <CheckCircle2 className="h-3 w-3" />
+              Em dia
+            </span>
+          )}
+
+          {nextActivity && (
+            <div className={`text-xs mt-1.5 ${hasOverdue ? "text-red-600" : hasToday ? "text-amber-600" : "text-muted-foreground"}`}>
+              <p className="font-medium truncate">{nextActivity.title}</p>
+              <p className="text-[10px]">
+                {(() => {
+                  try { return format(new Date(nextActivity.scheduled_date), "dd/MM 'às' HH:mm", { locale: ptBR }); }
+                  catch { return ""; }
+                })()}
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-1 justify-end pt-1">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(cobranca)}>
-            <Pencil className="h-3 w-3" />
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
           {(isAdmin || isGerente) && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(cobranca.id)}>
-              <Trash2 className="h-3 w-3 text-destructive" />
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
           )}
         </div>
