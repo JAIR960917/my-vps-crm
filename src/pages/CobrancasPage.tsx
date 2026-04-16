@@ -351,9 +351,11 @@ export default function CobrancasPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
-                      <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
-                        + Adicionar cobrança
-                      </button>
+                      {canCreate && (
+                        <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
+                          + Adicionar cobrança
+                        </button>
+                      )}
                     </div>
                   )}
                 </Droppable>
