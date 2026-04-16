@@ -185,6 +185,17 @@ export default function UsersPage() {
     setDeleting(false);
   };
 
+  const rolePriority: Record<string, number> = { admin: 0, gerente: 1, vendedor: 2 };
+
+  const sortedProfiles = [...profiles].sort((a, b) => {
+    const aRoles = getRoles(a.user_id);
+    const bRoles = getRoles(b.user_id);
+    const aPri = Math.min(...aRoles.map((r) => rolePriority[r] ?? 3));
+    const bPri = Math.min(...bRoles.map((r) => rolePriority[r] ?? 3));
+    if (aPri !== bPri) return aPri - bPri;
+    return (a.full_name || "").localeCompare(b.full_name || "", "pt-BR");
+  });
+
   const canManageUser = (p: Profile) => {
     if (p.user_id === user?.id) return false;
     if (isAdmin) return true;
