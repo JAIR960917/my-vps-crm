@@ -115,15 +115,17 @@ export default function CobrancasPage() {
       if (error) toast.error("Erro ao atualizar");
       else toast.success("Cobrança atualizada");
     } else {
-      const { error } = await supabase.from("crm_cobrancas").insert({
+      const { data: created, error } = await supabase.from("crm_cobrancas").insert({
         data: formData, status: formStatus, assigned_to: formAssigned || null,
         created_by: user?.id, valor, company_id: formCompanyId || null,
-      });
+      }).select().single();
       if (error) toast.error("Erro ao criar cobrança");
-      else toast.success("Cobrança criada");
+      else {
+        toast.success("Cobrança criada — agora você pode adicionar comentários e tarefas");
+        if (created) setEditingCobranca(created as Cobranca);
+      }
     }
     setSaving(false);
-    setDialogOpen(false);
     fetchAll();
   };
 
