@@ -75,18 +75,20 @@ export default function CobrancasPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }, { data: roles }] = await Promise.all([
+    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
       supabase.from("crm_cobrancas").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
+      supabase.from("cobranca_activities").select("id, cobranca_id, title, scheduled_date, completed_at"),
     ]);
     setCobrancas((cobs || []) as Cobranca[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
     setFinanceiroIds(new Set((roles || []).map((r: any) => r.user_id)));
+    setActivities((acts || []) as CobrancaActivity[]);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
