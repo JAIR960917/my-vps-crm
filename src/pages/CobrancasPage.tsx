@@ -195,8 +195,35 @@ export default function CobrancasPage() {
 
   const renderCard = (cobranca: Cobranca) => {
     const d = cobranca.data as Record<string, any>;
+
+    // Activity status (em dia / hoje / atrasada)
+    const cobActivities = activities.filter(a => a.cobranca_id === cobranca.id);
+    const pending = cobActivities.filter(a => !a.completed_at);
+    const overdue = pending.filter(a => new Date(a.scheduled_date) < new Date());
+    const today = pending.filter(a => {
+      const dt = new Date(a.scheduled_date);
+      const now = new Date();
+      return dt.toDateString() === now.toDateString() && dt >= now;
+    });
+    const hasOverdue = overdue.length > 0;
+    const hasToday = today.length > 0;
+    const hasPending = pending.length > 0 && !hasOverdue && !hasToday;
+
+    let cardBorderClass = "";
+    if (hasOverdue) {
+      cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
+    } else if (hasToday) {
+      cardBorderClass = "border-amber-400 bg-amber-500/5";
+    } else if (hasPending) {
+      cardBorderClass = "border-blue-400/50 bg-blue-500/5";
+    }
+
+    const nextActivity = [...pending].sort(
+      (a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
+    )[0];
+
     return (
-      <div className="bg-card border rounded-xl p-3 space-y-2 shadow-sm">
+      <div className={`bg-card border rounded-xl p-3 space-y-2 shadow-sm group ${cardBorderClass}`}>
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-sm truncate">{d.nome || "Sem nome"}</p>
@@ -227,13 +254,53 @@ export default function CobrancasPage() {
           </p>
         )}
 
+        {/* Activity status badges */}
+        <div className="pt-2 border-t">
+          {hasOverdue && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full uppercase">
+              <AlertTriangle className="h-3 w-3" />
+              Atrasada
+            </span>
+          )}
+          {hasToday && !hasOverdue && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <CalendarClock className="h-3 w-3" />
+              Hoje
+            </span>
+          )}
+          {hasPending && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <Clock className="h-3 w-3" />
+              Pendente
+            </span>
+          )}
+          {!hasOverdue && !hasToday && !hasPending && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-500 px-2 py-0.5 rounded-full uppercase">
+              <CheckCircle2 className="h-3 w-3" />
+              Em dia
+            </span>
+          )}
+
+          {nextActivity && (
+            <div className={`text-xs mt-1.5 ${hasOverdue ? "text-red-600" : hasToday ? "text-amber-600" : "text-muted-foreground"}`}>
+              <p className="font-medium truncate">{nextActivity.title}</p>
+              <p className="text-[10px]">
+                {(() => {
+                  try { return format(new Date(nextActivity.scheduled_date), "dd/MM 'às' HH:mm", { locale: ptBR }); }
+                  catch { return ""; }
+                })()}
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-1 justify-end pt-1">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(cobranca)}>
-            <Pencil className="h-3 w-3" />
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
           {(isAdmin || isGerente) && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(cobranca.id)}>
-              <Trash2 className="h-3 w-3 text-destructive" />
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
           )}
         </div>
