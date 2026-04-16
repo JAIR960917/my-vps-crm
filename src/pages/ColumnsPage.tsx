@@ -103,7 +103,7 @@ export default function ColumnsPage() {
 
   const handleDelete = async (status: CrmStatus, section: SectionType) => {
     const dataTable = sectionConfig[section].dataTable;
-    const { count } = await supabase.from(dataTable as any).select("id", { count: "exact", head: true }).eq("status" as any, status.key);
+    const { count } = await (supabase.from(dataTable as any) as any).select("id", { count: "exact", head: true }).eq("status", status.key);
     if (count && count > 0) { toast.error("Remova os registros desta coluna antes de excluí-la"); return; }
     const table = sectionConfig[section].statusTable;
     const { error } = await supabase.from(table as any).delete().eq("id", status.id);
