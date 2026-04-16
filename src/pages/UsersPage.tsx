@@ -112,13 +112,9 @@ export default function UsersPage() {
       body.extra_company_ids = createExtraCompanyIds;
     }
     const { data, error } = await supabase.functions.invoke("create-user", { body });
+    const errMsg = data?.error || (error as any)?.context?.body ? JSON.parse((error as any)?.context?.body)?.error : error?.message;
     if (error || data?.error) {
-      const errMsg = data?.error || error?.message || "";
-      if (errMsg.toLowerCase().includes("already") || errMsg.toLowerCase().includes("duplicate") || errMsg.toLowerCase().includes("already registered")) {
-        toast.error("Este email já está cadastrado. Não é possível criar outro usuário com o mesmo email.");
-      } else {
-        toast.error(errMsg || "Erro ao criar usuário");
-      }
+      toast.error(errMsg || "Erro ao criar usuário");
     } else {
       toast.success("Usuário criado com senha padrão: joonker2026");
       setOpenCreate(false);
