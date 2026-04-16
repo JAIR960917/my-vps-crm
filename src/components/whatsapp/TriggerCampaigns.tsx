@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { Plus, Trash2, Edit2, Send, Users, Hash, Clock, Zap, Smartphone } from "lucide-react";
+import ImageUploadField from "@/components/whatsapp/ImageUploadField";
 
 type Status = {
   id: string;
@@ -24,6 +25,7 @@ type TriggerStep = {
   position: number;
   delay_days: number;
   message: string;
+  image_url?: string | null;
 };
 
 type TriggerCampaign = {
@@ -122,7 +124,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setInstanceId("");
     setCompanyId("");
     setDailyLimit("15");
-    setSteps([{ position: 0, delay_days: 0, message: "" }]);
+    setSteps([{ position: 0, delay_days: 0, message: "", image_url: null }]);
     setEditingId(null);
     setShowForm(false);
   };
@@ -136,8 +138,8 @@ export default function TriggerCampaigns({ instances }: Props) {
     const sorted = [...(c.whatsapp_trigger_steps || [])].sort((a, b) => a.position - b.position);
     setSteps(
       sorted.length > 0
-        ? sorted.map((s) => ({ id: s.id, position: s.position, delay_days: s.delay_days, message: s.message }))
-        : [{ position: 0, delay_days: 0, message: "" }]
+        ? sorted.map((s) => ({ id: s.id, position: s.position, delay_days: s.delay_days, message: s.message, image_url: s.image_url || null }))
+        : [{ position: 0, delay_days: 0, message: "", image_url: null }]
     );
     setEditingId(c.id);
     setShowForm(true);
@@ -148,7 +150,7 @@ export default function TriggerCampaigns({ instances }: Props) {
       toast.error("Máximo de 5 etapas por campanha");
       return;
     }
-    setSteps([...steps, { position: steps.length, delay_days: steps.length === 0 ? 0 : 3, message: "" }]);
+    setSteps([...steps, { position: steps.length, delay_days: steps.length === 0 ? 0 : 3, message: "", image_url: null }]);
   };
 
   const removeStep = (idx: number) => {
@@ -199,6 +201,7 @@ export default function TriggerCampaigns({ instances }: Props) {
         position: i,
         delay_days: s.delay_days,
         message: s.message.trim(),
+        image_url: s.image_url || null,
       }));
 
       const { error: stepsError } = await supabase.from("whatsapp_trigger_steps").insert(stepsPayload);
@@ -377,6 +380,11 @@ export default function TriggerCampaigns({ instances }: Props) {
                   onChange={(e) => updateStep(idx, "message", e.target.value)}
                   className="min-h-[70px] text-sm"
                 />
+                <ImageUploadField
+                  value={step.image_url || null}
+                  onChange={(url) => updateStep(idx, "image_url", url)}
+                  label="Imagem desta etapa (opcional)"
+                />
               </div>
             ))}
           </div>
@@ -455,12 +463,15 @@ export default function TriggerCampaigns({ instances }: Props) {
 
                   {/* Steps preview */}
                   <div className="space-y-1">
-                    {sortedSteps.map((step, idx) => (
+                    {sortedSteps.map((step: any, idx) => (
                       <div key={step.id || idx} className="flex items-start gap-2 text-xs">
                         <div className="flex items-center gap-1 text-muted-foreground whitespace-nowrap mt-0.5">
                           <Clock className="h-3 w-3" />
                           {step.delay_days === 0 ? "Entrada" : `+${step.delay_days}d`}
                         </div>
+                        {step.image_url && (
+                          <img src={step.image_url} alt="" className="h-10 w-10 rounded object-cover border shrink-0" />
+                        )}
                         <p className="bg-muted/50 rounded px-2 py-1 flex-1 line-clamp-2">{step.message}</p>
                       </div>
                     ))}

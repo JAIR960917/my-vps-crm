@@ -17,6 +17,7 @@ import {
   QrCode, RefreshCw, Wifi, WifiOff, Loader2, Smartphone, Settings2, Zap
 } from "lucide-react";
 import TriggerCampaigns from "@/components/whatsapp/TriggerCampaigns";
+import ImageUploadField from "@/components/whatsapp/ImageUploadField";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -24,6 +25,7 @@ type Campaign = {
   id: string;
   name: string;
   message: string;
+  image_url: string | null;
   status_id: string;
   instance_id: string | null;
   company_id: string | null;
@@ -72,6 +74,7 @@ export default function WhatsAppPage() {
   // Form state
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
   const [companyId, setCompanyId] = useState("");
@@ -247,13 +250,14 @@ export default function WhatsAppPage() {
   }, [instances.length]);
 
   const resetForm = () => {
-    setName(""); setMessage(""); setStatusId(""); setInstanceId(""); setCompanyId("");
+    setName(""); setMessage(""); setImageUrl(null); setStatusId(""); setInstanceId(""); setCompanyId("");
     setDailyLimit("15");
     setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
   };
 
   const handleEdit = (c: Campaign) => {
-    setName(c.name); setMessage(c.message); setStatusId(c.status_id);
+    setName(c.name); setMessage(c.message); setImageUrl(c.image_url || null);
+    setStatusId(c.status_id);
     setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "");
     setDailyLimit(String(c.daily_limit));
     setStartDate(c.start_date); setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
@@ -273,6 +277,7 @@ export default function WhatsAppPage() {
       end_date: endDate, created_by: user.id,
       instance_id: instanceId || null,
       company_id: companyId,
+      image_url: imageUrl,
     };
 
     let error;
@@ -549,6 +554,7 @@ export default function WhatsAppPage() {
                   Use {"{nome}"} para inserir o nome do lead automaticamente
                 </p>
               </div>
+              <ImageUploadField value={imageUrl} onChange={setImageUrl} label="Imagem da campanha (opcional)" />
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={resetForm}>Cancelar</Button>
                 <Button size="sm" onClick={handleSubmit} disabled={saving}>
@@ -610,7 +616,12 @@ export default function WhatsAppPage() {
                         )}
                       </div>
 
-                      <p className="text-sm bg-muted/50 rounded-md p-2 whitespace-pre-wrap">{c.message}</p>
+                      <div className="flex gap-3">
+                        {c.image_url && (
+                          <img src={c.image_url} alt="Imagem" className="h-20 w-20 rounded-md object-cover border shrink-0" />
+                        )}
+                        <p className="text-sm bg-muted/50 rounded-md p-2 whitespace-pre-wrap flex-1">{c.message}</p>
+                      </div>
 
                       <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
                         <span className="flex items-center gap-1">
