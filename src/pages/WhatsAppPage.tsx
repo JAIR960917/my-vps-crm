@@ -268,13 +268,16 @@ export default function WhatsAppPage() {
   }, [instances.length]);
 
   const resetForm = () => {
-    setName(""); setMessage(""); setImageUrl(null); setStatusId(""); setInstanceId(""); setCompanyId("");
+    setName(""); setMessage(""); setImageUrl(null);
+    setModuleKey("leads");
+    setStatusId(""); setInstanceId(""); setCompanyId("");
     setDailyLimit("15");
     setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
   };
 
   const handleEdit = (c: Campaign) => {
     setName(c.name); setMessage(c.message); setImageUrl(c.image_url || null);
+    setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "");
     setDailyLimit(String(c.daily_limit));
@@ -282,15 +285,17 @@ export default function WhatsAppPage() {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !message.trim() || !statusId || !companyId || !startDate || !endDate || !dailyLimit) {
-      toast.error("Preencha todos os campos obrigatórios (incluindo Empresa)");
+    if (!name.trim() || !message.trim() || !moduleKey || !statusId || !companyId || !startDate || !endDate || !dailyLimit) {
+      toast.error("Preencha todos os campos obrigatórios (incluindo Empresa, Módulo e Coluna)");
       return;
     }
     if (!user) return;
     setSaving(true);
 
     const payload: any = {
-      name: name.trim(), message: message.trim(), status_id: statusId,
+      name: name.trim(), message: message.trim(),
+      module: moduleKey,
+      status_id: statusId,
       daily_limit: parseInt(dailyLimit) || 15, start_date: startDate,
       end_date: endDate, created_by: user.id,
       instance_id: instanceId || null,
