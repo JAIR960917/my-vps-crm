@@ -15,6 +15,14 @@ const ERROR_TOKENS = [
   "nao conectado", "not found", "forbidden", "blocked",
 ];
 
+// ========== Module configuration ==========
+type ModuleKey = "leads" | "cobrancas" | "renovacoes";
+const MODULE_CONFIG: Record<ModuleKey, { dataTable: string; statusTable: string; useFormBuilder: boolean }> = {
+  leads:      { dataTable: "crm_leads",      statusTable: "crm_statuses",            useFormBuilder: true  },
+  cobrancas:  { dataTable: "crm_cobrancas",  statusTable: "crm_cobranca_statuses",   useFormBuilder: false },
+  renovacoes: { dataTable: "crm_renovacoes", statusTable: "crm_renovacao_statuses",  useFormBuilder: false },
+};
+
 function extractApiMessages(result: any) {
   return [
     result?.message, result?.mensagem, result?.error, result?.msg, result?.status,
@@ -63,21 +71,35 @@ function cleanPhone(phone: string) {
   return clean;
 }
 
-function resolveLeadFields(data: Record<string, any>, nameFields: any[], phoneFields: any[]) {
-  let phone = "";
-  for (const f of phoneFields) {
-    const val = data[`field_${f.id}`];
-    if (val) { phone = val; break; }
-  }
-  if (!phone) phone = data.telefone || "";
+// Resolve phone/name from card data based on module type.
+// - leads: uses form builder mappings (is_phone_field / is_name_field)
+// - cobrancas/renovacoes: uses fixed keys data.telefone / data.nome
+function resolveCardFields(
+  module: ModuleKey,
+  data: Record<string, any>,
+  nameFields: any[],
+  phoneFields: any[],
+) {
+  if (MODULE_CONFIG[module].useFormBuilder) {
+    let phone = "";
+    for (const f of phoneFields) {
+      const val = data[`field_${f.id}`];
+      if (val) { phone = val; break; }
+    }
+    if (!phone) phone = data.telefone || data.phone || "";
 
-  let name = "";
-  for (const f of nameFields) {
-    const val = data[`field_${f.id}`];
-    if (val) { name = val; break; }
-  }
-  if (!name) name = data.nome_lead || "Cliente";
+    let name = "";
+    for (const f of nameFields) {
+      const val = data[`field_${f.id}`];
+      if (val) { name = val; break; }
+    }
+    if (!name) name = data.nome_lead || data.nome || "Cliente";
 
+    return { phone, name };
+  }
+  // Fixed-fields modules
+  const phone = data.telefone || data.phone || data.celular || "";
+  const name = data.nome || data.nome_lead || data.name || "Cliente";
   return { phone, name };
 }
 
@@ -92,7 +114,6 @@ async function resolveSession(supabase: any, instanceId: string | null): Promise
     if (data?.is_active) return data.session;
     return null;
   }
-  // Fallback: legacy system_settings
   const { data } = await supabase
     .from("system_settings")
     .select("setting_value")
@@ -119,13 +140,18 @@ async function getCompanyUserIds(supabase: any, companyId: string): Promise<Set<
   return ids;
 }
 
-// Filter leads to those whose created_by OR assigned_to belongs to the company
-function filterLeadsByCompany(leads: any[], companyUserIds: Set<string>): any[] {
-  return leads.filter((l) => {
+function filterCardsByCompany(cards: any[], companyUserIds: Set<string>): any[] {
+  return cards.filter((l) => {
     const cb = l.created_by;
     const at = l.assigned_to;
     return (cb && companyUserIds.has(cb)) || (at && companyUserIds.has(at));
   });
+}
+
+// Resolve the status key from a status_id, given the right status table for the module
+async function resolveStatusKey(supabase: any, statusTable: string, statusId: string): Promise<string> {
+  const { data } = await supabase.from(statusTable).select("key").eq("id", statusId).single();
+  return data?.key || "";
 }
 
 serve(async (req) => {
@@ -141,7 +167,10 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { data: formFields } = await supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field");
+    // Form builder fields are only needed for the 'leads' module
+    const { data: formFields } = await supabase
+      .from("crm_form_fields")
+      .select("id, label, is_name_field, is_phone_field");
     const nameFields = (formFields || []).filter((f: any) => f.is_name_field);
     const phoneFields = (formFields || []).filter((f: any) => f.is_phone_field);
 
@@ -150,7 +179,6 @@ serve(async (req) => {
     let skippedNoCompany = 0;
     const today = new Date().toISOString().split("T")[0];
 
-    // Cache of company_id -> set of user_ids
     const companyUsersCache = new Map<string, Set<string>>();
     const getUsers = async (companyId: string) => {
       if (!companyUsersCache.has(companyId)) {
@@ -165,30 +193,33 @@ serve(async (req) => {
 
     if (campaigns && campaigns.length > 0) {
       for (const campaign of campaigns) {
-        // Skip campaigns without company defined
         if (!campaign.company_id) {
           skippedNoCompany++;
           continue;
         }
 
+        const moduleKey = (campaign.module || "leads") as ModuleKey;
+        const cfg = MODULE_CONFIG[moduleKey];
+        if (!cfg) continue;
+
         const session = await resolveSession(supabase, campaign.instance_id);
         if (!session) continue;
 
-        const { data: statusData } = await supabase.from("crm_statuses").select("key").eq("id", campaign.status_id).single();
-        const statusKey = statusData?.key || "";
+        const statusKey = await resolveStatusKey(supabase, cfg.statusTable, campaign.status_id);
+        if (!statusKey) continue;
 
-        const { data: leads } = await supabase.from("crm_leads")
+        const { data: cards } = await supabase.from(cfg.dataTable)
           .select("id, data, created_by, assigned_to").eq("status", statusKey);
-        if (!leads) continue;
+        if (!cards) continue;
 
         const companyUsers = await getUsers(campaign.company_id);
-        const companyLeads = filterLeadsByCompany(leads, companyUsers);
-        if (companyLeads.length === 0) continue;
+        const companyCards = filterCardsByCompany(cards, companyUsers);
+        if (companyCards.length === 0) continue;
 
         const { data: existingSends } = await supabase.from("whatsapp_campaign_sends")
           .select("lead_id, status").eq("campaign_id", campaign.id);
-        const sentLeadIds = new Set((existingSends || []).filter((s: any) => s.status === "sent").map((s: any) => s.lead_id));
-        const pendingLeads = companyLeads.filter((l: any) => !sentLeadIds.has(l.id));
+        const sentIds = new Set((existingSends || []).filter((s: any) => s.status === "sent").map((s: any) => s.lead_id));
+        const pendingCards = companyCards.filter((l: any) => !sentIds.has(l.id));
 
         const todayStart = new Date(today + "T00:00:00Z").toISOString();
         const todayEnd = new Date(today + "T23:59:59Z").toISOString();
@@ -199,9 +230,9 @@ serve(async (req) => {
         const remaining = campaign.daily_limit - (sentToday || 0);
         if (remaining <= 0) continue;
 
-        for (const lead of pendingLeads.slice(0, remaining)) {
-          const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
-          const { phone, name } = resolveLeadFields(data, nameFields, phoneFields);
+        for (const card of pendingCards.slice(0, remaining)) {
+          const data = typeof card.data === "object" ? (card.data as Record<string, any>) : {};
+          const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
 
           const messageBody = campaign.message.replace(/\{nome\}/gi, name);
@@ -210,14 +241,14 @@ serve(async (req) => {
           try {
             const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, campaign.image_url);
             if (result.ok) {
-              await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: lead.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
+              await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
               totalSent++;
             } else {
-              await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: lead.id, phone: cp, status: "error", error_message: result.errorMessage || "Erro" });
+              await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "error", error_message: result.errorMessage || "Erro" });
               totalErrors++;
             }
           } catch (e) {
-            await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: lead.id, phone: cp, status: "error", error_message: e instanceof Error ? e.message : "Unknown error" });
+            await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "error", error_message: e instanceof Error ? e.message : "Unknown error" });
             totalErrors++;
           }
         }
@@ -230,11 +261,14 @@ serve(async (req) => {
 
     if (triggerCampaigns && triggerCampaigns.length > 0) {
       for (const tc of triggerCampaigns) {
-        // Skip trigger campaigns without company defined
         if (!tc.company_id) {
           skippedNoCompany++;
           continue;
         }
+
+        const moduleKey = (tc.module || "leads") as ModuleKey;
+        const cfg = MODULE_CONFIG[moduleKey];
+        if (!cfg) continue;
 
         const session = await resolveSession(supabase, tc.instance_id);
         if (!session) continue;
@@ -242,16 +276,16 @@ serve(async (req) => {
         const steps = ((tc as any).whatsapp_trigger_steps || []).sort((a: any, b: any) => a.position - b.position);
         if (steps.length === 0) continue;
 
-        const { data: statusData } = await supabase.from("crm_statuses").select("key").eq("id", tc.status_id).single();
-        const statusKey = statusData?.key || "";
+        const statusKey = await resolveStatusKey(supabase, cfg.statusTable, tc.status_id);
+        if (!statusKey) continue;
 
-        const { data: leadsRaw } = await supabase.from("crm_leads")
+        const { data: cardsRaw } = await supabase.from(cfg.dataTable)
           .select("id, data, status, updated_at, created_by, assigned_to").eq("status", statusKey);
-        if (!leadsRaw || leadsRaw.length === 0) continue;
+        if (!cardsRaw || cardsRaw.length === 0) continue;
 
         const companyUsers = await getUsers(tc.company_id);
-        const leads = filterLeadsByCompany(leadsRaw, companyUsers);
-        if (leads.length === 0) continue;
+        const cards = filterCardsByCompany(cardsRaw, companyUsers);
+        if (cards.length === 0) continue;
 
         const { data: existingSends } = await supabase.from("whatsapp_trigger_sends")
           .select("lead_id, step_id, status").eq("campaign_id", tc.id);
@@ -265,23 +299,23 @@ serve(async (req) => {
         let remaining = tc.daily_limit - (sentToday || 0);
         if (remaining <= 0) continue;
 
-        const sendsByLead = new Map<string, Set<string>>();
+        const sendsByCard = new Map<string, Set<string>>();
         for (const s of (existingSends || []) as any[]) {
           if (s.status === "sent") {
-            if (!sendsByLead.has(s.lead_id)) sendsByLead.set(s.lead_id, new Set());
-            sendsByLead.get(s.lead_id)!.add(s.step_id);
+            if (!sendsByCard.has(s.lead_id)) sendsByCard.set(s.lead_id, new Set());
+            sendsByCard.get(s.lead_id)!.add(s.step_id);
           }
         }
 
-        for (const lead of leads) {
+        for (const card of cards) {
           if (remaining <= 0) break;
 
-          const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
-          const { phone, name } = resolveLeadFields(data, nameFields, phoneFields);
+          const data = typeof card.data === "object" ? (card.data as Record<string, any>) : {};
+          const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
 
-          const sentStepIds = sendsByLead.get(lead.id) || new Set();
-          const enteredAt = new Date(lead.updated_at);
+          const sentStepIds = sendsByCard.get(card.id) || new Set();
+          const enteredAt = new Date(card.updated_at);
           const now = new Date();
           const daysSinceEntry = Math.floor((now.getTime() - enteredAt.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -295,15 +329,15 @@ serve(async (req) => {
             try {
               const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, step.image_url);
               if (result.ok) {
-                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: lead.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
+                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
                 totalSent++;
                 remaining--;
               } else {
-                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: lead.id, phone: cp, status: "error", error_message: result.errorMessage || "Erro" });
+                await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "error", error_message: result.errorMessage || "Erro" });
                 totalErrors++;
               }
             } catch (e) {
-              await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: lead.id, phone: cp, status: "error", error_message: e instanceof Error ? e.message : "Unknown error" });
+              await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "error", error_message: e instanceof Error ? e.message : "Unknown error" });
               totalErrors++;
             }
 

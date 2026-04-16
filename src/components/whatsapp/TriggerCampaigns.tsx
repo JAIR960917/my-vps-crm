@@ -13,6 +13,14 @@ import { toast } from "sonner";
 import { Plus, Trash2, Edit2, Send, Users, Hash, Clock, Zap, Smartphone } from "lucide-react";
 import ImageUploadField from "@/components/whatsapp/ImageUploadField";
 
+type ModuleKey = "leads" | "cobrancas" | "renovacoes";
+
+const MODULE_LABELS: Record<ModuleKey, string> = {
+  leads: "Leads",
+  cobrancas: "Cobranças",
+  renovacoes: "Renovações",
+};
+
 type Status = {
   id: string;
   key: string;
@@ -31,6 +39,7 @@ type TriggerStep = {
 type TriggerCampaign = {
   id: string;
   name: string;
+  module: ModuleKey;
   status_id: string;
   instance_id: string | null;
   company_id: string | null;
@@ -65,7 +74,9 @@ interface Props {
 export default function TriggerCampaigns({ instances }: Props) {
   const { user, isAdmin, isGerente } = useAuth();
   const [campaigns, setCampaigns] = useState<TriggerCampaign[]>([]);
-  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [statusesByModule, setStatusesByModule] = useState<Record<ModuleKey, Status[]>>({
+    leads: [], cobrancas: [], renovacoes: [],
+  });
   const [companies, setCompanies] = useState<Company[]>([]);
   const [sendStats, setSendStats] = useState<Record<string, TriggerSendStats>>({});
   const [loading, setLoading] = useState(true);
@@ -75,6 +86,7 @@ export default function TriggerCampaigns({ instances }: Props) {
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   const [name, setName] = useState("");
+  const [moduleKey, setModuleKey] = useState<ModuleKey>("leads");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
   const [companyId, setCompanyId] = useState("");
@@ -87,18 +99,24 @@ export default function TriggerCampaigns({ instances }: Props) {
 
   const fetchData = async () => {
     setLoading(true);
-    const [campaignsRes, statusesRes, sendsRes, companiesRes] = await Promise.all([
+    const [campaignsRes, leadStatusRes, cobStatusRes, renStatusRes, sendsRes, companiesRes] = await Promise.all([
       supabase
         .from("whatsapp_trigger_campaigns")
         .select("*, whatsapp_trigger_steps(*)")
         .order("created_at", { ascending: false }),
       supabase.from("crm_statuses").select("*").order("position"),
+      supabase.from("crm_cobranca_statuses").select("*").order("position"),
+      supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.from("whatsapp_trigger_sends").select("campaign_id, status"),
       supabase.from("companies").select("id, name").order("name"),
     ]);
 
     setCampaigns((campaignsRes.data || []) as any);
-    setStatuses((statusesRes.data || []) as Status[]);
+    setStatusesByModule({
+      leads: (leadStatusRes.data || []) as Status[],
+      cobrancas: (cobStatusRes.data || []) as Status[],
+      renovacoes: (renStatusRes.data || []) as Status[],
+    });
     setCompanies((companiesRes.data || []) as Company[]);
 
     const stats: Record<string, TriggerSendStats> = {};
@@ -120,6 +138,7 @@ export default function TriggerCampaigns({ instances }: Props) {
 
   const resetForm = () => {
     setName("");
+    setModuleKey("leads");
     setStatusId("");
     setInstanceId("");
     setCompanyId("");
@@ -131,6 +150,7 @@ export default function TriggerCampaigns({ instances }: Props) {
 
   const handleEdit = (c: TriggerCampaign) => {
     setName(c.name);
+    setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || "");
     setCompanyId(c.company_id || "");
@@ -163,8 +183,8 @@ export default function TriggerCampaigns({ instances }: Props) {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !statusId || !companyId) {
-      toast.error("Preencha empresa, nome e coluna");
+    if (!name.trim() || !moduleKey || !statusId || !companyId) {
+      toast.error("Preencha empresa, página, nome e coluna");
       return;
     }
     if (steps.some((s) => !s.message.trim())) {
@@ -177,6 +197,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     try {
       const payload: any = {
         name: name.trim(),
+        module: moduleKey,
         status_id: statusId,
         daily_limit: parseInt(dailyLimit) || 15,
         created_by: user.id,
@@ -233,8 +254,10 @@ export default function TriggerCampaigns({ instances }: Props) {
     else fetchData();
   };
 
-  const getStatusLabel = (sid: string) => statuses.find((s) => s.id === sid)?.label || "—";
-  const getStatusColor = (sid: string) => statuses.find((s) => s.id === sid)?.color || "gray";
+  const allStatuses = [...statusesByModule.leads, ...statusesByModule.cobrancas, ...statusesByModule.renovacoes];
+  const getStatusLabel = (sid: string) => allStatuses.find((s) => s.id === sid)?.label || "—";
+  const getStatusColor = (sid: string) => allStatuses.find((s) => s.id === sid)?.color || "gray";
+  const currentStatuses = statusesByModule[moduleKey] || [];
   const getInstanceName = (iid: string | null) => instances.find((i) => i.id === iid)?.name || "—";
   const getCompanyName = (cid: string | null) => companies.find((c) => c.id === cid)?.name || "—";
 
@@ -307,13 +330,26 @@ export default function TriggerCampaigns({ instances }: Props) {
               <Input placeholder="Ex: Sequência boas-vindas" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Coluna do Kanban *</Label>
-              <Select value={statusId} onValueChange={setStatusId}>
+              <Label>Página de origem *</Label>
+              <Select value={moduleKey} onValueChange={(v) => { setModuleKey(v as ModuleKey); setStatusId(""); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {statuses.map((s) => (
+                  <SelectItem value="leads">Leads</SelectItem>
+                  <SelectItem value="cobrancas">Cobranças</SelectItem>
+                  <SelectItem value="renovacoes">Renovações</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Coluna do Kanban *</Label>
+              <Select value={statusId} onValueChange={setStatusId} disabled={currentStatuses.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={currentStatuses.length === 0 ? "Sem colunas nesta página" : "Selecione..."} />
+                </SelectTrigger>
+                <SelectContent>
+                  {currentStatuses.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.label}
                     </SelectItem>
@@ -428,6 +464,9 @@ export default function TriggerCampaigns({ instances }: Props) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <Zap className="h-4 w-4 text-amber-500" />
                         <span className="font-semibold text-sm">{c.name}</span>
+                        <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                          {MODULE_LABELS[(c.module || "leads") as ModuleKey]}
+                        </Badge>
                         <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                           {getStatusLabel(c.status_id)}
                         </Badge>

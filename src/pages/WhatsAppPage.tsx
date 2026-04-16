@@ -21,11 +21,20 @@ import ImageUploadField from "@/components/whatsapp/ImageUploadField";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+type ModuleKey = "leads" | "cobrancas" | "renovacoes";
+
+const MODULE_LABELS: Record<ModuleKey, string> = {
+  leads: "Leads",
+  cobrancas: "Cobranças",
+  renovacoes: "Renovações",
+};
+
 type Campaign = {
   id: string;
   name: string;
   message: string;
   image_url: string | null;
+  module: ModuleKey;
   status_id: string;
   instance_id: string | null;
   company_id: string | null;
@@ -64,7 +73,9 @@ type Instance = {
 export default function WhatsAppPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [statusesByModule, setStatusesByModule] = useState<Record<ModuleKey, Status[]>>({
+    leads: [], cobrancas: [], renovacoes: [],
+  });
   const [sendStats, setSendStats] = useState<Record<string, SendStats>>({});
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +86,7 @@ export default function WhatsAppPage() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [moduleKey, setModuleKey] = useState<ModuleKey>("leads");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
   const [companyId, setCompanyId] = useState("");
@@ -98,16 +110,22 @@ export default function WhatsAppPage() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [campaignsRes, statusesRes, sendsRes, instancesRes, companiesRes] = await Promise.all([
+    const [campaignsRes, leadStatusRes, cobStatusRes, renStatusRes, sendsRes, instancesRes, companiesRes] = await Promise.all([
       supabase.from("whatsapp_campaigns").select("*").order("created_at", { ascending: false }),
       supabase.from("crm_statuses").select("*").order("position"),
+      supabase.from("crm_cobranca_statuses").select("*").order("position"),
+      supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.from("whatsapp_campaign_sends").select("campaign_id, status"),
       supabase.from("whatsapp_instances").select("*").order("created_at", { ascending: false }),
       supabase.from("companies").select("id, name").order("name"),
     ]);
 
     setCampaigns((campaignsRes.data || []) as Campaign[]);
-    setStatuses((statusesRes.data || []) as Status[]);
+    setStatusesByModule({
+      leads: (leadStatusRes.data || []) as Status[],
+      cobrancas: (cobStatusRes.data || []) as Status[],
+      renovacoes: (renStatusRes.data || []) as Status[],
+    });
     setInstances((instancesRes.data || []) as Instance[]);
     setCompanies((companiesRes.data || []) as { id: string; name: string }[]);
 
@@ -250,13 +268,16 @@ export default function WhatsAppPage() {
   }, [instances.length]);
 
   const resetForm = () => {
-    setName(""); setMessage(""); setImageUrl(null); setStatusId(""); setInstanceId(""); setCompanyId("");
+    setName(""); setMessage(""); setImageUrl(null);
+    setModuleKey("leads");
+    setStatusId(""); setInstanceId(""); setCompanyId("");
     setDailyLimit("15");
     setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
   };
 
   const handleEdit = (c: Campaign) => {
     setName(c.name); setMessage(c.message); setImageUrl(c.image_url || null);
+    setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "");
     setDailyLimit(String(c.daily_limit));
@@ -264,15 +285,17 @@ export default function WhatsAppPage() {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !message.trim() || !statusId || !companyId || !startDate || !endDate || !dailyLimit) {
-      toast.error("Preencha todos os campos obrigatórios (incluindo Empresa)");
+    if (!name.trim() || !message.trim() || !moduleKey || !statusId || !companyId || !startDate || !endDate || !dailyLimit) {
+      toast.error("Preencha todos os campos obrigatórios (incluindo Empresa, Módulo e Coluna)");
       return;
     }
     if (!user) return;
     setSaving(true);
 
     const payload: any = {
-      name: name.trim(), message: message.trim(), status_id: statusId,
+      name: name.trim(), message: message.trim(),
+      module: moduleKey,
+      status_id: statusId,
       daily_limit: parseInt(dailyLimit) || 15, start_date: startDate,
       end_date: endDate, created_by: user.id,
       instance_id: instanceId || null,
@@ -305,8 +328,10 @@ export default function WhatsAppPage() {
     else fetchData();
   };
 
-  const getStatusLabel = (sid: string) => statuses.find(s => s.id === sid)?.label || "—";
-  const getStatusColor = (sid: string) => statuses.find(s => s.id === sid)?.color || "gray";
+  const allStatuses = [...statusesByModule.leads, ...statusesByModule.cobrancas, ...statusesByModule.renovacoes];
+  const getStatusLabel = (sid: string) => allStatuses.find(s => s.id === sid)?.label || "—";
+  const getStatusColor = (sid: string) => allStatuses.find(s => s.id === sid)?.color || "gray";
+  const currentStatuses = statusesByModule[moduleKey] || [];
   const getInstanceName = (iid: string | null) => instances.find(i => i.id === iid)?.name || "—";
   const getCompanyName = (cid: string | null) => companies.find(c => c.id === cid)?.name || "—";
 
@@ -508,11 +533,23 @@ export default function WhatsAppPage() {
                   <Input placeholder="Ex: Boas-vindas novos leads" value={name} onChange={e => setName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Coluna do Kanban *</Label>
-                  <Select value={statusId} onValueChange={setStatusId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione a coluna..." /></SelectTrigger>
+                  <Label>Página de origem *</Label>
+                  <Select value={moduleKey} onValueChange={(v) => { setModuleKey(v as ModuleKey); setStatusId(""); }}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a página..." /></SelectTrigger>
                     <SelectContent>
-                      {statuses.map(s => (
+                      <SelectItem value="leads">Leads</SelectItem>
+                      <SelectItem value="cobrancas">Cobranças</SelectItem>
+                      <SelectItem value="renovacoes">Renovações</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground">De qual página os cards serão buscados</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Coluna do Kanban *</Label>
+                  <Select value={statusId} onValueChange={setStatusId} disabled={currentStatuses.length === 0}>
+                    <SelectTrigger><SelectValue placeholder={currentStatuses.length === 0 ? "Sem colunas nesta página" : "Selecione a coluna..."} /></SelectTrigger>
+                    <SelectContent>
+                      {currentStatuses.map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -583,6 +620,9 @@ export default function WhatsAppPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm">{c.name}</span>
+                            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                              {MODULE_LABELS[(c.module || "leads") as ModuleKey]}
+                            </Badge>
                             <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                               {getStatusLabel(c.status_id)}
                             </Badge>
