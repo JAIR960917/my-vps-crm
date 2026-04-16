@@ -533,11 +533,23 @@ export default function WhatsAppPage() {
                   <Input placeholder="Ex: Boas-vindas novos leads" value={name} onChange={e => setName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Coluna do Kanban *</Label>
-                  <Select value={statusId} onValueChange={setStatusId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione a coluna..." /></SelectTrigger>
+                  <Label>Página de origem *</Label>
+                  <Select value={moduleKey} onValueChange={(v) => { setModuleKey(v as ModuleKey); setStatusId(""); }}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a página..." /></SelectTrigger>
                     <SelectContent>
-                      {statuses.map(s => (
+                      <SelectItem value="leads">Leads</SelectItem>
+                      <SelectItem value="cobrancas">Cobranças</SelectItem>
+                      <SelectItem value="renovacoes">Renovações</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground">De qual página os cards serão buscados</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Coluna do Kanban *</Label>
+                  <Select value={statusId} onValueChange={setStatusId} disabled={currentStatuses.length === 0}>
+                    <SelectTrigger><SelectValue placeholder={currentStatuses.length === 0 ? "Sem colunas nesta página" : "Selecione a coluna..."} /></SelectTrigger>
+                    <SelectContent>
+                      {currentStatuses.map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
                       ))}
                     </SelectContent>
