@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle } from "lucide-react";
+import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
@@ -74,6 +74,14 @@ export default function CobrancaEditSheet(props: Props) {
   const [taskDate, setTaskDate] = useState<Date | undefined>(undefined);
   const [taskTime, setTaskTime] = useState("09:00");
   const [savingTask, setSavingTask] = useState(false);
+
+  // Edit task inline
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskDescription, setEditTaskDescription] = useState("");
+  const [editTaskDate, setEditTaskDate] = useState<Date | undefined>(undefined);
+  const [editTaskTime, setEditTaskTime] = useState("09:00");
+  const [savingEditTask, setSavingEditTask] = useState(false);
 
   const isEditing = !!cobrancaId;
 
@@ -155,6 +163,43 @@ export default function CobrancaEditSheet(props: Props) {
   };
 
   const getProfile = (uid: string) => profiles.find(p => p.user_id === uid);
+
+  const startEditTask = (a: Activity) => {
+    setEditingTaskId(a.id);
+    setEditTaskTitle(a.title);
+    setEditTaskDescription(a.description || "");
+    const d = new Date(a.scheduled_date);
+    setEditTaskDate(d);
+    setEditTaskTime(format(d, "HH:mm"));
+  };
+
+  const handleUpdateTask = async () => {
+    if (!editingTaskId || !editTaskTitle.trim() || !editTaskDate) return;
+    setSavingEditTask(true);
+    const [h, m] = editTaskTime.split(":").map(Number);
+    const dt = new Date(editTaskDate); dt.setHours(h || 9, m || 0, 0, 0);
+    const { error } = await supabase.from("cobranca_activities").update({
+      title: editTaskTitle.trim(),
+      description: editTaskDescription.trim() || null,
+      scheduled_date: dt.toISOString(),
+    }).eq("id", editingTaskId);
+    if (error) toast.error("Erro ao atualizar tarefa");
+    else {
+      toast.success("Tarefa atualizada");
+      setEditingTaskId(null);
+      fetchTimeline();
+    }
+    setSavingEditTask(false);
+  };
+
+  const getTaskStatus = (a: Activity): "completed" | "overdue" | "today" | "pending" => {
+    if (a.completed_at) return "completed";
+    const now = new Date();
+    const d = new Date(a.scheduled_date);
+    if (d < now) return "overdue";
+    if (d.toDateString() === now.toDateString()) return "today";
+    return "pending";
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -348,34 +393,143 @@ export default function CobrancaEditSheet(props: Props) {
                     } else {
                       const a = item.data as Activity;
                       const p = getProfile(a.created_by);
-                      const done = !!a.completed_at;
-                      const overdue = !done && new Date(a.scheduled_date) < new Date();
+                      const status = getTaskStatus(a);
+                      const canEdit = a.created_by === user?.id || isAdmin;
+
+                      let iconBg = "bg-muted text-muted-foreground";
+                      let labelClass = "text-muted-foreground bg-muted";
+                      let label = "PENDENTE";
+                      let cardClass = "border-border bg-card";
+
+                      if (status === "completed") {
+                        iconBg = "bg-emerald-500/20 text-emerald-500";
+                        labelClass = "text-emerald-500 bg-emerald-500/15";
+                        label = "CONCLUÍDA";
+                        cardClass = "border-emerald-500/30 bg-emerald-500/5";
+                      } else if (status === "overdue") {
+                        iconBg = "bg-red-500/20 text-red-500";
+                        labelClass = "text-red-500 bg-red-500/15";
+                        label = "ATRASADA";
+                        cardClass = "border-red-500/40 bg-red-500/5";
+                      } else if (status === "today") {
+                        iconBg = "bg-amber-500/20 text-amber-500";
+                        labelClass = "text-amber-500 bg-amber-500/15";
+                        label = "HOJE";
+                        cardClass = "border-amber-500/40 bg-amber-500/5";
+                      } else {
+                        iconBg = "bg-blue-500/20 text-blue-500";
+                        labelClass = "text-blue-500 bg-blue-500/15";
+                      }
+
+                      let scheduledFmt = "";
+                      try { scheduledFmt = format(new Date(a.scheduled_date), "EEE, dd 'de' MMM, HH:mm", { locale: ptBR }); }
+                      catch { scheduledFmt = a.scheduled_date; }
+
                       return (
-                        <div key={a.id} className="flex gap-3 group">
-                          <button onClick={() => toggleTaskComplete(a)}
-                            className={cn("h-8 w-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                              done ? "bg-emerald-500 border-emerald-500" :
-                              overdue ? "border-destructive" : "border-muted-foreground/40")}>
-                            {done ? <CheckCircle2 className="h-4 w-4 text-white" /> :
-                             overdue ? <AlertTriangle className="h-4 w-4 text-destructive" /> :
-                             <Clock className="h-4 w-4 text-muted-foreground" />}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                              <span className="font-medium text-foreground">{p?.full_name || "Usuário"}</span>
-                              <span>•</span>
-                              <span>{format(new Date(a.scheduled_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
-                            </div>
-                            <div className={cn("bg-card border rounded-lg p-3", done && "opacity-60")}>
-                              <p className={cn("text-sm font-medium", done && "line-through")}>{a.title}</p>
-                              {a.description && <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{a.description}</p>}
-                            </div>
+                        <div key={a.id} className="relative pl-10 group">
+                          {/* Timeline dot */}
+                          <div className={cn("absolute left-1 top-1 w-7 h-7 rounded-full flex items-center justify-center", iconBg)}>
+                            {status === "completed" ? <CheckCircle2 className="h-4 w-4" /> :
+                             status === "overdue" ? <AlertTriangle className="h-4 w-4" /> :
+                             <CalendarClock className="h-4 w-4" />}
                           </div>
-                          {(a.created_by === user?.id || isAdmin) && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => deleteActivity(a.id)}>
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                            </Button>
-                          )}
+
+                          <div className={cn("rounded-lg border p-3", cardClass)}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-semibold text-foreground">Tarefa</span>
+                                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", labelClass)}>{label}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {format(new Date(a.created_at), "dd/MM/yyyy, HH:mm", { locale: ptBR })}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {p && (
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarImage src={p.avatar_url ?? undefined} />
+                                    <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
+                                      {(p.full_name || "?").slice(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                )}
+                                {canEdit && (
+                                  <>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => startEditTask(a)}>
+                                      <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => deleteActivity(a.id)}>
+                                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            {editingTaskId === a.id ? (
+                              <div className="mt-2 rounded-md bg-background/60 p-2.5 space-y-2">
+                                <Input value={editTaskTitle} onChange={e => setEditTaskTitle(e.target.value)} placeholder="Título..." className="h-8 text-sm" />
+                                <Textarea value={editTaskDescription} onChange={e => setEditTaskDescription(e.target.value)} placeholder="Descrição (opcional)..." rows={2} className="text-sm" />
+                                <div className="flex gap-2">
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button variant="outline" className="flex-1 justify-start text-left h-8 text-sm">
+                                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                                        {editTaskDate ? format(editTaskDate, "dd/MM/yyyy", { locale: ptBR }) : "Data"}
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                      <Calendar mode="single" selected={editTaskDate} onSelect={setEditTaskDate} locale={ptBR} className="p-3 pointer-events-auto" />
+                                    </PopoverContent>
+                                  </Popover>
+                                  <div className="relative">
+                                    <Clock className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                    <Input type="time" value={editTaskTime} onChange={e => setEditTaskTime(e.target.value)} className="h-8 text-sm pl-8 w-[110px]" />
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setEditingTaskId(null)}>Cancelar</Button>
+                                  <Button size="sm" className="text-xs h-7" onClick={handleUpdateTask} disabled={savingEditTask || !editTaskTitle.trim() || !editTaskDate}>
+                                    {savingEditTask ? "Salvando..." : "Salvar"}
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="mt-2 rounded-md bg-background/40 p-2.5">
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                      <span className="text-muted-foreground text-xs">Prazo</span>
+                                      <p className={cn("font-medium text-xs", status === "overdue" && "text-red-500")}>{scheduledFmt}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground text-xs">Título</span>
+                                      <p className={cn("font-medium text-xs", status === "completed" && "line-through text-muted-foreground")}>{a.title}</p>
+                                    </div>
+                                  </div>
+                                  {a.description && (
+                                    <p className="text-xs text-muted-foreground mt-1.5 whitespace-pre-wrap">{a.description}</p>
+                                  )}
+                                  {p && (
+                                    <div className="mt-1.5">
+                                      <span className="text-muted-foreground text-xs">Responsável</span>
+                                      <p className="text-xs font-medium text-primary">{p.full_name}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2 mt-2">
+                                  <Button
+                                    size="sm"
+                                    variant={status === "completed" ? "outline" : "destructive"}
+                                    className="text-xs h-7"
+                                    onClick={() => toggleTaskComplete(a)}
+                                  >
+                                    {status === "completed" ? "Reabrir" : "Concluir"}
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
                       );
                     }
