@@ -462,9 +462,21 @@ export default function WhatsAppPage() {
 
         {/* Campaigns Tab */}
         <TabsContent value="campaigns" className="flex-1 flex flex-col">
-          <div className="mb-4 flex items-center justify-end">
+          <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs whitespace-nowrap">Filtrar por empresa:</Label>
+              <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+                <SelectTrigger className="w-[220px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  {companies.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {canManage && (
-              <Button onClick={() => { resetForm(); setShowForm(!showForm); }} size="sm">
+              <Button onClick={() => { resetForm(); if (filterCompanyId !== "all") setCompanyId(filterCompanyId); setShowForm(!showForm); }} size="sm">
                 <Plus className="h-4 w-4 mr-1" />
                 Nova Campanha
               </Button>
@@ -475,6 +487,17 @@ export default function WhatsAppPage() {
             <div className="rounded-lg border bg-card p-4 mb-6 space-y-4">
               <h3 className="font-semibold text-sm">{editingId ? "Editar campanha" : "Nova campanha"}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Empresa *</Label>
+                  <Select value={companyId} onValueChange={setCompanyId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
+                    <SelectContent>
+                      {companies.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label>Nome da campanha *</Label>
                   <Input placeholder="Ex: Boas-vindas novos leads" value={name} onChange={e => setName(e.target.value)} />
