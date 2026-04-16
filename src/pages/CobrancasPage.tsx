@@ -60,6 +60,7 @@ export default function CobrancasPage() {
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [activities, setActivities] = useState<CobrancaActivity[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCobranca, setEditingCobranca] = useState<Cobranca | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({ nome: "", telefone: "", descricao: "" });
