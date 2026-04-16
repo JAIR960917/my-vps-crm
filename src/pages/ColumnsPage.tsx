@@ -103,10 +103,10 @@ export default function ColumnsPage() {
 
   const handleDelete = async (status: CrmStatus, section: SectionType) => {
     const dataTable = sectionConfig[section].dataTable;
-    const { count } = await supabase.from(dataTable).select("id", { count: "exact", head: true }).eq("status", status.key);
+    const { count } = await supabase.from(dataTable as any).select("id", { count: "exact", head: true }).eq("status" as any, status.key);
     if (count && count > 0) { toast.error("Remova os registros desta coluna antes de excluí-la"); return; }
     const table = sectionConfig[section].statusTable;
-    const { error } = await supabase.from(table).delete().eq("id", status.id);
+    const { error } = await supabase.from(table as any).delete().eq("id", status.id);
     if (error) toast.error("Erro ao excluir"); else { toast.success("Coluna excluída"); fetchStatuses(); }
   };
 
@@ -122,7 +122,7 @@ export default function ColumnsPage() {
     else if (section === "cobrancas") setCobrancaStatuses(statuses);
     else setRenovacaoStatuses(statuses);
 
-    await Promise.all(statuses.map((s, i) => supabase.from(table).update({ position: i }).eq("id", s.id)));
+    await Promise.all(statuses.map((s, i) => supabase.from(table as any).update({ position: i } as any).eq("id", s.id)));
   };
 
   if (!isAdmin) {
