@@ -259,9 +259,11 @@ export default function CobrancasPage() {
               className="pl-8 h-9 w-full sm:w-48"
             />
           </div>
-          <Button size="sm" onClick={() => openCreate()}>
-            <Plus className="mr-2 h-4 w-4" />Nova Cobrança
-          </Button>
+          {canCreate && (
+            <Button size="sm" onClick={() => openCreate()}>
+              <Plus className="mr-2 h-4 w-4" />Nova Cobrança
+            </Button>
+          )}
         </div>
       </div>
 
