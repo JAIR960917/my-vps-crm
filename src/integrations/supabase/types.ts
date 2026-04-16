@@ -778,6 +778,7 @@ export type Database = {
           daily_limit: number
           end_date: string
           id: string
+          image_url: string | null
           instance_id: string | null
           is_active: boolean
           message: string
@@ -793,6 +794,7 @@ export type Database = {
           daily_limit?: number
           end_date: string
           id?: string
+          image_url?: string | null
           instance_id?: string | null
           is_active?: boolean
           message: string
@@ -808,6 +810,7 @@ export type Database = {
           daily_limit?: number
           end_date?: string
           id?: string
+          image_url?: string | null
           instance_id?: string | null
           is_active?: boolean
           message?: string
@@ -1003,6 +1006,7 @@ export type Database = {
           created_at: string
           delay_days: number
           id: string
+          image_url: string | null
           message: string
           position: number
         }
@@ -1011,6 +1015,7 @@ export type Database = {
           created_at?: string
           delay_days?: number
           id?: string
+          image_url?: string | null
           message: string
           position?: number
         }
@@ -1019,6 +1024,7 @@ export type Database = {
           created_at?: string
           delay_days?: number
           id?: string
+          image_url?: string | null
           message?: string
           position?: number
         }
