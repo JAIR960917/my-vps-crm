@@ -26,6 +26,7 @@ type Campaign = {
   message: string;
   status_id: string;
   instance_id: string | null;
+  company_id: string | null;
   daily_limit: number;
   start_date: string;
   end_date: string;
@@ -73,10 +74,12 @@ export default function WhatsAppPage() {
   const [message, setMessage] = useState("");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [dailyLimit, setDailyLimit] = useState("15");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   // Instance management state
   const [newInstanceName, setNewInstanceName] = useState("");
@@ -244,19 +247,21 @@ export default function WhatsAppPage() {
   }, [instances.length]);
 
   const resetForm = () => {
-    setName(""); setMessage(""); setStatusId(""); setInstanceId(""); setDailyLimit("15");
+    setName(""); setMessage(""); setStatusId(""); setInstanceId(""); setCompanyId("");
+    setDailyLimit("15");
     setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
   };
 
   const handleEdit = (c: Campaign) => {
     setName(c.name); setMessage(c.message); setStatusId(c.status_id);
-    setInstanceId(c.instance_id || ""); setDailyLimit(String(c.daily_limit));
+    setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "");
+    setDailyLimit(String(c.daily_limit));
     setStartDate(c.start_date); setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !message.trim() || !statusId || !startDate || !endDate || !dailyLimit) {
-      toast.error("Preencha todos os campos obrigatórios");
+    if (!name.trim() || !message.trim() || !statusId || !companyId || !startDate || !endDate || !dailyLimit) {
+      toast.error("Preencha todos os campos obrigatórios (incluindo Empresa)");
       return;
     }
     if (!user) return;
@@ -267,6 +272,7 @@ export default function WhatsAppPage() {
       daily_limit: parseInt(dailyLimit) || 15, start_date: startDate,
       end_date: endDate, created_by: user.id,
       instance_id: instanceId || null,
+      company_id: companyId,
     };
 
     let error;
@@ -297,6 +303,11 @@ export default function WhatsAppPage() {
   const getStatusLabel = (sid: string) => statuses.find(s => s.id === sid)?.label || "—";
   const getStatusColor = (sid: string) => statuses.find(s => s.id === sid)?.color || "gray";
   const getInstanceName = (iid: string | null) => instances.find(i => i.id === iid)?.name || "—";
+  const getCompanyName = (cid: string | null) => companies.find(c => c.id === cid)?.name || "—";
+
+  const filteredCampaigns = campaigns.filter(c =>
+    filterCompanyId === "all" ? true : c.company_id === filterCompanyId
+  );
   const isConnected = (id: string) => {
     const s = connectionStatus[id]?.toLowerCase();
     return s === "connected" || s === "open" || s === "sucesso";

@@ -96,6 +96,33 @@ async function resolveSession(supabase: any, instanceId: string | null): Promise
   return data?.setting_value || null;
 }
 
+// Build the set of user_ids that belong to a given company (via profiles + manager_companies)
+async function getCompanyUserIds(supabase: any, companyId: string): Promise<Set<string>> {
+  const ids = new Set<string>();
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("company_id", companyId);
+  for (const p of (profs || []) as { user_id: string }[]) ids.add(p.user_id);
+
+  const { data: mgrs } = await supabase
+    .from("manager_companies")
+    .select("user_id")
+    .eq("company_id", companyId);
+  for (const m of (mgrs || []) as { user_id: string }[]) ids.add(m.user_id);
+
+  return ids;
+}
+
+// Filter leads to those whose created_by OR assigned_to belongs to the company
+function filterLeadsByCompany(leads: any[], companyUserIds: Set<string>): any[] {
+  return leads.filter((l) => {
+    const cb = l.created_by;
+    const at = l.assigned_to;
+    return (cb && companyUserIds.has(cb)) || (at && companyUserIds.has(at));
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -115,7 +142,17 @@ serve(async (req) => {
 
     let totalSent = 0;
     let totalErrors = 0;
+    let skippedNoCompany = 0;
     const today = new Date().toISOString().split("T")[0];
+
+    // Cache of company_id -> set of user_ids
+    const companyUsersCache = new Map<string, Set<string>>();
+    const getUsers = async (companyId: string) => {
+      if (!companyUsersCache.has(companyId)) {
+        companyUsersCache.set(companyId, await getCompanyUserIds(supabase, companyId));
+      }
+      return companyUsersCache.get(companyId)!;
+    };
 
     // ========== PERIOD CAMPAIGNS ==========
     const { data: campaigns } = await supabase.from("whatsapp_campaigns")
@@ -123,19 +160,30 @@ serve(async (req) => {
 
     if (campaigns && campaigns.length > 0) {
       for (const campaign of campaigns) {
+        // Skip campaigns without company defined
+        if (!campaign.company_id) {
+          skippedNoCompany++;
+          continue;
+        }
+
         const session = await resolveSession(supabase, campaign.instance_id);
         if (!session) continue;
 
         const { data: statusData } = await supabase.from("crm_statuses").select("key").eq("id", campaign.status_id).single();
         const statusKey = statusData?.key || "";
 
-        const { data: leads } = await supabase.from("crm_leads").select("id, data").eq("status", statusKey);
+        const { data: leads } = await supabase.from("crm_leads")
+          .select("id, data, created_by, assigned_to").eq("status", statusKey);
         if (!leads) continue;
+
+        const companyUsers = await getUsers(campaign.company_id);
+        const companyLeads = filterLeadsByCompany(leads, companyUsers);
+        if (companyLeads.length === 0) continue;
 
         const { data: existingSends } = await supabase.from("whatsapp_campaign_sends")
           .select("lead_id, status").eq("campaign_id", campaign.id);
         const sentLeadIds = new Set((existingSends || []).filter((s: any) => s.status === "sent").map((s: any) => s.lead_id));
-        const pendingLeads = leads.filter((l: any) => !sentLeadIds.has(l.id));
+        const pendingLeads = companyLeads.filter((l: any) => !sentLeadIds.has(l.id));
 
         const todayStart = new Date(today + "T00:00:00Z").toISOString();
         const todayEnd = new Date(today + "T23:59:59Z").toISOString();
@@ -177,6 +225,12 @@ serve(async (req) => {
 
     if (triggerCampaigns && triggerCampaigns.length > 0) {
       for (const tc of triggerCampaigns) {
+        // Skip trigger campaigns without company defined
+        if (!tc.company_id) {
+          skippedNoCompany++;
+          continue;
+        }
+
         const session = await resolveSession(supabase, tc.instance_id);
         if (!session) continue;
 
@@ -186,8 +240,13 @@ serve(async (req) => {
         const { data: statusData } = await supabase.from("crm_statuses").select("key").eq("id", tc.status_id).single();
         const statusKey = statusData?.key || "";
 
-        const { data: leads } = await supabase.from("crm_leads").select("id, data, status, updated_at").eq("status", statusKey);
-        if (!leads || leads.length === 0) continue;
+        const { data: leadsRaw } = await supabase.from("crm_leads")
+          .select("id, data, status, updated_at, created_by, assigned_to").eq("status", statusKey);
+        if (!leadsRaw || leadsRaw.length === 0) continue;
+
+        const companyUsers = await getUsers(tc.company_id);
+        const leads = filterLeadsByCompany(leadsRaw, companyUsers);
+        if (leads.length === 0) continue;
 
         const { data: existingSends } = await supabase.from("whatsapp_trigger_sends")
           .select("lead_id, step_id, status").eq("campaign_id", tc.id);
@@ -250,7 +309,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ message: "Processamento concluído", sent: totalSent, errors: totalErrors }),
+      JSON.stringify({ message: "Processamento concluído", sent: totalSent, errors: totalErrors, skipped_no_company: skippedNoCompany }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
