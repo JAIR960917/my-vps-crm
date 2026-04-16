@@ -21,11 +21,20 @@ import ImageUploadField from "@/components/whatsapp/ImageUploadField";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+type ModuleKey = "leads" | "cobrancas" | "renovacoes";
+
+const MODULE_LABELS: Record<ModuleKey, string> = {
+  leads: "Leads",
+  cobrancas: "Cobranças",
+  renovacoes: "Renovações",
+};
+
 type Campaign = {
   id: string;
   name: string;
   message: string;
   image_url: string | null;
+  module: ModuleKey;
   status_id: string;
   instance_id: string | null;
   company_id: string | null;
@@ -64,7 +73,9 @@ type Instance = {
 export default function WhatsAppPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [statusesByModule, setStatusesByModule] = useState<Record<ModuleKey, Status[]>>({
+    leads: [], cobrancas: [], renovacoes: [],
+  });
   const [sendStats, setSendStats] = useState<Record<string, SendStats>>({});
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +86,7 @@ export default function WhatsAppPage() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [moduleKey, setModuleKey] = useState<ModuleKey>("leads");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
   const [companyId, setCompanyId] = useState("");
@@ -98,16 +110,22 @@ export default function WhatsAppPage() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [campaignsRes, statusesRes, sendsRes, instancesRes, companiesRes] = await Promise.all([
+    const [campaignsRes, leadStatusRes, cobStatusRes, renStatusRes, sendsRes, instancesRes, companiesRes] = await Promise.all([
       supabase.from("whatsapp_campaigns").select("*").order("created_at", { ascending: false }),
       supabase.from("crm_statuses").select("*").order("position"),
+      supabase.from("crm_cobranca_statuses").select("*").order("position"),
+      supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.from("whatsapp_campaign_sends").select("campaign_id, status"),
       supabase.from("whatsapp_instances").select("*").order("created_at", { ascending: false }),
       supabase.from("companies").select("id, name").order("name"),
     ]);
 
     setCampaigns((campaignsRes.data || []) as Campaign[]);
-    setStatuses((statusesRes.data || []) as Status[]);
+    setStatusesByModule({
+      leads: (leadStatusRes.data || []) as Status[],
+      cobrancas: (cobStatusRes.data || []) as Status[],
+      renovacoes: (renStatusRes.data || []) as Status[],
+    });
     setInstances((instancesRes.data || []) as Instance[]);
     setCompanies((companiesRes.data || []) as { id: string; name: string }[]);
 
