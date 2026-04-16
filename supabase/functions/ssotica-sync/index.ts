@@ -23,6 +23,28 @@ function daysBetween(a: Date, b: Date): number {
   return Math.floor((b.getTime() - a.getTime()) / 86400000);
 }
 
+// Mapeia dias de atraso para a key da coluna em crm_cobranca_statuses.
+// dias < 0 = ainda vai vencer; dias >= 0 = já venceu.
+function statusKeyForDiasAtraso(dias: number): string {
+  if (dias <= -1) return "pendente";                                   // 1 dia antes do vencimento (ou mais)
+  if (dias >= 0 && dias <= 4) return "em_cobranca";                    // 1 a 4 dias de atraso
+  if (dias >= 5 && dias <= 14) return "5_dias_de_atraso";              // 5 a 14 dias
+  if (dias >= 15 && dias <= 29) return "atrasado";                     // 15 a 29 dias
+  if (dias >= 30 && dias <= 30) return "30_dias_de_atraso";            // 30
+  if (dias >= 31 && dias <= 44) return "31_dias_de_atraso_ligao";      // 31-44
+  if (dias >= 45 && dias <= 59) return "45_dias_de_atrasomensagem_automtica"; // 45-59
+  if (dias >= 60 && dias <= 60) return "60_dias_de_atraso_ligao_negativao";   // 60
+  if (dias >= 61 && dias <= 64) return "61_negativao";                 // 61-64
+  if (dias >= 65 && dias <= 74) return "65_dias_de_atraso_receber_informe_de_negativao";
+  if (dias >= 75 && dias <= 89) return "75_dias_de_atraso_proposta_de_negociao_ps_negativao";
+  if (dias >= 90 && dias <= 104) return "90_dias_de_atraso_ligao_para_tentativa_de_negociao_ps_negativao";
+  if (dias >= 105 && dias <= 119) return "105_dias_de_atraso_notificao_extra_judicial_altomtico";
+  if (dias >= 120 && dias <= 134) return "120_dias_de_atraso_ligao_informe_judicial";
+  if (dias >= 135 && dias <= 149) return "135_dias_de_atraso_oferta_de_negativao_automatico";
+  if (dias >= 150 && dias <= 179) return "150_dias_de_atraso_enviar_para_o_advogado";
+  return "180_dias_ajuizar_manualmente"; // 180+
+}
+
 // Quebra um intervalo em janelas de até 30 dias (limite SSótica)
 function buildWindows(start: Date, end: Date): Array<{ start: string; end: string }> {
   const windows: Array<{ start: string; end: string }> = [];
@@ -111,6 +133,8 @@ async function syncContasReceber(
         // Regra: incluir se já venceu OU vence em até 1 dia
         if (diasAtraso < -1) continue;
 
+        const colunaKey = statusKeyForDiasAtraso(diasAtraso);
+
         const cliente = parcela.cliente ?? {};
         const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
         const data = {
@@ -126,8 +150,6 @@ async function syncContasReceber(
           ssotica_raw: parcela,
         };
 
-        const status = diasAtraso > 0 ? "vencida" : "a_vencer";
-
         // upsert por ssotica_parcela_id
         const { data: existing } = await supabase
           .from("crm_cobrancas")
@@ -136,6 +158,7 @@ async function syncContasReceber(
           .maybeSingle();
 
         if (existing) {
+          // Re-classifica SEMPRE: o card muda de coluna conforme o tempo passa
           await supabase
             .from("crm_cobrancas")
             .update({
@@ -143,7 +166,7 @@ async function syncContasReceber(
               valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
               vencimento,
               dias_atraso: diasAtraso,
-              status,
+              status: colunaKey,
               scheduled_date: vencimento,
             })
             .eq("id", existing.id);
@@ -159,7 +182,7 @@ async function syncContasReceber(
             valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
             vencimento,
             dias_atraso: diasAtraso,
-            status,
+            status: colunaKey,
             scheduled_date: vencimento,
           });
           created++;
@@ -213,13 +236,14 @@ async function syncVendas(
 
   // Para cada cliente que comprou: se NÃO tem cobrança em aberto/vencida, vai para Renovações
   for (const [clienteId, info] of ultimaCompraPorCliente) {
-    // Verifica se há cobrança em aberto/vencida desse cliente nesta loja
+    // Verifica se há cobrança em aberto desse cliente nesta loja
+    // (qualquer status que não seja pago/cancelado conta como dívida pendente)
     const { data: cobrancasAbertas } = await supabase
       .from("crm_cobrancas")
       .select("id")
       .eq("ssotica_cliente_id", clienteId)
       .eq("ssotica_company_id", integ.company_id)
-      .in("status", ["a_vencer", "vencida"])
+      .not("status", "in", "(pago,cancelado)")
       .limit(1);
 
     if (cobrancasAbertas && cobrancasAbertas.length > 0) continue; // tem dívida → não vai pra renovação
