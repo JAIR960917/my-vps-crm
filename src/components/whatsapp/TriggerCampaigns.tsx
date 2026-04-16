@@ -464,6 +464,9 @@ export default function TriggerCampaigns({ instances }: Props) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <Zap className="h-4 w-4 text-amber-500" />
                         <span className="font-semibold text-sm">{c.name}</span>
+                        <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                          {MODULE_LABELS[(c.module || "leads") as ModuleKey]}
+                        </Badge>
                         <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                           {getStatusLabel(c.status_id)}
                         </Badge>
