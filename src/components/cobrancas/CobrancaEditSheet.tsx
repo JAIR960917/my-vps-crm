@@ -164,6 +164,43 @@ export default function CobrancaEditSheet(props: Props) {
 
   const getProfile = (uid: string) => profiles.find(p => p.user_id === uid);
 
+  const startEditTask = (a: Activity) => {
+    setEditingTaskId(a.id);
+    setEditTaskTitle(a.title);
+    setEditTaskDescription(a.description || "");
+    const d = new Date(a.scheduled_date);
+    setEditTaskDate(d);
+    setEditTaskTime(format(d, "HH:mm"));
+  };
+
+  const handleUpdateTask = async () => {
+    if (!editingTaskId || !editTaskTitle.trim() || !editTaskDate) return;
+    setSavingEditTask(true);
+    const [h, m] = editTaskTime.split(":").map(Number);
+    const dt = new Date(editTaskDate); dt.setHours(h || 9, m || 0, 0, 0);
+    const { error } = await supabase.from("cobranca_activities").update({
+      title: editTaskTitle.trim(),
+      description: editTaskDescription.trim() || null,
+      scheduled_date: dt.toISOString(),
+    }).eq("id", editingTaskId);
+    if (error) toast.error("Erro ao atualizar tarefa");
+    else {
+      toast.success("Tarefa atualizada");
+      setEditingTaskId(null);
+      fetchTimeline();
+    }
+    setSavingEditTask(false);
+  };
+
+  const getTaskStatus = (a: Activity): "completed" | "overdue" | "today" | "pending" => {
+    if (a.completed_at) return "completed";
+    const now = new Date();
+    const d = new Date(a.scheduled_date);
+    if (d < now) return "overdue";
+    if (d.toDateString() === now.toDateString()) return "today";
+    return "pending";
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
