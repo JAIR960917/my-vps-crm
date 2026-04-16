@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle } from "lucide-react";
+import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
