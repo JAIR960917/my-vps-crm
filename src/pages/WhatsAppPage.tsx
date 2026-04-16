@@ -620,6 +620,9 @@ export default function WhatsAppPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm">{c.name}</span>
+                            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                              {MODULE_LABELS[(c.module || "leads") as ModuleKey]}
+                            </Badge>
                             <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                               {getStatusLabel(c.status_id)}
                             </Badge>
