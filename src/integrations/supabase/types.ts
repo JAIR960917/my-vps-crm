@@ -1065,7 +1065,7 @@ export type Database = {
       manage_whatsapp_cron: { Args: never; Returns: undefined }
     }
     Enums: {
-      app_role: "admin" | "vendedor" | "gerente"
+      app_role: "admin" | "vendedor" | "gerente" | "financeiro"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1193,7 +1193,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "vendedor", "gerente"],
+      app_role: ["admin", "vendedor", "gerente", "financeiro"],
     },
   },
 } as const
