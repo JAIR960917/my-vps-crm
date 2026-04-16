@@ -124,6 +124,69 @@ export type Database = {
           },
         ]
       }
+      crm_cobranca_statuses: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          key: string
+          label: string
+          position: number
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          key: string
+          label: string
+          position?: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          key?: string
+          label?: string
+          position?: number
+        }
+        Relationships: []
+      }
+      crm_cobrancas: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          created_by: string | null
+          data: Json
+          id: string
+          scheduled_date: string | null
+          status: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          scheduled_date?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          scheduled_date?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
+      }
       crm_columns: {
         Row: {
           created_at: string
