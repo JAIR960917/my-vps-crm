@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 
   const { email, password, full_name, role, company_id, extra_company_ids } = await req.json();
 
-  const validRoles = ["admin", "vendedor", "gerente"];
+  const validRoles = ["admin", "vendedor", "gerente", "financeiro"];
   if (!email || !password || !role) {
     return new Response(JSON.stringify({ error: "Email, senha e papel são obrigatórios" }), {
       status: 400,
@@ -73,9 +73,9 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Gerentes cannot create admins
-  if (isGerente && !isAdmin && role === "admin") {
-    return new Response(JSON.stringify({ error: "Gerentes não podem criar administradores" }), {
+  // Gerentes cannot create admins or financeiros
+  if (isGerente && !isAdmin && (role === "admin" || role === "financeiro")) {
+    return new Response(JSON.stringify({ error: "Gerentes não podem criar administradores ou financeiros" }), {
       status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

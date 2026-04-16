@@ -82,12 +82,18 @@ export default function UsersPage() {
     switch (role) {
       case "admin": return "default";
       case "gerente": return "secondary";
+      case "financeiro": return "secondary";
       default: return "outline";
     }
   };
 
   const roleOptions = isAdmin
-    ? [{ value: "admin", label: "Admin" }, { value: "gerente", label: "Gerente" }, { value: "vendedor", label: "Vendedor" }]
+    ? [
+        { value: "admin", label: "Admin" },
+        { value: "gerente", label: "Gerente" },
+        { value: "financeiro", label: "Financeiro" },
+        { value: "vendedor", label: "Vendedor" },
+      ]
     : [{ value: "gerente", label: "Gerente" }, { value: "vendedor", label: "Vendedor" }];
 
   const toggleCompanyInList = (list: string[], setList: (v: string[]) => void, companyId: string) => {
@@ -191,7 +197,7 @@ export default function UsersPage() {
     setDeleting(false);
   };
 
-  const rolePriority: Record<string, number> = { admin: 0, gerente: 1, vendedor: 2 };
+  const rolePriority: Record<string, number> = { admin: 0, gerente: 1, financeiro: 2, vendedor: 3 };
 
   const sortedProfiles = [...profiles].sort((a, b) => {
     const aRoles = getRoles(a.user_id);

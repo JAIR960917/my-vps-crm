@@ -6,16 +6,20 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare, CalendarCheck, UserCheck, Upload, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type Role = "admin" | "gerente" | "financeiro" | "vendedor";
+
 type NavItem = {
   path: string;
   label: string;
   icon: any;
-  roles?: ("admin" | "gerente")[];
+  // If `roles` is set, only those roles see it.
+  // If omitted, every role EXCEPT financeiro sees it (financeiro is restricted by default).
+  roles?: Role[];
 };
 
 const navItems: NavItem[] = [
   { path: "/", label: "Leads", icon: LayoutDashboard },
-  { path: "/cobrancas", label: "Cobranças", icon: Receipt },
+  { path: "/cobrancas", label: "Cobranças", icon: Receipt, roles: ["admin", "financeiro"] },
   { path: "/agendamentos", label: "Agendamentos", icon: CalendarCheck },
   { path: "/clientes-ativos", label: "Renovação", icon: UserCheck },
   { path: "/usuarios", label: "Usuários", icon: Users, roles: ["admin", "gerente"] },
@@ -33,7 +37,7 @@ interface Props {
 }
 
 export default function AppSidebar({ onNavigate }: Props) {
-  const { user, isAdmin, isGerente, signOut } = useAuth();
+  const { user, isAdmin, isGerente, isFinanceiro, signOut } = useAuth();
   const { settings } = useSystemSettings();
   
   const [signingOut, setSigningOut] = useState(false);
@@ -41,10 +45,15 @@ export default function AppSidebar({ onNavigate }: Props) {
   const navigate = useNavigate();
 
   const canSee = (item: NavItem) => {
-    if (!item.roles) return true;
-    if (isAdmin && item.roles.includes("admin")) return true;
-    if (isGerente && item.roles.includes("gerente")) return true;
-    return false;
+    if (item.roles) {
+      if (isAdmin && item.roles.includes("admin")) return true;
+      if (isGerente && item.roles.includes("gerente")) return true;
+      if (isFinanceiro && item.roles.includes("financeiro")) return true;
+      return false;
+    }
+    // No explicit roles: hide from financeiro by default (financeiro only sees explicit pages)
+    if (isFinanceiro && !isAdmin && !isGerente) return false;
+    return true;
   };
 
   const handleNav = (path: string) => {
