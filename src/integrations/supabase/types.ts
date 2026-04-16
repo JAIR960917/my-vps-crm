@@ -772,6 +772,7 @@ export type Database = {
       }
       whatsapp_campaigns: {
         Row: {
+          company_id: string | null
           created_at: string
           created_by: string
           daily_limit: number
@@ -786,6 +787,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           created_by: string
           daily_limit?: number
@@ -800,6 +802,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           created_by?: string
           daily_limit?: number
@@ -814,6 +817,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "whatsapp_campaigns_instance_id_fkey"
             columns: ["instance_id"]
@@ -870,6 +880,7 @@ export type Database = {
       }
       whatsapp_trigger_campaigns: {
         Row: {
+          company_id: string | null
           created_at: string
           created_by: string
           daily_limit: number
@@ -881,6 +892,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           created_by: string
           daily_limit?: number
@@ -892,6 +904,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           created_by?: string
           daily_limit?: number
@@ -903,6 +916,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_trigger_campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "whatsapp_trigger_campaigns_instance_id_fkey"
             columns: ["instance_id"]
