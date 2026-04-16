@@ -8,11 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, User, Building2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, User, Building2, AlertTriangle, CalendarClock, CheckCircle2, Clock } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import CobrancaEditSheet from "@/components/cobrancas/CobrancaEditSheet";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
+type CobrancaActivity = {
+  id: string;
+  cobranca_id: string;
+  title: string;
+  scheduled_date: string;
+  completed_at: string | null;
+};
 
 type Cobranca = {
   id: string;
