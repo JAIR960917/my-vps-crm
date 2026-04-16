@@ -39,11 +39,16 @@ function resolveSendResult(responseOk: boolean, result: any) {
   return { ok: false, errorMessage: "A API Full respondeu sem confirmar claramente que a mensagem foi enviada" };
 }
 
-async function sendMessage(session: string, apiKey: string, phone: string, text: string) {
-  const response = await fetch(`${APIFULL_BASE}/send-message`, {
+async function sendMessage(session: string, apiKey: string, phone: string, text: string, imageUrl?: string | null) {
+  const endpoint = imageUrl ? "/send-image" : "/send-message";
+  const body: Record<string, any> = imageUrl
+    ? { session, number: phone, text, file: imageUrl }
+    : { session, number: phone, text, isGroup: false };
+
+  const response = await fetch(`${APIFULL_BASE}${endpoint}`, {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ session, number: phone, text, isGroup: false }),
+    body: JSON.stringify(body),
   });
   const responseText = await response.text();
   let result: any = null;
@@ -203,7 +208,7 @@ serve(async (req) => {
           const cp = cleanPhone(phone);
 
           try {
-            const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody);
+            const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, campaign.image_url);
             if (result.ok) {
               await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: lead.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
               totalSent++;
@@ -288,7 +293,7 @@ serve(async (req) => {
             const cp = cleanPhone(phone);
 
             try {
-              const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody);
+              const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, step.image_url);
               if (result.ok) {
                 await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: lead.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
                 totalSent++;
