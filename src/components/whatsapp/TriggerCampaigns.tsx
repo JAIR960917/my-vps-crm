@@ -330,13 +330,26 @@ export default function TriggerCampaigns({ instances }: Props) {
               <Input placeholder="Ex: Sequência boas-vindas" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Coluna do Kanban *</Label>
-              <Select value={statusId} onValueChange={setStatusId}>
+              <Label>Página de origem *</Label>
+              <Select value={moduleKey} onValueChange={(v) => { setModuleKey(v as ModuleKey); setStatusId(""); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {statuses.map((s) => (
+                  <SelectItem value="leads">Leads</SelectItem>
+                  <SelectItem value="cobrancas">Cobranças</SelectItem>
+                  <SelectItem value="renovacoes">Renovações</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Coluna do Kanban *</Label>
+              <Select value={statusId} onValueChange={setStatusId} disabled={currentStatuses.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={currentStatuses.length === 0 ? "Sem colunas nesta página" : "Selecione..."} />
+                </SelectTrigger>
+                <SelectContent>
+                  {currentStatuses.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.label}
                     </SelectItem>
