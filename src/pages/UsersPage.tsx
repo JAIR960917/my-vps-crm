@@ -340,7 +340,7 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {profiles.map((p) => {
+            {sortedProfiles.map((p) => {
               const companyNames = getUserCompanyNames(p);
               return (
                 <tr key={p.id} className="border-b last:border-0">
@@ -366,7 +366,7 @@ export default function UsersPage() {
 
       {/* Mobile cards */}
       <div className="sm:hidden space-y-3">
-        {profiles.map((p) => {
+        {sortedProfiles.map((p) => {
           const companyNames = getUserCompanyNames(p);
           return (
             <div key={p.id} className="rounded-xl border bg-card p-4">
