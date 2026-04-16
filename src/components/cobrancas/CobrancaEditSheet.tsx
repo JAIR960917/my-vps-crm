@@ -75,6 +75,14 @@ export default function CobrancaEditSheet(props: Props) {
   const [taskTime, setTaskTime] = useState("09:00");
   const [savingTask, setSavingTask] = useState(false);
 
+  // Edit task inline
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskDescription, setEditTaskDescription] = useState("");
+  const [editTaskDate, setEditTaskDate] = useState<Date | undefined>(undefined);
+  const [editTaskTime, setEditTaskTime] = useState("09:00");
+  const [savingEditTask, setSavingEditTask] = useState(false);
+
   const isEditing = !!cobrancaId;
 
   const fetchTimeline = async () => {
