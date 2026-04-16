@@ -26,6 +26,7 @@ type Campaign = {
   message: string;
   status_id: string;
   instance_id: string | null;
+  company_id: string | null;
   daily_limit: number;
   start_date: string;
   end_date: string;
@@ -73,10 +74,12 @@ export default function WhatsAppPage() {
   const [message, setMessage] = useState("");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [dailyLimit, setDailyLimit] = useState("15");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   // Instance management state
   const [newInstanceName, setNewInstanceName] = useState("");
@@ -244,19 +247,21 @@ export default function WhatsAppPage() {
   }, [instances.length]);
 
   const resetForm = () => {
-    setName(""); setMessage(""); setStatusId(""); setInstanceId(""); setDailyLimit("15");
+    setName(""); setMessage(""); setStatusId(""); setInstanceId(""); setCompanyId("");
+    setDailyLimit("15");
     setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
   };
 
   const handleEdit = (c: Campaign) => {
     setName(c.name); setMessage(c.message); setStatusId(c.status_id);
-    setInstanceId(c.instance_id || ""); setDailyLimit(String(c.daily_limit));
+    setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "");
+    setDailyLimit(String(c.daily_limit));
     setStartDate(c.start_date); setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !message.trim() || !statusId || !startDate || !endDate || !dailyLimit) {
-      toast.error("Preencha todos os campos obrigatórios");
+    if (!name.trim() || !message.trim() || !statusId || !companyId || !startDate || !endDate || !dailyLimit) {
+      toast.error("Preencha todos os campos obrigatórios (incluindo Empresa)");
       return;
     }
     if (!user) return;
@@ -267,6 +272,7 @@ export default function WhatsAppPage() {
       daily_limit: parseInt(dailyLimit) || 15, start_date: startDate,
       end_date: endDate, created_by: user.id,
       instance_id: instanceId || null,
+      company_id: companyId,
     };
 
     let error;
@@ -297,6 +303,11 @@ export default function WhatsAppPage() {
   const getStatusLabel = (sid: string) => statuses.find(s => s.id === sid)?.label || "—";
   const getStatusColor = (sid: string) => statuses.find(s => s.id === sid)?.color || "gray";
   const getInstanceName = (iid: string | null) => instances.find(i => i.id === iid)?.name || "—";
+  const getCompanyName = (cid: string | null) => companies.find(c => c.id === cid)?.name || "—";
+
+  const filteredCampaigns = campaigns.filter(c =>
+    filterCompanyId === "all" ? true : c.company_id === filterCompanyId
+  );
   const isConnected = (id: string) => {
     const s = connectionStatus[id]?.toLowerCase();
     return s === "connected" || s === "open" || s === "sucesso";
@@ -451,9 +462,21 @@ export default function WhatsAppPage() {
 
         {/* Campaigns Tab */}
         <TabsContent value="campaigns" className="flex-1 flex flex-col">
-          <div className="mb-4 flex items-center justify-end">
+          <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs whitespace-nowrap">Filtrar por empresa:</Label>
+              <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+                <SelectTrigger className="w-[220px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  {companies.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {canManage && (
-              <Button onClick={() => { resetForm(); setShowForm(!showForm); }} size="sm">
+              <Button onClick={() => { resetForm(); if (filterCompanyId !== "all") setCompanyId(filterCompanyId); setShowForm(!showForm); }} size="sm">
                 <Plus className="h-4 w-4 mr-1" />
                 Nova Campanha
               </Button>
@@ -464,6 +487,17 @@ export default function WhatsAppPage() {
             <div className="rounded-lg border bg-card p-4 mb-6 space-y-4">
               <h3 className="font-semibold text-sm">{editingId ? "Editar campanha" : "Nova campanha"}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Empresa *</Label>
+                  <Select value={companyId} onValueChange={setCompanyId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
+                    <SelectContent>
+                      {companies.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label>Nome da campanha *</Label>
                   <Input placeholder="Ex: Boas-vindas novos leads" value={name} onChange={e => setName(e.target.value)} />
@@ -528,14 +562,14 @@ export default function WhatsAppPage() {
           <ScrollArea className="flex-1">
             {loading ? (
               <p className="text-center text-muted-foreground py-8">Carregando...</p>
-            ) : campaigns.length === 0 ? (
+            ) : filteredCampaigns.length === 0 ? (
               <div className="text-center py-12">
                 <MessageSquare className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
                 <p className="text-muted-foreground text-sm">Nenhuma campanha criada</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {campaigns.map(c => {
+                {filteredCampaigns.map(c => {
                   const stats = sendStats[c.id];
                   return (
                     <div key={c.id} className={`rounded-lg border bg-card p-4 space-y-3 ${!c.is_active ? "opacity-60" : ""}`}>
@@ -546,6 +580,11 @@ export default function WhatsAppPage() {
                             <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                               {getStatusLabel(c.status_id)}
                             </Badge>
+                            {c.company_id ? (
+                              <Badge variant="secondary" className="text-[10px]">{getCompanyName(c.company_id)}</Badge>
+                            ) : (
+                              <Badge variant="destructive" className="text-[10px]">Sem empresa</Badge>
+                            )}
                             {c.instance_id && (
                               <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
                                 <Smartphone className="h-3 w-3" /> {getInstanceName(c.instance_id)}

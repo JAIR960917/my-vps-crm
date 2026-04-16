@@ -31,6 +31,7 @@ type TriggerCampaign = {
   name: string;
   status_id: string;
   instance_id: string | null;
+  company_id: string | null;
   is_active: boolean;
   daily_limit: number;
   created_by: string;
@@ -53,6 +54,8 @@ type Instance = {
   is_active: boolean;
 };
 
+type Company = { id: string; name: string };
+
 interface Props {
   instances: Instance[];
 }
@@ -61,15 +64,18 @@ export default function TriggerCampaigns({ instances }: Props) {
   const { user, isAdmin, isGerente } = useAuth();
   const [campaigns, setCampaigns] = useState<TriggerCampaign[]>([]);
   const [statuses, setStatuses] = useState<Status[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [sendStats, setSendStats] = useState<Record<string, TriggerSendStats>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   const [name, setName] = useState("");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [dailyLimit, setDailyLimit] = useState("15");
   const [steps, setSteps] = useState<TriggerStep[]>([
     { position: 0, delay_days: 0, message: "" },
@@ -79,17 +85,19 @@ export default function TriggerCampaigns({ instances }: Props) {
 
   const fetchData = async () => {
     setLoading(true);
-    const [campaignsRes, statusesRes, sendsRes] = await Promise.all([
+    const [campaignsRes, statusesRes, sendsRes, companiesRes] = await Promise.all([
       supabase
         .from("whatsapp_trigger_campaigns")
         .select("*, whatsapp_trigger_steps(*)")
         .order("created_at", { ascending: false }),
       supabase.from("crm_statuses").select("*").order("position"),
       supabase.from("whatsapp_trigger_sends").select("campaign_id, status"),
+      supabase.from("companies").select("id, name").order("name"),
     ]);
 
     setCampaigns((campaignsRes.data || []) as any);
     setStatuses((statusesRes.data || []) as Status[]);
+    setCompanies((companiesRes.data || []) as Company[]);
 
     const stats: Record<string, TriggerSendStats> = {};
     for (const send of (sendsRes.data || []) as { campaign_id: string; status: string }[]) {
@@ -112,6 +120,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setName("");
     setStatusId("");
     setInstanceId("");
+    setCompanyId("");
     setDailyLimit("15");
     setSteps([{ position: 0, delay_days: 0, message: "" }]);
     setEditingId(null);
@@ -122,6 +131,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     setName(c.name);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || "");
+    setCompanyId(c.company_id || "");
     setDailyLimit(String(c.daily_limit));
     const sorted = [...(c.whatsapp_trigger_steps || [])].sort((a, b) => a.position - b.position);
     setSteps(
@@ -151,8 +161,8 @@ export default function TriggerCampaigns({ instances }: Props) {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !statusId) {
-      toast.error("Preencha nome e coluna");
+    if (!name.trim() || !statusId || !companyId) {
+      toast.error("Preencha empresa, nome e coluna");
       return;
     }
     if (steps.some((s) => !s.message.trim())) {
@@ -169,6 +179,7 @@ export default function TriggerCampaigns({ instances }: Props) {
         daily_limit: parseInt(dailyLimit) || 15,
         created_by: user.id,
         instance_id: instanceId || null,
+        company_id: companyId,
       };
 
       let campaignId = editingId;
@@ -222,14 +233,39 @@ export default function TriggerCampaigns({ instances }: Props) {
   const getStatusLabel = (sid: string) => statuses.find((s) => s.id === sid)?.label || "—";
   const getStatusColor = (sid: string) => statuses.find((s) => s.id === sid)?.color || "gray";
   const getInstanceName = (iid: string | null) => instances.find((i) => i.id === iid)?.name || "—";
+  const getCompanyName = (cid: string | null) => companies.find((c) => c.id === cid)?.name || "—";
+
+  // When filtering by company, only show that company's instances
+  const availableInstances = instances.filter(i => {
+    if (!i.is_active) return false;
+    if (!companyId) return true;
+    return !i.company_id || i.company_id === companyId;
+  });
+
+  const filteredCampaigns = campaigns.filter(c =>
+    filterCompanyId === "all" ? true : c.company_id === filterCompanyId
+  );
 
   return (
     <div className="flex-1 flex flex-col">
-      <div className="mb-4 flex items-center justify-end">
+      <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs whitespace-nowrap">Filtrar por empresa:</Label>
+          <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+            <SelectTrigger className="w-[220px] h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as empresas</SelectItem>
+              {companies.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {canManage && (
           <Button
             onClick={() => {
               resetForm();
+              if (filterCompanyId !== "all") setCompanyId(filterCompanyId);
               setShowForm(!showForm);
             }}
             size="sm"
@@ -247,7 +283,22 @@ export default function TriggerCampaigns({ instances }: Props) {
             {editingId ? "Editar campanha por gatilho" : "Nova campanha por gatilho"}
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Empresa *</Label>
+              <Select value={companyId} onValueChange={setCompanyId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Nome *</Label>
               <Input placeholder="Ex: Sequência boas-vindas" value={name} onChange={(e) => setName(e.target.value)} />
@@ -274,7 +325,7 @@ export default function TriggerCampaigns({ instances }: Props) {
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {instances.filter(i => i.is_active).map((i) => (
+                  {availableInstances.map((i) => (
                     <SelectItem key={i.id} value={i.id}>
                       {i.name}
                     </SelectItem>
@@ -331,7 +382,7 @@ export default function TriggerCampaigns({ instances }: Props) {
           </div>
 
           <p className="text-[10px] text-muted-foreground">
-            Se o lead sair da coluna antes de receber um follow-up, as mensagens pendentes serão canceladas automaticamente.
+            A campanha enviará apenas para leads (criados ou atribuídos) da empresa selecionada.
           </p>
 
           <div className="flex gap-2 justify-end">
@@ -349,7 +400,7 @@ export default function TriggerCampaigns({ instances }: Props) {
       <ScrollArea className="flex-1">
         {loading ? (
           <p className="text-center text-muted-foreground py-8">Carregando...</p>
-        ) : campaigns.length === 0 ? (
+        ) : filteredCampaigns.length === 0 ? (
           <div className="text-center py-12">
             <Zap className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-muted-foreground text-sm">Nenhuma campanha por gatilho criada</p>
@@ -359,7 +410,7 @@ export default function TriggerCampaigns({ instances }: Props) {
           </div>
         ) : (
           <div className="space-y-3">
-            {campaigns.map((c) => {
+            {filteredCampaigns.map((c) => {
               const stats = sendStats[c.id];
               const sortedSteps = [...(c.whatsapp_trigger_steps || [])].sort((a, b) => a.position - b.position);
               return (
@@ -372,6 +423,11 @@ export default function TriggerCampaigns({ instances }: Props) {
                         <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                           {getStatusLabel(c.status_id)}
                         </Badge>
+                        {c.company_id ? (
+                          <Badge variant="secondary" className="text-[10px]">{getCompanyName(c.company_id)}</Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-[10px]">Sem empresa</Badge>
+                        )}
                         {c.instance_id && (
                           <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
                             <Smartphone className="h-3 w-3" /> {getInstanceName(c.instance_id)}
