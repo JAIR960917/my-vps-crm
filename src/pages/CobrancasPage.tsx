@@ -381,7 +381,7 @@ export default function CobrancasPage() {
         formCompanyId={formCompanyId}
         setFormCompanyId={setFormCompanyId}
         statuses={statuses}
-        profiles={profiles}
+        profiles={profiles.filter(p => financeiroIds.has(p.user_id))}
         companies={companies}
         saving={saving}
         onSave={handleSave}
