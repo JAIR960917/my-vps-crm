@@ -1146,7 +1146,8 @@ export default function LeadFormDialog({
             </ScrollArea>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
