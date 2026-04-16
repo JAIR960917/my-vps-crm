@@ -272,7 +272,7 @@ export default function UsersPage() {
     <AppLayout>
       <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Usuários</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Usuários <Badge variant="secondary" className="ml-2 text-xs align-middle">{profiles.length}</Badge></h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
             {isGerente && !isAdmin ? "Usuários da sua empresa" : "Gerencie os usuários do sistema"}
           </p>
