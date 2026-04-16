@@ -236,13 +236,14 @@ async function syncVendas(
 
   // Para cada cliente que comprou: se NÃO tem cobrança em aberto/vencida, vai para Renovações
   for (const [clienteId, info] of ultimaCompraPorCliente) {
-    // Verifica se há cobrança em aberto/vencida desse cliente nesta loja
+    // Verifica se há cobrança em aberto desse cliente nesta loja
+    // (qualquer status que não seja pago/cancelado conta como dívida pendente)
     const { data: cobrancasAbertas } = await supabase
       .from("crm_cobrancas")
       .select("id")
       .eq("ssotica_cliente_id", clienteId)
       .eq("ssotica_company_id", integ.company_id)
-      .in("status", ["a_vencer", "vencida"])
+      .not("status", "in", "(pago,cancelado)")
       .limit(1);
 
     if (cobrancasAbertas && cobrancasAbertas.length > 0) continue; // tem dívida → não vai pra renovação
