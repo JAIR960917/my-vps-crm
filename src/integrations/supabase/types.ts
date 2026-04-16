@@ -234,11 +234,17 @@ export type Database = {
           created_at: string
           created_by: string | null
           data: Json
+          dias_atraso: number | null
           id: string
           scheduled_date: string | null
+          ssotica_cliente_id: number | null
+          ssotica_company_id: string | null
+          ssotica_parcela_id: number | null
+          ssotica_titulo_id: number | null
           status: string
           updated_at: string
           valor: number
+          vencimento: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -246,11 +252,17 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data?: Json
+          dias_atraso?: number | null
           id?: string
           scheduled_date?: string | null
+          ssotica_cliente_id?: number | null
+          ssotica_company_id?: string | null
+          ssotica_parcela_id?: number | null
+          ssotica_titulo_id?: number | null
           status?: string
           updated_at?: string
           valor?: number
+          vencimento?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -258,16 +270,29 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data?: Json
+          dias_atraso?: number | null
           id?: string
           scheduled_date?: string | null
+          ssotica_cliente_id?: number | null
+          ssotica_company_id?: string | null
+          ssotica_parcela_id?: number | null
+          ssotica_titulo_id?: number | null
           status?: string
           updated_at?: string
           valor?: number
+          vencimento?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "crm_cobrancas_company_id_fkey"
             columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_cobrancas_ssotica_company_id_fkey"
+            columns: ["ssotica_company_id"]
             isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
@@ -467,8 +492,12 @@ export type Database = {
           created_at: string
           created_by: string | null
           data: Json
+          data_ultima_compra: string | null
           id: string
           scheduled_date: string | null
+          ssotica_cliente_id: number | null
+          ssotica_company_id: string | null
+          ssotica_venda_id: number | null
           status: string
           updated_at: string
           valor: number
@@ -478,8 +507,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data?: Json
+          data_ultima_compra?: string | null
           id?: string
           scheduled_date?: string | null
+          ssotica_cliente_id?: number | null
+          ssotica_company_id?: string | null
+          ssotica_venda_id?: number | null
           status?: string
           updated_at?: string
           valor?: number
@@ -489,13 +522,25 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data?: Json
+          data_ultima_compra?: string | null
           id?: string
           scheduled_date?: string | null
+          ssotica_cliente_id?: number | null
+          ssotica_company_id?: string | null
+          ssotica_venda_id?: number | null
           status?: string
           updated_at?: string
           valor?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "crm_renovacoes_ssotica_company_id_fkey"
+            columns: ["ssotica_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crm_statuses: {
         Row: {
@@ -755,6 +800,109 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ssotica_integrations: {
+        Row: {
+          bearer_token: string
+          cnpj: string
+          company_id: string
+          created_at: string
+          id: string
+          initial_sync_done: boolean
+          is_active: boolean
+          last_error: string | null
+          last_sync_receber_at: string | null
+          last_sync_vendas_at: string | null
+          sync_status: string
+          updated_at: string
+        }
+        Insert: {
+          bearer_token: string
+          cnpj: string
+          company_id: string
+          created_at?: string
+          id?: string
+          initial_sync_done?: boolean
+          is_active?: boolean
+          last_error?: string | null
+          last_sync_receber_at?: string | null
+          last_sync_vendas_at?: string | null
+          sync_status?: string
+          updated_at?: string
+        }
+        Update: {
+          bearer_token?: string
+          cnpj?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          initial_sync_done?: boolean
+          is_active?: boolean
+          last_error?: string | null
+          last_sync_receber_at?: string | null
+          last_sync_vendas_at?: string | null
+          sync_status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ssotica_integrations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ssotica_sync_logs: {
+        Row: {
+          details: Json | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          integration_id: string
+          items_created: number
+          items_processed: number
+          items_updated: number
+          started_at: string
+          status: string
+          sync_type: string
+        }
+        Insert: {
+          details?: Json | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          integration_id: string
+          items_created?: number
+          items_processed?: number
+          items_updated?: number
+          started_at?: string
+          status?: string
+          sync_type: string
+        }
+        Update: {
+          details?: Json | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          integration_id?: string
+          items_created?: number
+          items_processed?: number
+          items_updated?: number
+          started_at?: string
+          status?: string
+          sync_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ssotica_sync_logs_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "ssotica_integrations"
             referencedColumns: ["id"]
           },
         ]
