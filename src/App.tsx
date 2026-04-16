@@ -38,6 +38,29 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Allowed paths for financeiro role (restrict everything else)
+const FINANCEIRO_ALLOWED = new Set([
+  "/cobrancas",
+  "/perfil",
+  "/notificacoes",
+  "/instalar",
+]);
+
+function RoleGate({ children }: { children: React.ReactNode }) {
+  const { session, loading, isFinanceiro, isAdmin, isGerente } = useAuth();
+  if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>;
+  if (!session) return <Navigate to="/login" replace />;
+
+  // Financeiro role (without admin/gerente) is restricted to a small set of pages
+  if (isFinanceiro && !isAdmin && !isGerente) {
+    const path = window.location.pathname;
+    if (!FINANCEIRO_ALLOWED.has(path)) {
+      return <Navigate to="/cobrancas" replace />;
+    }
+  }
+  return <>{children}</>;
+}
+
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>;
@@ -49,20 +72,20 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-      <Route path="/" element={<ProtectedRoute><LeadsPage /></ProtectedRoute>} />
-      <Route path="/usuarios" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
-      <Route path="/empresas" element={<ProtectedRoute><CompaniesPage /></ProtectedRoute>} />
-      <Route path="/colunas" element={<ProtectedRoute><ColumnsPage /></ProtectedRoute>} />
-      <Route path="/formulario" element={<ProtectedRoute><FormBuilderPage /></ProtectedRoute>} />
-      <Route path="/novo-lead" element={<ProtectedRoute><NewLeadPage /></ProtectedRoute>} />
-      <Route path="/configuracoes" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-      <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-      <Route path="/notificacoes" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
-      <Route path="/whatsapp" element={<ProtectedRoute><WhatsAppPage /></ProtectedRoute>} />
-      <Route path="/agendamentos" element={<ProtectedRoute><AppointmentsPage /></ProtectedRoute>} />
-      <Route path="/clientes-ativos" element={<ProtectedRoute><ActiveClientsPage /></ProtectedRoute>} />
-      <Route path="/importar" element={<ProtectedRoute><ImportLeadsPage /></ProtectedRoute>} />
-      <Route path="/cobrancas" element={<ProtectedRoute><CobrancasPage /></ProtectedRoute>} />
+      <Route path="/" element={<RoleGate><LeadsPage /></RoleGate>} />
+      <Route path="/usuarios" element={<RoleGate><UsersPage /></RoleGate>} />
+      <Route path="/empresas" element={<RoleGate><CompaniesPage /></RoleGate>} />
+      <Route path="/colunas" element={<RoleGate><ColumnsPage /></RoleGate>} />
+      <Route path="/formulario" element={<RoleGate><FormBuilderPage /></RoleGate>} />
+      <Route path="/novo-lead" element={<RoleGate><NewLeadPage /></RoleGate>} />
+      <Route path="/configuracoes" element={<RoleGate><SettingsPage /></RoleGate>} />
+      <Route path="/perfil" element={<RoleGate><ProfilePage /></RoleGate>} />
+      <Route path="/notificacoes" element={<RoleGate><NotificationSettingsPage /></RoleGate>} />
+      <Route path="/whatsapp" element={<RoleGate><WhatsAppPage /></RoleGate>} />
+      <Route path="/agendamentos" element={<RoleGate><AppointmentsPage /></RoleGate>} />
+      <Route path="/clientes-ativos" element={<RoleGate><ActiveClientsPage /></RoleGate>} />
+      <Route path="/importar" element={<RoleGate><ImportLeadsPage /></RoleGate>} />
+      <Route path="/cobrancas" element={<RoleGate><CobrancasPage /></RoleGate>} />
       <Route path="/instalar" element={<InstallPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

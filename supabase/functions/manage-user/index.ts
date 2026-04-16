@@ -128,10 +128,10 @@ Deno.serve(async (req) => {
 
     // Update role if provided (admin only, or gerente for vendedor)
     if (role) {
-      const validRoles = ["admin", "vendedor", "gerente"];
+      const validRoles = ["admin", "vendedor", "gerente", "financeiro"];
       if (!validRoles.includes(role)) return jsonResponse({ error: "Papel inválido" }, 400);
-      if (isGerente && !isAdmin && role === "admin") {
-        return jsonResponse({ error: "Gerentes não podem atribuir papel de admin" }, 403);
+      if (isGerente && !isAdmin && (role === "admin" || role === "financeiro")) {
+        return jsonResponse({ error: "Gerentes não podem atribuir papel de admin ou financeiro" }, 403);
       }
 
       // Upsert: delete old roles and insert new
