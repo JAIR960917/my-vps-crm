@@ -21,6 +21,7 @@ import WhatsAppPage from "./pages/WhatsAppPage";
 import AppointmentsPage from "./pages/AppointmentsPage";
 import ActiveClientsPage from "./pages/ActiveClientsPage";
 import ImportLeadsPage from "./pages/ImportLeadsPage";
+import CobrancasPage from "./pages/CobrancasPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -61,6 +62,7 @@ const AppRoutes = () => {
       <Route path="/agendamentos" element={<ProtectedRoute><AppointmentsPage /></ProtectedRoute>} />
       <Route path="/clientes-ativos" element={<ProtectedRoute><ActiveClientsPage /></ProtectedRoute>} />
       <Route path="/importar" element={<ProtectedRoute><ImportLeadsPage /></ProtectedRoute>} />
+      <Route path="/cobrancas" element={<ProtectedRoute><CobrancasPage /></ProtectedRoute>} />
       <Route path="/instalar" element={<InstallPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
