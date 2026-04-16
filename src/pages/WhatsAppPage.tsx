@@ -328,8 +328,10 @@ export default function WhatsAppPage() {
     else fetchData();
   };
 
-  const getStatusLabel = (sid: string) => statuses.find(s => s.id === sid)?.label || "—";
-  const getStatusColor = (sid: string) => statuses.find(s => s.id === sid)?.color || "gray";
+  const allStatuses = [...statusesByModule.leads, ...statusesByModule.cobrancas, ...statusesByModule.renovacoes];
+  const getStatusLabel = (sid: string) => allStatuses.find(s => s.id === sid)?.label || "—";
+  const getStatusColor = (sid: string) => allStatuses.find(s => s.id === sid)?.color || "gray";
+  const currentStatuses = statusesByModule[moduleKey] || [];
   const getInstanceName = (iid: string | null) => instances.find(i => i.id === iid)?.name || "—";
   const getCompanyName = (cid: string | null) => companies.find(c => c.id === cid)?.name || "—";
 
