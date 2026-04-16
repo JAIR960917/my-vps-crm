@@ -98,6 +98,11 @@ export default function UsersPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canManage) return;
+    const emailExists = profiles.some((p) => p.email.toLowerCase() === email.trim().toLowerCase());
+    if (emailExists) {
+      toast.error("Este email já está cadastrado no sistema");
+      return;
+    }
     setCreating(true);
     const body: Record<string, any> = { email, password: "joonker2026", full_name: name, role };
     if (isAdmin && createCompanyId !== "__none__") {
