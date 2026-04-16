@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      cobranca_activities: {
+        Row: {
+          cobranca_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          scheduled_date: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          cobranca_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          scheduled_date: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          cobranca_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          scheduled_date?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobranca_activities_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobrancas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           address: string | null
@@ -120,6 +164,38 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_cobranca_notes: {
+        Row: {
+          cobranca_id: string
+          content: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          cobranca_id: string
+          content: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          cobranca_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_cobranca_notes_cobranca_id_fkey"
+            columns: ["cobranca_id"]
+            isOneToOne: false
+            referencedRelation: "crm_cobrancas"
             referencedColumns: ["id"]
           },
         ]
