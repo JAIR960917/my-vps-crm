@@ -13,6 +13,14 @@ import { toast } from "sonner";
 import { Plus, Trash2, Edit2, Send, Users, Hash, Clock, Zap, Smartphone } from "lucide-react";
 import ImageUploadField from "@/components/whatsapp/ImageUploadField";
 
+type ModuleKey = "leads" | "cobrancas" | "renovacoes";
+
+const MODULE_LABELS: Record<ModuleKey, string> = {
+  leads: "Leads",
+  cobrancas: "Cobranças",
+  renovacoes: "Renovações",
+};
+
 type Status = {
   id: string;
   key: string;
@@ -31,6 +39,7 @@ type TriggerStep = {
 type TriggerCampaign = {
   id: string;
   name: string;
+  module: ModuleKey;
   status_id: string;
   instance_id: string | null;
   company_id: string | null;
