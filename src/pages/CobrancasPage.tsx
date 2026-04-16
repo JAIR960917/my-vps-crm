@@ -6,14 +6,13 @@ import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Plus, Search, Pencil, Trash2, Phone, User, Building2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatPhoneBR } from "@/lib/phoneFormat";
+import CobrancaEditSheet from "@/components/cobrancas/CobrancaEditSheet";
 
 type Cobranca = {
   id: string;
@@ -116,15 +115,17 @@ export default function CobrancasPage() {
       if (error) toast.error("Erro ao atualizar");
       else toast.success("Cobrança atualizada");
     } else {
-      const { error } = await supabase.from("crm_cobrancas").insert({
+      const { data: created, error } = await supabase.from("crm_cobrancas").insert({
         data: formData, status: formStatus, assigned_to: formAssigned || null,
         created_by: user?.id, valor, company_id: formCompanyId || null,
-      });
+      }).select().single();
       if (error) toast.error("Erro ao criar cobrança");
-      else toast.success("Cobrança criada");
+      else {
+        toast.success("Cobrança criada — agora você pode adicionar comentários e tarefas");
+        if (created) setEditingCobranca(created as Cobranca);
+      }
     }
     setSaving(false);
-    setDialogOpen(false);
     fetchAll();
   };
 
@@ -354,72 +355,28 @@ export default function CobrancasPage() {
         </div>
       </DragDropContext>
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingCobranca ? "Editar Cobrança" : "Nova Cobrança"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Empresa</Label>
-              <Select value={formCompanyId} onValueChange={setFormCompanyId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecionar empresa..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {companies.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input value={formData.nome || ""} onChange={e => setFormData(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do cliente" required />
-            </div>
-            <div className="space-y-2">
-              <Label>Telefone</Label>
-              <Input value={formData.telefone || ""} onChange={e => setFormData(p => ({ ...p, telefone: e.target.value }))} placeholder="(00) 00000-0000" />
-            </div>
-            <div className="space-y-2">
-              <Label>Valor (R$)</Label>
-              <Input type="number" step="0.01" value={formValor} onChange={e => setFormValor(e.target.value)} placeholder="0,00" />
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea value={formData.descricao || ""} onChange={e => setFormData(p => ({ ...p, descricao: e.target.value }))} placeholder="Descrição da cobrança..." rows={3} />
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={formStatus} onValueChange={setFormStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {statuses.map(s => (
-                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {(isAdmin || isGerente) && (
-              <div className="space-y-2">
-                <Label>Responsável</Label>
-                <Select value={formAssigned} onValueChange={setFormAssigned}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                  <SelectContent>
-                    {profiles.map(p => (
-                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <Button type="submit" className="w-full" disabled={saving || !formData.nome?.trim()}>
-              {saving ? "Salvando..." : editingCobranca ? "Atualizar" : "Criar"}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Edit/Create Sheet with Activity/Comment/Task tabs */}
+      <CobrancaEditSheet
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        cobrancaId={editingCobranca?.id || null}
+        formData={formData}
+        setFormData={setFormData}
+        formStatus={formStatus}
+        setFormStatus={setFormStatus}
+        formAssigned={formAssigned}
+        setFormAssigned={setFormAssigned}
+        formValor={formValor}
+        setFormValor={setFormValor}
+        formCompanyId={formCompanyId}
+        setFormCompanyId={setFormCompanyId}
+        statuses={statuses}
+        profiles={profiles}
+        companies={companies}
+        saving={saving}
+        onSave={handleSave}
+        canReassign={isAdmin || isGerente}
+      />
 
       <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
