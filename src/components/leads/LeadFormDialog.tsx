@@ -780,11 +780,11 @@ export default function LeadFormDialog({
 
   // EDIT MODE — split layout
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-5xl p-0">
-        <div className="flex flex-col md:flex-row h-[85vh] max-h-[85vh]">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-[1100px] p-0 flex flex-col">
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* LEFT PANEL — Lead Data */}
-          <div className="md:w-[380px] md:min-w-[380px] border-r flex flex-col overflow-hidden">
+          <div className="md:w-[420px] md:min-w-[420px] border-r flex flex-col overflow-hidden bg-card">
             <div className="px-5 py-4 border-b">
               <DialogTitle className="text-lg font-bold">Editar Lead</DialogTitle>
             </div>
