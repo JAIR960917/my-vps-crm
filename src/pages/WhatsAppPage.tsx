@@ -562,14 +562,14 @@ export default function WhatsAppPage() {
           <ScrollArea className="flex-1">
             {loading ? (
               <p className="text-center text-muted-foreground py-8">Carregando...</p>
-            ) : campaigns.length === 0 ? (
+            ) : filteredCampaigns.length === 0 ? (
               <div className="text-center py-12">
                 <MessageSquare className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
                 <p className="text-muted-foreground text-sm">Nenhuma campanha criada</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {campaigns.map(c => {
+                {filteredCampaigns.map(c => {
                   const stats = sendStats[c.id];
                   return (
                     <div key={c.id} className={`rounded-lg border bg-card p-4 space-y-3 ${!c.is_active ? "opacity-60" : ""}`}>
@@ -580,6 +580,11 @@ export default function WhatsAppPage() {
                             <Badge variant="outline" style={{ borderColor: getStatusColor(c.status_id), color: getStatusColor(c.status_id) }}>
                               {getStatusLabel(c.status_id)}
                             </Badge>
+                            {c.company_id ? (
+                              <Badge variant="secondary" className="text-[10px]">{getCompanyName(c.company_id)}</Badge>
+                            ) : (
+                              <Badge variant="destructive" className="text-[10px]">Sem empresa</Badge>
+                            )}
                             {c.instance_id && (
                               <Badge variant="secondary" className="text-[10px] flex items-center gap-1">
                                 <Smartphone className="h-3 w-3" /> {getInstanceName(c.instance_id)}
