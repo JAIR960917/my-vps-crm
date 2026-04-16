@@ -38,12 +38,19 @@ const colorDot: Record<string, string> = {
   red: "bg-red-500",
 };
 
-type SectionType = "leads" | "cobrancas";
+type SectionType = "leads" | "cobrancas" | "renovacoes";
+
+const sectionConfig: Record<SectionType, { statusTable: string; dataTable: string; title: string }> = {
+  leads:      { statusTable: "crm_statuses",            dataTable: "crm_leads",      title: "Colunas de Leads" },
+  cobrancas:  { statusTable: "crm_cobranca_statuses",   dataTable: "crm_cobrancas",  title: "Colunas de Cobranças" },
+  renovacoes: { statusTable: "crm_renovacao_statuses",  dataTable: "crm_renovacoes", title: "Colunas de Renovação" },
+};
 
 export default function ColumnsPage() {
   const { isAdmin } = useAuth();
   const [leadStatuses, setLeadStatuses] = useState<CrmStatus[]>([]);
   const [cobrancaStatuses, setCobrancaStatuses] = useState<CrmStatus[]>([]);
+  const [renovacaoStatuses, setRenovacaoStatuses] = useState<CrmStatus[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingStatus, setEditingStatus] = useState<CrmStatus | null>(null);
   const [dialogSection, setDialogSection] = useState<SectionType>("leads");
@@ -52,107 +59,70 @@ export default function ColumnsPage() {
   const [saving, setSaving] = useState(false);
 
   const fetchStatuses = async () => {
-    const [{ data: leads }, { data: cobrancas }] = await Promise.all([
+    const [{ data: leads }, { data: cobrancas }, { data: renovacoes }] = await Promise.all([
       supabase.from("crm_statuses").select("*").order("position"),
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
+      supabase.from("crm_renovacao_statuses").select("*").order("position"),
     ]);
     setLeadStatuses((leads || []) as CrmStatus[]);
     setCobrancaStatuses((cobrancas || []) as CrmStatus[]);
+    setRenovacaoStatuses((renovacoes || []) as CrmStatus[]);
   };
 
   useEffect(() => { fetchStatuses(); }, []);
 
-  const resetForm = () => {
-    setLabel("");
-    setColor("blue");
-    setEditingStatus(null);
-  };
+  const resetForm = () => { setLabel(""); setColor("blue"); setEditingStatus(null); };
 
-  const openCreate = (section: SectionType) => {
-    resetForm();
-    setDialogSection(section);
-    setDialogOpen(true);
-  };
+  const openCreate = (section: SectionType) => { resetForm(); setDialogSection(section); setDialogOpen(true); };
 
   const openEdit = (status: CrmStatus, section: SectionType) => {
-    setEditingStatus(status);
-    setLabel(status.label);
-    setColor(status.color);
-    setDialogSection(section);
-    setDialogOpen(true);
+    setEditingStatus(status); setLabel(status.label); setColor(status.color);
+    setDialogSection(section); setDialogOpen(true);
   };
 
-  const getTable = (section: SectionType) =>
-    section === "leads" ? "crm_statuses" : "crm_cobranca_statuses";
-
-  const getLeadsTable = (section: SectionType) =>
-    section === "leads" ? "crm_leads" : "crm_cobrancas";
-
   const getStatuses = (section: SectionType) =>
-    section === "leads" ? leadStatuses : cobrancaStatuses;
+    section === "leads" ? leadStatuses : section === "cobrancas" ? cobrancaStatuses : renovacaoStatuses;
 
   const handleSave = async () => {
     if (!label.trim()) return;
     setSaving(true);
-    const table = getTable(dialogSection);
+    const table = sectionConfig[dialogSection].statusTable;
 
     if (editingStatus) {
-      const { error } = await supabase
-        .from(table)
-        .update({ label: label.trim(), color })
-        .eq("id", editingStatus.id);
-      if (error) toast.error("Erro ao atualizar");
-      else toast.success("Coluna atualizada");
+      const { error } = await supabase.from(table).update({ label: label.trim(), color }).eq("id", editingStatus.id);
+      if (error) toast.error("Erro ao atualizar"); else toast.success("Coluna atualizada");
     } else {
       const statuses = getStatuses(dialogSection);
       const key = label.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
       const maxPos = statuses.length > 0 ? Math.max(...statuses.map(s => s.position)) + 1 : 0;
-      const { error } = await supabase
-        .from(table)
-        .insert({ key, label: label.trim(), color, position: maxPos });
-      if (error) toast.error("Erro ao criar coluna");
-      else toast.success("Coluna criada");
+      const { error } = await supabase.from(table).insert({ key, label: label.trim(), color, position: maxPos });
+      if (error) toast.error("Erro ao criar coluna"); else toast.success("Coluna criada");
     }
-
-    setSaving(false);
-    setDialogOpen(false);
-    resetForm();
-    fetchStatuses();
+    setSaving(false); setDialogOpen(false); resetForm(); fetchStatuses();
   };
 
   const handleDelete = async (status: CrmStatus, section: SectionType) => {
-    const leadsTable = getLeadsTable(section);
-    const { count } = await supabase
-      .from(leadsTable)
-      .select("id", { count: "exact", head: true })
-      .eq("status", status.key);
-
-    if (count && count > 0) {
-      toast.error(`Remova os registros desta coluna antes de excluí-la`);
-      return;
-    }
-
-    const table = getTable(section);
+    const dataTable = sectionConfig[section].dataTable;
+    const { count } = await supabase.from(dataTable).select("id", { count: "exact", head: true }).eq("status", status.key);
+    if (count && count > 0) { toast.error("Remova os registros desta coluna antes de excluí-la"); return; }
+    const table = sectionConfig[section].statusTable;
     const { error } = await supabase.from(table).delete().eq("id", status.id);
-    if (error) toast.error("Erro ao excluir");
-    else { toast.success("Coluna excluída"); fetchStatuses(); }
+    if (error) toast.error("Erro ao excluir"); else { toast.success("Coluna excluída"); fetchStatuses(); }
   };
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
-    const droppableId = result.source.droppableId as SectionType;
-    const table = getTable(droppableId);
-    const statuses = droppableId === "leads" ? [...leadStatuses] : [...cobrancaStatuses];
+    const section = result.source.droppableId as SectionType;
+    const table = sectionConfig[section].statusTable;
+    const statuses = [...getStatuses(section)];
     const [moved] = statuses.splice(result.source.index, 1);
     statuses.splice(result.destination.index, 0, moved);
 
-    if (droppableId === "leads") setLeadStatuses(statuses);
-    else setCobrancaStatuses(statuses);
+    if (section === "leads") setLeadStatuses(statuses);
+    else if (section === "cobrancas") setCobrancaStatuses(statuses);
+    else setRenovacaoStatuses(statuses);
 
-    const updates = statuses.map((s, i) =>
-      supabase.from(table).update({ position: i }).eq("id", s.id)
-    );
-    await Promise.all(updates);
+    await Promise.all(statuses.map((s, i) => supabase.from(table).update({ position: i }).eq("id", s.id)));
   };
 
   if (!isAdmin) {
@@ -164,20 +134,13 @@ export default function ColumnsPage() {
       {(provided) => (
         <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
           {statuses.length === 0 && (
-            <div className="text-center text-muted-foreground py-8 border rounded-xl bg-card">
-              Nenhuma coluna criada ainda
-            </div>
+            <div className="text-center text-muted-foreground py-8 border rounded-xl bg-card">Nenhuma coluna criada ainda</div>
           )}
           {statuses.map((status, index) => (
             <Draggable key={status.id} draggableId={status.id} index={index}>
               {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.draggableProps}
-                  className={`rounded-xl border bg-card p-3 sm:p-4 transition-shadow ${
-                    snapshot.isDragging ? "shadow-lg ring-2 ring-primary/20" : ""
-                  }`}
-                >
+                <div ref={provided.innerRef} {...provided.draggableProps}
+                  className={`rounded-xl border bg-card p-3 sm:p-4 transition-shadow ${snapshot.isDragging ? "shadow-lg ring-2 ring-primary/20" : ""}`}>
                   <div className="flex items-center gap-2 sm:gap-3">
                     <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0">
                       <GripVertical className="h-5 w-5" />
@@ -206,65 +169,61 @@ export default function ColumnsPage() {
     </Droppable>
   );
 
+  const sectionLabel = dialogSection === "leads" ? "Leads" : dialogSection === "cobrancas" ? "Cobranças" : "Renovação";
+
   return (
     <AppLayout>
       <div className="mb-4 sm:mb-6">
         <h1 className="text-xl sm:text-2xl font-bold">Colunas do CRM</h1>
-        <p className="text-xs sm:text-sm text-muted-foreground">
-          Gerencie as colunas do kanban. Arraste para reordenar.
-        </p>
+        <p className="text-xs sm:text-sm text-muted-foreground">Gerencie as colunas do kanban. Arraste para reordenar.</p>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        {/* Leads Section */}
+        {/* Leads */}
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Colunas de Leads</h2>
-          <Button size="sm" className="w-full sm:w-auto" onClick={() => openCreate("leads")}>
-            <Plus className="mr-2 h-4 w-4" />Nova Coluna
-          </Button>
+          <Button size="sm" className="w-full sm:w-auto" onClick={() => openCreate("leads")}><Plus className="mr-2 h-4 w-4" />Nova Coluna</Button>
         </div>
         {renderStatusList(leadStatuses, "leads")}
 
         <Separator className="my-8" />
 
-        {/* Cobranças Section */}
+        {/* Cobranças */}
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Colunas de Cobranças</h2>
-          <Button size="sm" className="w-full sm:w-auto" onClick={() => openCreate("cobrancas")}>
-            <Plus className="mr-2 h-4 w-4" />Nova Coluna
-          </Button>
+          <Button size="sm" className="w-full sm:w-auto" onClick={() => openCreate("cobrancas")}><Plus className="mr-2 h-4 w-4" />Nova Coluna</Button>
         </div>
         {renderStatusList(cobrancaStatuses, "cobrancas")}
+
+        <Separator className="my-8" />
+
+        {/* Renovação */}
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Colunas de Renovação</h2>
+          <Button size="sm" className="w-full sm:w-auto" onClick={() => openCreate("renovacoes")}><Plus className="mr-2 h-4 w-4" />Nova Coluna</Button>
+        </div>
+        {renderStatusList(renovacaoStatuses, "renovacoes")}
       </DragDropContext>
 
-      {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {editingStatus ? "Editar Coluna" : "Nova Coluna"}{" "}
-              <span className="text-muted-foreground text-sm font-normal">
-                ({dialogSection === "leads" ? "Leads" : "Cobranças"})
-              </span>
+              <span className="text-muted-foreground text-sm font-normal">({sectionLabel})</span>
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Nome da coluna</Label>
-              <Input
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Ex: Em negociação"
-              />
+              <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="Ex: Em negociação" />
             </div>
             <div className="space-y-2">
               <Label>Cor</Label>
               <Select value={color} onValueChange={setColor}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {COLORS.map((c) => (
+                  {COLORS.map(c => (
                     <SelectItem key={c.value} value={c.value}>
                       <div className="flex items-center gap-2">
                         <div className={`h-3 w-3 rounded-full ${colorDot[c.value]}`} />
