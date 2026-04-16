@@ -302,9 +302,11 @@ export default function CobrancasPage() {
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhuma cobrança nesta coluna</p>
               )}
               {items.map(c => <div key={c.id} className="mb-2">{renderCard(c)}</div>)}
-              <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
-                + Adicionar cobrança
-              </button>
+              {canCreate && (
+                <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
+                  + Adicionar cobrança
+                </button>
+              )}
             </div>
           );
         })}
