@@ -74,7 +74,9 @@ interface Props {
 export default function TriggerCampaigns({ instances }: Props) {
   const { user, isAdmin, isGerente } = useAuth();
   const [campaigns, setCampaigns] = useState<TriggerCampaign[]>([]);
-  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [statusesByModule, setStatusesByModule] = useState<Record<ModuleKey, Status[]>>({
+    leads: [], cobrancas: [], renovacoes: [],
+  });
   const [companies, setCompanies] = useState<Company[]>([]);
   const [sendStats, setSendStats] = useState<Record<string, TriggerSendStats>>({});
   const [loading, setLoading] = useState(true);
@@ -84,6 +86,7 @@ export default function TriggerCampaigns({ instances }: Props) {
   const [filterCompanyId, setFilterCompanyId] = useState<string>("all");
 
   const [name, setName] = useState("");
+  const [moduleKey, setModuleKey] = useState<ModuleKey>("leads");
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
   const [companyId, setCompanyId] = useState("");
@@ -96,18 +99,24 @@ export default function TriggerCampaigns({ instances }: Props) {
 
   const fetchData = async () => {
     setLoading(true);
-    const [campaignsRes, statusesRes, sendsRes, companiesRes] = await Promise.all([
+    const [campaignsRes, leadStatusRes, cobStatusRes, renStatusRes, sendsRes, companiesRes] = await Promise.all([
       supabase
         .from("whatsapp_trigger_campaigns")
         .select("*, whatsapp_trigger_steps(*)")
         .order("created_at", { ascending: false }),
       supabase.from("crm_statuses").select("*").order("position"),
+      supabase.from("crm_cobranca_statuses").select("*").order("position"),
+      supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.from("whatsapp_trigger_sends").select("campaign_id, status"),
       supabase.from("companies").select("id, name").order("name"),
     ]);
 
     setCampaigns((campaignsRes.data || []) as any);
-    setStatuses((statusesRes.data || []) as Status[]);
+    setStatusesByModule({
+      leads: (leadStatusRes.data || []) as Status[],
+      cobrancas: (cobStatusRes.data || []) as Status[],
+      renovacoes: (renStatusRes.data || []) as Status[],
+    });
     setCompanies((companiesRes.data || []) as Company[]);
 
     const stats: Record<string, TriggerSendStats> = {};
