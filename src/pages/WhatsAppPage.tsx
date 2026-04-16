@@ -554,6 +554,7 @@ export default function WhatsAppPage() {
                   Use {"{nome}"} para inserir o nome do lead automaticamente
                 </p>
               </div>
+              <ImageUploadField value={imageUrl} onChange={setImageUrl} label="Imagem da campanha (opcional)" />
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={resetForm}>Cancelar</Button>
                 <Button size="sm" onClick={handleSubmit} disabled={saving}>
@@ -615,7 +616,12 @@ export default function WhatsAppPage() {
                         )}
                       </div>
 
-                      <p className="text-sm bg-muted/50 rounded-md p-2 whitespace-pre-wrap">{c.message}</p>
+                      <div className="flex gap-3">
+                        {c.image_url && (
+                          <img src={c.image_url} alt="Imagem" className="h-20 w-20 rounded-md object-cover border shrink-0" />
+                        )}
+                        <p className="text-sm bg-muted/50 rounded-md p-2 whitespace-pre-wrap flex-1">{c.message}</p>
+                      </div>
 
                       <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
                         <span className="flex items-center gap-1">
