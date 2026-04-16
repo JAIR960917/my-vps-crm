@@ -347,6 +347,69 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_renovacao_statuses: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          key: string
+          label: string
+          position: number
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          key: string
+          label: string
+          position?: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          key?: string
+          label?: string
+          position?: number
+        }
+        Relationships: []
+      }
+      crm_renovacoes: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          created_by: string | null
+          data: Json
+          id: string
+          scheduled_date: string | null
+          status: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          scheduled_date?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          scheduled_date?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
+      }
       crm_statuses: {
         Row: {
           color: string
