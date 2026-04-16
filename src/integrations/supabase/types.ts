@@ -154,6 +154,7 @@ export type Database = {
       crm_cobrancas: {
         Row: {
           assigned_to: string | null
+          company_id: string | null
           created_at: string
           created_by: string | null
           data: Json
@@ -165,6 +166,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          company_id?: string | null
           created_at?: string
           created_by?: string | null
           data?: Json
@@ -176,6 +178,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          company_id?: string | null
           created_at?: string
           created_by?: string | null
           data?: Json
@@ -185,7 +188,15 @@ export type Database = {
           updated_at?: string
           valor?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "crm_cobrancas_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       crm_columns: {
         Row: {
