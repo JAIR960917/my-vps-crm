@@ -89,13 +89,13 @@ export default function ColumnsPage() {
     const table = sectionConfig[dialogSection].statusTable;
 
     if (editingStatus) {
-      const { error } = await supabase.from(table).update({ label: label.trim(), color }).eq("id", editingStatus.id);
+      const { error } = await supabase.from(table as any).update({ label: label.trim(), color } as any).eq("id", editingStatus.id);
       if (error) toast.error("Erro ao atualizar"); else toast.success("Coluna atualizada");
     } else {
       const statuses = getStatuses(dialogSection);
       const key = label.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
       const maxPos = statuses.length > 0 ? Math.max(...statuses.map(s => s.position)) + 1 : 0;
-      const { error } = await supabase.from(table).insert({ key, label: label.trim(), color, position: maxPos });
+      const { error } = await supabase.from(table as any).insert({ key, label: label.trim(), color, position: maxPos } as any);
       if (error) toast.error("Erro ao criar coluna"); else toast.success("Coluna criada");
     }
     setSaving(false); setDialogOpen(false); resetForm(); fetchStatuses();
