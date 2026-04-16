@@ -45,6 +45,16 @@ function statusKeyForDiasAtraso(dias: number): string {
   return "180_dias_ajuizar_manualmente"; // 180+
 }
 
+// Mapeia dias desde a última compra para a key da coluna em crm_renovacao_statuses.
+// Re-classifica sempre (a cada sync) para acompanhar a passagem do tempo.
+function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
+  if (diasDesdeUltimaCompra === null) return "novo";        // sem data = informações insuficientes
+  if (diasDesdeUltimaCompra < 365) return "em_contato";     // menos de 1 ano
+  if (diasDesdeUltimaCompra < 730) return "agendado";       // 1 a 2 anos
+  if (diasDesdeUltimaCompra < 1095) return "renovado";      // 2 a 3 anos
+  return "mais_de_3_anos";                                  // 3+ anos
+}
+
 // Quebra um intervalo em janelas de até 30 dias (limite SSótica)
 function buildWindows(start: Date, end: Date): Array<{ start: string; end: string }> {
   const windows: Array<{ start: string; end: string }> = [];
@@ -259,16 +269,26 @@ async function syncVendas(
       ssotica_raw: cliente,
     };
 
+    // Calcula dias desde a última compra para escolher a coluna
+    const ultimaCompraDate = new Date(info.data + "T00:00:00Z");
+    const diasDesdeUltimaCompra = daysBetween(ultimaCompraDate, today);
+    const renovacaoStatusKey = statusKeyForRenovacao(diasDesdeUltimaCompra);
+
     const { data: existing } = await supabase
       .from("crm_renovacoes")
-      .select("id, data_ultima_compra")
+      .select("id, data_ultima_compra, status")
       .eq("ssotica_cliente_id", clienteId)
       .eq("ssotica_company_id", integ.company_id)
       .maybeSingle();
 
     if (existing) {
-      // Atualiza só se a venda for mais recente
-      if (!existing.data_ultima_compra || existing.data_ultima_compra < info.data) {
+      // Não mexe se vendedor já está atendendo manualmente
+      const isManualStatus = existing.status === "em_atendimento" || existing.status === "nunca_fez_exame";
+      const newStatus = isManualStatus ? existing.status : renovacaoStatusKey;
+      // Atualiza se a venda é mais recente OU se o status precisa mudar de coluna pelo tempo
+      const vendaMaisRecente = !existing.data_ultima_compra || existing.data_ultima_compra < info.data;
+      const statusMudou = !isManualStatus && existing.status !== renovacaoStatusKey;
+      if (vendaMaisRecente || statusMudou) {
         await supabase
           .from("crm_renovacoes")
           .update({
@@ -276,6 +296,7 @@ async function syncVendas(
             data_ultima_compra: info.data,
             ssotica_venda_id: info.vendaId,
             scheduled_date: info.data,
+            status: newStatus,
           })
           .eq("id", existing.id);
         updated++;
@@ -287,7 +308,7 @@ async function syncVendas(
         ssotica_company_id: integ.company_id,
         data: renovacaoData,
         data_ultima_compra: info.data,
-        status: "aguardando_renovacao",
+        status: renovacaoStatusKey,
         scheduled_date: info.data,
       });
       created++;
