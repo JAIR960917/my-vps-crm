@@ -43,7 +43,9 @@ const colorMap: Record<string, { header: string; badge: string }> = {
 };
 
 export default function CobrancasPage() {
-  const { user, isAdmin, isGerente } = useAuth();
+  const { user, isAdmin, isGerente, isFinanceiro } = useAuth();
+  const canCreate = isAdmin || isFinanceiro;
+  const [financeiroIds, setFinanceiroIds] = useState<Set<string>>(new Set());
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -62,16 +64,18 @@ export default function CobrancasPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }] = await Promise.all([
+    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }, { data: roles }] = await Promise.all([
       supabase.from("crm_cobrancas").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("companies").select("id, name").order("name"),
+      supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
     ]);
     setCobrancas((cobs || []) as Cobranca[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
+    setFinanceiroIds(new Set((roles || []).map((r: any) => r.user_id)));
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -255,9 +259,11 @@ export default function CobrancasPage() {
               className="pl-8 h-9 w-full sm:w-48"
             />
           </div>
-          <Button size="sm" onClick={() => openCreate()}>
-            <Plus className="mr-2 h-4 w-4" />Nova Cobrança
-          </Button>
+          {canCreate && (
+            <Button size="sm" onClick={() => openCreate()}>
+              <Plus className="mr-2 h-4 w-4" />Nova Cobrança
+            </Button>
+          )}
         </div>
       </div>
 
@@ -296,9 +302,11 @@ export default function CobrancasPage() {
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhuma cobrança nesta coluna</p>
               )}
               {items.map(c => <div key={c.id} className="mb-2">{renderCard(c)}</div>)}
-              <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
-                + Adicionar cobrança
-              </button>
+              {canCreate && (
+                <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
+                  + Adicionar cobrança
+                </button>
+              )}
             </div>
           );
         })}
@@ -343,9 +351,11 @@ export default function CobrancasPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
-                      <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
-                        + Adicionar cobrança
-                      </button>
+                      {canCreate && (
+                        <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
+                          + Adicionar cobrança
+                        </button>
+                      )}
                     </div>
                   )}
                 </Droppable>
@@ -371,7 +381,7 @@ export default function CobrancasPage() {
         formCompanyId={formCompanyId}
         setFormCompanyId={setFormCompanyId}
         statuses={statuses}
-        profiles={profiles}
+        profiles={profiles.filter(p => financeiroIds.has(p.user_id))}
         companies={companies}
         saving={saving}
         onSave={handleSave}
