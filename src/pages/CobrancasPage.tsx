@@ -166,7 +166,7 @@ export default function CobrancasPage() {
             <p className="font-semibold text-sm truncate">{d.nome || "Sem nome"}</p>
             {d.telefone && (
               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                <Phone className="h-3 w-3" />{formatPhone(d.telefone)}
+                <Phone className="h-3 w-3" />{formatPhoneBR(d.telefone)}
               </p>
             )}
           </div>
