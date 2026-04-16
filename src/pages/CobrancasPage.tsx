@@ -43,7 +43,9 @@ const colorMap: Record<string, { header: string; badge: string }> = {
 };
 
 export default function CobrancasPage() {
-  const { user, isAdmin, isGerente } = useAuth();
+  const { user, isAdmin, isGerente, isFinanceiro } = useAuth();
+  const canCreate = isAdmin || isFinanceiro;
+  const [financeiroIds, setFinanceiroIds] = useState<Set<string>>(new Set());
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
