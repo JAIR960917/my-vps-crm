@@ -212,10 +212,10 @@ export default function SSoticaIntegrationsPage() {
     if (!integ) return <Badge variant="outline">Não configurada</Badge>;
     if (!integ.is_active) return <Badge variant="secondary">Desativada</Badge>;
     if (integ.sync_status === "running")
-      return <Badge className="bg-blue-500"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sincronizando</Badge>;
+      return <Badge variant="secondary"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sincronizando</Badge>;
     if (integ.sync_status === "error" || integ.last_error)
       return <Badge variant="destructive"><AlertTriangle className="h-3 w-3 mr-1" />Erro</Badge>;
-    return <Badge className="bg-emerald-600"><CheckCircle2 className="h-3 w-3 mr-1" />Conectada</Badge>;
+    return <Badge className="bg-primary text-primary-foreground"><CheckCircle2 className="h-3 w-3 mr-1" />Conectada</Badge>;
   }
 
   return (
