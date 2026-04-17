@@ -415,6 +415,20 @@ export default function SSoticaIntegrationsPage() {
                           </Button>
                           <Button
                             size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              if (confirm("Resincronizar os últimos 6 meses de vendas? Use isso para corrigir cards antigos sem vendedor vinculado. Pode demorar alguns minutos.")) {
+                                handleSyncNow(integ, true);
+                              }
+                            }}
+                            disabled={syncingId === integ.id || !integ.is_active}
+                            title="Reprocessa os últimos 6 meses para reaplicar vínculos de vendedor"
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Resync 6m
+                          </Button>
+                          <Button
+                            size="sm"
                             variant="outline"
                             onClick={() => handleTestConnection(integ)}
                             disabled={testingId === integ.id}
