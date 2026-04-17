@@ -542,6 +542,74 @@ export default function SSoticaIntegrationsPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Dialog de resultado do teste de conexão */}
+      <Dialog open={!!testResult} onOpenChange={(o) => !o && setTestResult(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {testResult?.ok ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  Conexão OK
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  Falha na conexão
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {testResult?._company && <span className="font-medium">{testResult._company} · </span>}
+              Parâmetro enviado: <code className="bg-muted px-1 rounded">{testResult?.empresa_param}</code>{" "}
+              ({testResult?.is_cnpj_format ? "formato CNPJ" : "código alfanumérico"})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {testResult?.error && (
+              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded">
+                {testResult.error}
+              </div>
+            )}
+            {testResult?.results?.map((r: any, i: number) => (
+              <Card key={i}>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <span>{r.endpoint}</span>
+                    <Badge variant={r.ok ? "default" : "destructive"}>HTTP {r.status}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-xs">
+                  <div>
+                    <div className="font-medium text-muted-foreground mb-1">URL chamada:</div>
+                    <code className="block bg-muted p-2 rounded break-all">{r.url}</code>
+                  </div>
+                  <div>
+                    <div className="font-medium text-muted-foreground mb-1">Resposta do SSótica:</div>
+                    <pre className="bg-muted p-2 rounded overflow-x-auto whitespace-pre-wrap break-all max-h-40">
+                      {r.response}
+                    </pre>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {!testResult?.ok && (
+              <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded space-y-1">
+                <div className="font-medium text-foreground">Possíveis causas:</div>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>O parâmetro <code>empresa</code> precisa ser o <strong>código de licença</strong> da loja, não o CNPJ — confirme no painel SSótica.</li>
+                  <li>Token bearer pode estar vinculado a outra loja.</li>
+                  <li>Token pode não ter permissão para o módulo Financeiro/Vendas.</li>
+                </ul>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestResult(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
