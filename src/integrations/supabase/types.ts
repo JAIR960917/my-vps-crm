@@ -985,6 +985,11 @@ export type Database = {
       }
       ssotica_integrations: {
         Row: {
+          backfill_chunk_index: number
+          backfill_next_run_at: string | null
+          backfill_started_at: string | null
+          backfill_status: string
+          backfill_total_chunks: number
           bearer_token: string
           cnpj: string
           company_id: string
@@ -1000,6 +1005,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          backfill_chunk_index?: number
+          backfill_next_run_at?: string | null
+          backfill_started_at?: string | null
+          backfill_status?: string
+          backfill_total_chunks?: number
           bearer_token: string
           cnpj: string
           company_id: string
@@ -1015,6 +1025,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          backfill_chunk_index?: number
+          backfill_next_run_at?: string | null
+          backfill_started_at?: string | null
+          backfill_status?: string
+          backfill_total_chunks?: number
           bearer_token?: string
           cnpj?: string
           company_id?: string
