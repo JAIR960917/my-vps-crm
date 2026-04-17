@@ -465,6 +465,7 @@ export type Database = {
           date_status_ranges: Json | null
           field_type: string
           id: string
+          is_cpf_field: boolean
           is_last_visit_field: boolean
           is_name_field: boolean
           is_phone_field: boolean
@@ -482,6 +483,7 @@ export type Database = {
           date_status_ranges?: Json | null
           field_type?: string
           id?: string
+          is_cpf_field?: boolean
           is_last_visit_field?: boolean
           is_name_field?: boolean
           is_phone_field?: boolean
@@ -499,6 +501,7 @@ export type Database = {
           date_status_ranges?: Json | null
           field_type?: string
           id?: string
+          is_cpf_field?: boolean
           is_last_visit_field?: boolean
           is_name_field?: boolean
           is_phone_field?: boolean

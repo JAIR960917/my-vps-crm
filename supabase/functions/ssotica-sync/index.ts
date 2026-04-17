@@ -316,8 +316,8 @@ async function syncVendas(
   // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
   const cnpjVendas = normalizeIdentifier(integ.cnpj);
 
-  // Mapa cliente_id -> última venda (data + venda_id + cliente)
-  const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; cliente: any }>();
+  // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
+  const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any }>();
 
   for (const w of windows) {
     const url =
@@ -331,9 +331,10 @@ async function syncVendas(
       const cliente = venda.cliente;
       if (!cliente?.id) continue;
       const data = venda.data as string;
+      const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
       const prev = ultimaCompraPorCliente.get(cliente.id);
       if (!prev || prev.data < data) {
-        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, cliente });
+        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente });
       }
     }
   }
@@ -389,6 +390,7 @@ async function syncVendas(
             data: renovacaoData,
             data_ultima_compra: info.data,
             ssotica_venda_id: info.vendaId,
+            valor: info.valor,
             scheduled_date: info.data,
             status: newStatus,
           })
@@ -402,6 +404,7 @@ async function syncVendas(
         ssotica_company_id: integ.company_id,
         data: renovacaoData,
         data_ultima_compra: info.data,
+        valor: info.valor,
         status: renovacaoStatusKey,
         scheduled_date: info.data,
       });
