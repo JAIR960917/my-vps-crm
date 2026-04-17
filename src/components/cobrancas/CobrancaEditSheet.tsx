@@ -66,7 +66,8 @@ type Props = {
 
 export default function CobrancaEditSheet(props: Props) {
   const {
-    open, onOpenChange, cobrancaId, formData, setFormData,
+    open, onOpenChange, cobrancaId, ssoticaClienteId, ssoticaCompanyId,
+    formData, setFormData,
     formStatus, setFormStatus, formAssigned, setFormAssigned,
     formValor, setFormValor, formCompanyId, setFormCompanyId,
     statuses, profiles, companies, saving, onSave, canReassign,
