@@ -456,7 +456,7 @@ async function syncContasReceber(
     .slice(0, 10);
   console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} processed=${processed} created=${created} updated=${updated} removed=${removed} quitados=${clientesQuitadosSet.size} skipped=${JSON.stringify(skipped)} top_situacoes=${JSON.stringify(topSituacoes)}`);
 
-  return { processed, created, updated, removed, clientesQuitados: Array.from(clientesQuitadosSet) };
+  return { processed, created, updated, removed, chunks: chunksProcessed, clientesQuitados: Array.from(clientesQuitadosSet) };
 }
 
 async function syncVendas(
