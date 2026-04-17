@@ -123,7 +123,7 @@ export default function SSoticaIntegrationsPage() {
           backfill_next_run_at: null,
           sync_status: "idle",
         }, { count: "exact" })
-        .in("backfill_status", ["running", "scheduled"]);
+        .or("backfill_status.in.(running,scheduled),sync_status.eq.running");
       if (error) throw error;
       toast({
         title: "Backfills interrompidos",
