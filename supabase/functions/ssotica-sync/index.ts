@@ -242,7 +242,7 @@ async function syncContasReceber(
           (valorParcela > 0 && valorRecebido >= valorParcela);
 
         const isInativa =
-          !isAtiva || foiBaixada || foiCancelada || foiEstornada || foiPaga;
+          !isAtiva || foiRenegociada || foiBaixada || foiCancelada || foiEstornada || foiPaga;
 
         if (isInativa) {
           // Marca cliente para reclassificação (a parcela em si é tratada no pós-processamento)
