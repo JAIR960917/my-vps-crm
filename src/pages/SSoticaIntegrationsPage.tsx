@@ -500,6 +500,22 @@ export default function SSoticaIntegrationsPage() {
                             <RefreshCw className="h-3 w-3 mr-1" />
                             Backfill 96m
                           </Button>
+                          {((integ as any).backfill_status === "running" || (integ as any).backfill_status === "scheduled") && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleStopBackfill(integ)}
+                              disabled={stoppingId === integ.id}
+                              title="Cancelar o backfill em andamento desta loja"
+                            >
+                              {stoppingId === integ.id ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              ) : (
+                                <StopCircle className="h-3 w-3 mr-1" />
+                              )}
+                              Parar backfill
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
