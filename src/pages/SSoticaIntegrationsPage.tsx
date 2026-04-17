@@ -130,7 +130,11 @@ export default function SSoticaIntegrationsPage() {
       }
       const { error } = await supabase.rpc("manage_ssotica_cron" as any);
       if (error) throw error;
-      toast({ title: "Horário salvo", description: `Sincronização diária agendada para ${syncHour}h (horário de Brasília).` });
+      const h = parseInt(syncHour, 10);
+      const horarios = [h, (h + 6) % 24, (h + 12) % 24, (h + 18) % 24]
+        .map((x) => String(x).padStart(2, "0") + "h")
+        .join(", ");
+      toast({ title: "Horário salvo", description: `Sincronização agendada a cada 6h: ${horarios} (Brasília).` });
     } catch (e: any) {
       toast({ title: "Erro ao salvar horário", description: e.message, variant: "destructive" });
     } finally {
@@ -274,17 +278,18 @@ export default function SSoticaIntegrationsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="h-4 w-4" /> Sincronização automática diária
+              <Clock className="h-4 w-4" /> Sincronização automática (a cada 6h)
             </CardTitle>
             <CardDescription>
-              Escolha o horário (de Brasília) em que o sistema irá buscar atualizações de todas as lojas SSótica.
-              Cobranças quitadas serão removidas e clientes sem dívida vão automaticamente para Renovações.
+              Escolha o horário base (de Brasília). A sincronização rodará a cada 6 horas a partir desse horário
+              (ex: 6h → 6h, 12h, 18h, 0h). Cobranças quitadas serão removidas e clientes sem dívida vão
+              automaticamente para Renovações.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
-                <Label htmlFor="sync-hour">Horário diário</Label>
+                <Label htmlFor="sync-hour">Horário base</Label>
                 <Select value={syncHour} onValueChange={setSyncHour}>
                   <SelectTrigger id="sync-hour" className="w-[180px]">
                     <SelectValue />
