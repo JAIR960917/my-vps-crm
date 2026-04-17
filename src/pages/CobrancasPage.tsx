@@ -74,6 +74,12 @@ export default function CobrancasPage() {
   const [filterCompanyId, setFilterCompanyId] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  // Paginação visual: mostra 20 cards por coluna inicialmente, com botão "Carregar mais" (+20)
+  const PAGE_INCREMENT = 20;
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const showMore = (statusKey: string) => {
+    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] ?? PAGE_INCREMENT) + PAGE_INCREMENT }));
+  };
 
   const fetchAll = useCallback(async () => {
     // Busca TODAS as cobranças em batches de 1000 (limite padrão do PostgREST)
