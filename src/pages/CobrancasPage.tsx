@@ -248,11 +248,24 @@ export default function CobrancasPage() {
           <p className="text-xs text-muted-foreground line-clamp-2">{d.descricao}</p>
         )}
 
-        {cobranca.assigned_to && (
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <User className="h-3 w-3" />{getProfileName(cobranca.assigned_to)}
-          </p>
-        )}
+        {cobranca.assigned_to && (() => {
+          const ap = profiles.find(p => p.user_id === cobranca.assigned_to);
+          if (!ap) return null;
+          return (
+            <div className="pt-1">
+              <p className="text-[11px] text-muted-foreground leading-tight">Pessoa responsável</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Avatar className="h-5 w-5 text-[9px]">
+                  <AvatarImage src={ap.avatar_url ?? undefined} />
+                  <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
+                    {(ap.full_name || "?").slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs font-medium text-foreground truncate">{ap.full_name}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Activity status badges */}
         <div className="pt-2 border-t">
