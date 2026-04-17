@@ -118,6 +118,14 @@ async function syncContasReceber(
   // Contas a Receber: usa o Código de Licença se disponível, senão usa o CNPJ.
   const empresaParam = normalizeIdentifier(integ.license_code || integ.cnpj);
 
+  // Atribui novas cobranças à Brenda automaticamente (responsável padrão por cobranças)
+  const { data: brendaProfile } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .ilike("full_name", "brenda%")
+    .maybeSingle();
+  const defaultAssignee: string | null = (brendaProfile as any)?.user_id ?? null;
+
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
   // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
   const parcelasAtivasIds = new Set<number>();
