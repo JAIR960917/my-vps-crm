@@ -174,12 +174,11 @@ async function syncContasReceber(
   integ: Integration,
   windowOverride?: { start: Date; end: Date },
 ): Promise<{ processed: number; created: number; updated: number; removed: number; chunks: number; clientesQuitados: number[] }> {
-  const today = new Date();
-  // Histórico total: 96 meses para trás + 60 dias à frente, em chunks de 12 meses.
-  // Processa do mais recente ao mais antigo para que parcelas atuais entrem primeiro
-  // e os logs mostrem progresso incremental.
-  const overallStart = addDays(today, -MAX_HISTORY_DAYS);
-  const overallEnd = addDays(today, COBRANCAS_FUTURE_DAYS);
+  // Janela: por padrão, últimos 12 meses + 60 dias à frente (sync incremental).
+  // Quando há windowOverride (modo backfill), processa apenas o chunk de 12 meses indicado.
+  const overallStart = windowOverride?.start ?? addDays(today, -CHUNK_DAYS);
+  const overallEnd = windowOverride?.end ?? addDays(today, COBRANCAS_FUTURE_DAYS);
+  const isBackfillChunk = !!windowOverride;
 
   let processed = 0, created = 0, updated = 0, removed = 0;
   // Contadores de diagnóstico (logados ao final para depurar filtros)
