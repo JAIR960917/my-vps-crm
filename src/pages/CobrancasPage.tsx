@@ -233,6 +233,11 @@ export default function CobrancasPage() {
                 <Phone className="h-3 w-3" />{formatPhoneBR(d.telefone)}
               </p>
             )}
+            {(d.documento || d.cpf) && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                CPF: {d.documento || d.cpf}
+              </p>
+            )}
           </div>
           <Badge variant="outline" className="text-xs shrink-0 ml-2">
             R$ {Number(cobranca.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
