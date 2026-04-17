@@ -291,13 +291,13 @@ export default function ActiveClientsPage() {
     const currentItem = renovacoes.find((item) => item.id === itemId);
     if (!currentItem) return;
 
-    const isAssignedToVendedor = currentItem.assigned_to ? vendedorIds.has(currentItem.assigned_to) : false;
+    const hasAssignedUser = !!currentItem.assigned_to;
     let resolvedStatus = newStatus;
 
-    if (!isAssignedToVendedor) {
+    if (!hasAssignedUser) {
       resolvedStatus = DIRECIONAMENTO_STATUS;
       if (newStatus !== DIRECIONAMENTO_STATUS) {
-        toast.info("Cards sem vendedor ficam em 'Fazer direcionamento para o vendedor'.");
+        toast.info("Cards sem responsável ficam em 'Fazer direcionamento para o vendedor'.");
       }
     } else if (newStatus === DIRECIONAMENTO_STATUS) {
       resolvedStatus = getRenovacaoFlowStatus(currentItem.data_ultima_compra);
