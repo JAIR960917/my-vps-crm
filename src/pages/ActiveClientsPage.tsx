@@ -9,11 +9,18 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarIcon, CalendarHeart } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatPhoneBR } from "@/lib/phoneFormat";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 type Renovacao = {
   id: string;
@@ -22,15 +29,28 @@ type Renovacao = {
   assigned_to: string | null;
   created_by: string | null;
   valor: number;
+  data_ultima_compra: string | null;
   created_at: string;
   updated_at: string;
 };
 
-type CrmStatus = {
-  id: string; key: string; label: string; position: number; color: string;
-};
-
+type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
+
+type FormField = {
+  id: string;
+  label: string;
+  field_type: string;
+  options: string[] | null;
+  position: number;
+  is_required: boolean;
+  is_name_field: boolean;
+  is_phone_field: boolean;
+  is_last_visit_field: boolean;
+  show_on_card: boolean;
+  parent_field_id: string | null;
+  parent_trigger_value: string | null;
+};
 
 const colorMap: Record<string, { header: string; badge: string }> = {
   blue:    { header: "bg-blue-500",    badge: "bg-blue-500/15 text-blue-700 border-blue-300" },
@@ -41,14 +61,30 @@ const colorMap: Record<string, { header: string; badge: string }> = {
   red:     { header: "bg-red-500",     badge: "bg-red-500/15 text-red-700 border-red-300" },
 };
 
+const parseStoredDate = (value: unknown): Date | undefined => {
+  if (!value) return undefined;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
+  const raw = String(value).trim();
+  if (!raw) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const p = new Date(`${raw}T12:00:00`);
+    return Number.isNaN(p.getTime()) ? undefined : p;
+  }
+  const p = new Date(raw);
+  return Number.isNaN(p.getTime()) ? undefined : p;
+};
+
+const normalizePhoneDigits = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(0, 11);
+
 export default function ActiveClientsPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const [renovacoes, setRenovacoes] = useState<Renovacao[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [fields, setFields] = useState<FormField[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Renovacao | null>(null);
-  const [formData, setFormData] = useState<Record<string, any>>({ nome: "", telefone: "", descricao: "" });
+  const [formData, setFormData] = useState<Record<string, any>>({});
   const [formStatus, setFormStatus] = useState("");
   const [formAssigned, setFormAssigned] = useState("");
   const [formValor, setFormValor] = useState("");
@@ -58,14 +94,16 @@ export default function ActiveClientsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: items }, { data: sts }, { data: profs }] = await Promise.all([
+    const [{ data: items }, { data: sts }, { data: profs }, { data: ff }] = await Promise.all([
       supabase.from("crm_renovacoes").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
+      supabase.from("crm_renovacao_form_fields").select("*").order("position"),
     ]);
     setRenovacoes((items || []) as Renovacao[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
+    setFields((ff || []) as unknown as FormField[]);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -75,10 +113,13 @@ export default function ActiveClientsPage() {
   }, [statuses]);
 
   const statusOptions = statuses.map(s => s.key);
+  const nameField = useMemo(() => fields.find(f => f.is_name_field), [fields]);
+  const phoneField = useMemo(() => fields.find(f => f.is_phone_field), [fields]);
+  const lastVisitField = useMemo(() => fields.find(f => f.is_last_visit_field), [fields]);
 
   const openCreate = (status?: string) => {
     setEditingItem(null);
-    setFormData({ nome: "", telefone: "", descricao: "" });
+    setFormData({});
     setFormStatus(status || statusOptions[0] || "novo");
     setFormAssigned("");
     setFormValor("");
@@ -87,11 +128,39 @@ export default function ActiveClientsPage() {
 
   const openEdit = (item: Renovacao) => {
     setEditingItem(item);
-    setFormData(typeof item.data === "object" ? item.data : {});
+    const initial: Record<string, any> = typeof item.data === "object" && item.data ? { ...item.data } : {};
+    // Backward-compat: migrar campos antigos para os novos field_<id> se existirem
+    if (nameField && !initial[`field_${nameField.id}`] && initial.nome) initial[`field_${nameField.id}`] = initial.nome;
+    if (phoneField && !initial[`field_${phoneField.id}`] && initial.telefone) initial[`field_${phoneField.id}`] = initial.telefone;
+    if (lastVisitField && !initial[`field_${lastVisitField.id}`] && item.data_ultima_compra) {
+      initial[`field_${lastVisitField.id}`] = item.data_ultima_compra;
+    }
+    setFormData(initial);
     setFormStatus(item.status);
     setFormAssigned(item.assigned_to || "");
     setFormValor(String(item.valor || ""));
     setDialogOpen(true);
+  };
+
+  const set = (key: string, val: any) => setFormData(p => ({ ...p, [key]: val }));
+  const toggleArray = (key: string, item: string) => {
+    const arr: string[] = formData[key] || [];
+    set(key, arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item]);
+  };
+
+  const isFieldVisible = (field: FormField): boolean => {
+    if (!field.parent_field_id) return true;
+    const parent = fields.find(f => f.id === field.parent_field_id);
+    if (!parent || !isFieldVisible(parent)) return false;
+    if (!field.parent_trigger_value) return true;
+    let triggers: string[];
+    try {
+      const p = JSON.parse(field.parent_trigger_value);
+      triggers = Array.isArray(p) ? p : [field.parent_trigger_value];
+    } catch { triggers = [field.parent_trigger_value]; }
+    const pv = formData[`field_${parent.id}`];
+    if (Array.isArray(pv)) return pv.some((v: string) => triggers.includes(v));
+    return triggers.includes(pv);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -99,19 +168,26 @@ export default function ActiveClientsPage() {
     setSaving(true);
     const valor = parseFloat(formValor) || 0;
 
+    // Mirror name/phone/last-visit into fixed columns for backward-compat & filtering
+    const dataToSave: Record<string, any> = { ...formData };
+    if (nameField) dataToSave.nome = formData[`field_${nameField.id}`] || "";
+    if (phoneField) dataToSave.telefone = formData[`field_${phoneField.id}`] || "";
+    const lastVisitValue = lastVisitField ? formData[`field_${lastVisitField.id}`] : null;
+
+    const payload: any = {
+      data: dataToSave,
+      status: formStatus,
+      assigned_to: formAssigned || null,
+      valor,
+      data_ultima_compra: lastVisitValue || null,
+    };
+
     if (editingItem) {
-      const { error } = await supabase.from("crm_renovacoes").update({
-        data: formData, status: formStatus, assigned_to: formAssigned || null, valor,
-      }).eq("id", editingItem.id);
-      if (error) toast.error("Erro ao atualizar");
-      else toast.success("Renovação atualizada");
+      const { error } = await supabase.from("crm_renovacoes").update(payload).eq("id", editingItem.id);
+      if (error) toast.error("Erro ao atualizar"); else toast.success("Renovação atualizada");
     } else {
-      const { error } = await supabase.from("crm_renovacoes").insert({
-        data: formData, status: formStatus, assigned_to: formAssigned || null,
-        created_by: user?.id, valor,
-      });
-      if (error) toast.error("Erro ao criar renovação");
-      else toast.success("Renovação criada");
+      const { error } = await supabase.from("crm_renovacoes").insert({ ...payload, created_by: user?.id });
+      if (error) toast.error("Erro ao criar renovação"); else toast.success("Renovação criada");
     }
     setSaving(false);
     setDialogOpen(false);
@@ -121,8 +197,7 @@ export default function ActiveClientsPage() {
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
     const { error } = await supabase.from("crm_renovacoes").delete().eq("id", deleteConfirmId);
-    if (error) toast.error("Erro ao excluir");
-    else toast.success("Renovação excluída");
+    if (error) toast.error("Erro ao excluir"); else toast.success("Renovação excluída");
     setDeleteConfirmId(null);
     fetchAll();
   };
@@ -135,10 +210,7 @@ export default function ActiveClientsPage() {
     await supabase.from("crm_renovacoes").update({ status: newStatus }).eq("id", itemId);
   };
 
-  const getProfileName = (userId: string | null) => {
-    if (!userId) return "";
-    return profiles.find(p => p.user_id === userId)?.full_name || "";
-  };
+  const getProfileName = (uid: string | null) => uid ? (profiles.find(p => p.user_id === uid)?.full_name || "") : "";
 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return renovacoes;
@@ -147,18 +219,108 @@ export default function ActiveClientsPage() {
       const d = r.data as Record<string, any>;
       return (d.nome || "").toLowerCase().includes(q)
         || (d.telefone || "").includes(q)
-        || (d.descricao || "").toLowerCase().includes(q)
         || String(r.valor).includes(q);
     });
   }, [renovacoes, searchQuery]);
 
   const getByStatus = (key: string) => filteredItems.filter(r => r.status === key);
 
+  const renderFormField = (field: FormField) => {
+    if (!isFieldVisible(field)) return null;
+    const fieldKey = `field_${field.id}`;
+    const rawValue = formData[fieldKey];
+    const value = typeof rawValue === "string" ? rawValue : rawValue == null ? "" : String(rawValue);
+    const checkboxValues: string[] = Array.isArray(rawValue) ? rawValue : [];
+    const selectedDate = parseStoredDate(rawValue);
+    const isLastVisit = field.is_last_visit_field;
+
+    return (
+      <div key={field.id} className={cn("space-y-2", field.parent_field_id && "ml-4 pl-3 border-l-2 border-primary/20", isLastVisit && "p-3 rounded-lg bg-primary/5 border border-primary/30")}>
+        <Label className="text-xs flex items-center gap-1.5">
+          {isLastVisit && <CalendarHeart className="h-3.5 w-3.5 text-primary" />}
+          {field.label}
+          {field.is_required && <span className="text-destructive ml-1">*</span>}
+          {isLastVisit && <span className="ml-1 text-[10px] uppercase font-bold text-primary">principal</span>}
+        </Label>
+
+        {field.field_type === "text" && (
+          <Input value={value} onChange={(e) => set(fieldKey, e.target.value)} required={field.is_required} className="h-9 text-sm" />
+        )}
+        {field.field_type === "number" && (
+          <Input type="number" value={value} onChange={(e) => set(fieldKey, e.target.value)} required={field.is_required} className="h-9 text-sm" />
+        )}
+        {field.field_type === "email" && (
+          <Input type="email" value={value} onChange={(e) => set(fieldKey, e.target.value)} required={field.is_required} className="h-9 text-sm" />
+        )}
+        {(field.field_type === "phone" || field.is_phone_field) && (
+          <Input type="tel" inputMode="numeric" placeholder="(00) 00000-0000"
+            value={formatPhoneBR(normalizePhoneDigits(rawValue))}
+            onChange={(e) => set(fieldKey, normalizePhoneDigits(e.target.value))}
+            required={field.is_required} maxLength={16} className="h-9 text-sm" />
+        )}
+        {field.field_type === "textarea" && (
+          <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={3} className="text-sm" />
+        )}
+        {field.field_type === "select" && field.options && (
+          <Select value={value} onValueChange={(v) => set(fieldKey, v)}>
+            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectContent>
+              {field.options.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+        {field.field_type === "checkbox_group" && field.options && (
+          <div className="flex flex-wrap gap-1.5">
+            {field.options.map(opt => {
+              const checked = checkboxValues.includes(opt);
+              return (
+                <label key={opt} className={cn("flex items-center gap-1 px-2 py-1 rounded-md border text-xs cursor-pointer transition-colors", checked ? "bg-primary/10 border-primary text-primary" : "bg-muted/50 border-border text-foreground hover:bg-muted")}>
+                  <Checkbox checked={checked} onCheckedChange={() => toggleArray(fieldKey, opt)} className="h-3 w-3" />
+                  {opt}
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {field.field_type === "date" && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-9 text-sm", !value && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={selectedDate} onSelect={(d) => set(fieldKey, d ? format(d, "yyyy-MM-dd") : "")} initialFocus className="p-3 pointer-events-auto" />
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
+    );
+  };
+
+  const rootFields = fields.filter(f => !f.parent_field_id).sort((a, b) => a.position - b.position);
+  const childrenOf = (id: string) => fields.filter(f => f.parent_field_id === id).sort((a, b) => a.position - b.position);
+
+  const renderFieldTree = (field: FormField): JSX.Element[] => {
+    const result: JSX.Element[] = [];
+    const node = renderFormField(field);
+    if (node) result.push(node);
+    childrenOf(field.id).forEach(c => result.push(...renderFieldTree(c)));
+    return result;
+  };
+
   const renderCard = (item: Renovacao) => {
     const d = item.data as Record<string, any>;
+    const lastVisit = item.data_ultima_compra
+      ? parseStoredDate(item.data_ultima_compra)
+      : (lastVisitField ? parseStoredDate(d[`field_${lastVisitField.id}`]) : undefined);
+
+    const cardFields = fields.filter(f => f.show_on_card && !f.is_name_field && !f.is_phone_field && !f.is_last_visit_field);
+
     return (
       <div className="bg-card border rounded-xl p-3 space-y-2 shadow-sm">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-sm truncate">{d.nome || "Sem nome"}</p>
             {d.telefone && (
@@ -167,11 +329,35 @@ export default function ActiveClientsPage() {
               </p>
             )}
           </div>
-          <Badge variant="outline" className="text-xs shrink-0 ml-2">
-            R$ {Number(item.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-          </Badge>
+          {Number(item.valor || 0) > 0 && (
+            <Badge variant="outline" className="text-xs shrink-0">
+              R$ {Number(item.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            </Badge>
+          )}
         </div>
-        {d.descricao && <p className="text-xs text-muted-foreground line-clamp-2">{d.descricao}</p>}
+
+        {lastVisit && (
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/10 border border-primary/30">
+            <CalendarHeart className="h-3.5 w-3.5 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase font-bold text-primary leading-none">Última consulta</p>
+              <p className="text-xs font-semibold text-foreground mt-0.5">{format(lastVisit, "dd/MM/yyyy", { locale: ptBR })}</p>
+            </div>
+          </div>
+        )}
+
+        {cardFields.map(f => {
+          const v = d[`field_${f.id}`];
+          if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) return null;
+          const display = Array.isArray(v) ? v.join(", ") : (f.field_type === "date" ? (parseStoredDate(v) ? format(parseStoredDate(v)!, "dd/MM/yyyy", { locale: ptBR }) : String(v)) : String(v));
+          return (
+            <div key={f.id} className="text-xs">
+              <span className="text-muted-foreground">{f.label}: </span>
+              <span className="font-medium">{display}</span>
+            </div>
+          );
+        })}
+
         {item.assigned_to && (
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             <User className="h-3 w-3" />{getProfileName(item.assigned_to)}
@@ -236,7 +422,6 @@ export default function ActiveClientsPage() {
         </div>
       </div>
 
-      {/* Mobile column */}
       <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
         {statuses.filter(s => s.key === mobileTab).map(status => {
           const items = getByStatus(status.key);
@@ -252,7 +437,6 @@ export default function ActiveClientsPage() {
         })}
       </div>
 
-      {/* Desktop Kanban */}
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map(status => {
@@ -294,53 +478,51 @@ export default function ActiveClientsPage() {
         </div>
       </DragDropContext>
 
-      {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-md p-0 max-h-[90vh] flex flex-col">
+          <DialogHeader className="px-6 pt-6">
             <DialogTitle>{editingItem ? "Editar Renovação" : "Nova Renovação"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input value={formData.nome || ""} onChange={e => setFormData(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do cliente" required />
-            </div>
-            <div className="space-y-2">
-              <Label>Telefone</Label>
-              <Input value={formData.telefone || ""} onChange={e => setFormData(p => ({ ...p, telefone: e.target.value }))} placeholder="(00) 00000-0000" />
-            </div>
-            <div className="space-y-2">
-              <Label>Valor (R$)</Label>
-              <Input type="number" step="0.01" value={formValor} onChange={e => setFormValor(e.target.value)} placeholder="0,00" />
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea value={formData.descricao || ""} onChange={e => setFormData(p => ({ ...p, descricao: e.target.value }))} placeholder="Descrição..." rows={3} />
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={formStatus} onValueChange={setFormStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {statuses.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {(isAdmin || isGerente) && (
+          <ScrollArea className="flex-1 px-6">
+            <form id="renovacao-form" onSubmit={handleSave} className="space-y-4 py-4">
+              {fields.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  Nenhuma pergunta configurada. Configure em <strong>Formulário Renovação</strong>.
+                </p>
+              )}
+              {rootFields.flatMap(f => renderFieldTree(f))}
+
               <div className="space-y-2">
-                <Label>Responsável</Label>
-                <Select value={formAssigned} onValueChange={setFormAssigned}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                <Label>Valor (R$)</Label>
+                <Input type="number" step="0.01" value={formValor} onChange={e => setFormValor(e.target.value)} placeholder="0,00" />
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={formStatus} onValueChange={setFormStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {profiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>)}
+                    {statuses.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-            )}
-            <Button type="submit" className="w-full" disabled={saving || !formData.nome?.trim()}>
+              {(isAdmin || isGerente) && (
+                <div className="space-y-2">
+                  <Label>Responsável</Label>
+                  <Select value={formAssigned} onValueChange={setFormAssigned}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                    <SelectContent>
+                      {profiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </form>
+          </ScrollArea>
+          <div className="px-6 pb-6 pt-2 border-t">
+            <Button type="submit" form="renovacao-form" className="w-full" disabled={saving}>
               {saving ? "Salvando..." : editingItem ? "Atualizar" : "Criar"}
             </Button>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
 
