@@ -76,6 +76,7 @@ export default function ActiveClientsPage() {
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
+  const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Renovacao | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
