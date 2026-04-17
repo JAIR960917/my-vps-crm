@@ -634,6 +634,14 @@ export default function SSoticaIntegrationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {mappingFor && (
+        <UserMappingDialog
+          open={!!mappingFor}
+          onOpenChange={(o) => !o && setMappingFor(null)}
+          companyId={mappingFor.id}
+          companyName={mappingFor.name}
+        />
+      )}
     </AppLayout>
   );
 }
