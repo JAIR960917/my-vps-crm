@@ -114,6 +114,10 @@ export default function ActiveClientsPage() {
   const nameField = useMemo(() => fields.find(f => f.is_name_field), [fields]);
   const phoneField = useMemo(() => fields.find(f => f.is_phone_field), [fields]);
   const lastVisitField = useMemo(() => fields.find(f => f.is_last_visit_field), [fields]);
+  const cpfField = useMemo(
+    () => fields.find(f => f.is_cpf_field) || fields.find(f => /cpf/i.test(f.label)),
+    [fields],
+  );
 
   const openCreate = (status?: string) => {
     setEditingItem(null);
@@ -127,10 +131,15 @@ export default function ActiveClientsPage() {
   const openEdit = (item: Renovacao) => {
     setEditingItem(item);
     const initial: Record<string, any> = typeof item.data === "object" && item.data ? { ...item.data } : {};
-    // Backward-compat: migrar campos antigos para os novos field_<id> se existirem
+    // Backward-compat: migrar campos fixos (vindos do SSótica ou de cards antigos) para os field_<id>
     if (nameField && !initial[`field_${nameField.id}`] && initial.nome) initial[`field_${nameField.id}`] = initial.nome;
     if (phoneField && !initial[`field_${phoneField.id}`] && initial.telefone) initial[`field_${phoneField.id}`] = initial.telefone;
-    if (lastVisitField && !initial[`field_${lastVisitField.id}`] && item.data_ultima_compra) {
+    if (cpfField && !initial[`field_${cpfField.id}`] && (initial.documento || initial.cpf)) {
+      initial[`field_${cpfField.id}`] = initial.documento || initial.cpf;
+    }
+    // Data da última visita: SEMPRE usa a coluna data_ultima_compra como fonte da verdade
+    // (o sync do SSótica grava lá; aqui sobrescreve para refletir a data real da última compra)
+    if (lastVisitField && item.data_ultima_compra) {
       initial[`field_${lastVisitField.id}`] = item.data_ultima_compra;
     }
     setFormData(initial);
