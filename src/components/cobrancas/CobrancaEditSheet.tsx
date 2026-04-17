@@ -328,6 +328,14 @@ export default function CobrancaEditSheet(props: Props) {
                 <TabsTrigger value="atividade" className="data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">Atividade</TabsTrigger>
                 <TabsTrigger value="comentario">Comentário</TabsTrigger>
                 <TabsTrigger value="tarefa">Tarefa</TabsTrigger>
+                <TabsTrigger value="parcelas" className="data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">
+                  Parcelas
+                  {parcelas.filter(p => (p.dias_atraso ?? 0) > 0).length > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-red-500/20 text-red-500 text-[10px] font-bold h-4 min-w-4 px-1">
+                      {parcelas.filter(p => (p.dias_atraso ?? 0) > 0).length}
+                    </span>
+                  )}
+                </TabsTrigger>
               </TabsList>
             </Tabs>
             <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
