@@ -577,8 +577,10 @@ export default function SSoticaIntegrationsPage() {
             </DialogTitle>
             <DialogDescription>
               {testResult?._company && <span className="font-medium">{testResult._company} · </span>}
-              Parâmetro enviado: <code className="bg-muted px-1 rounded">{testResult?.empresa_param}</code>{" "}
-              ({testResult?.is_cnpj_format ? "formato CNPJ" : "código alfanumérico"})
+              Receber: <code className="bg-muted px-1 rounded">{testResult?.empresa_param}</code>
+              {testResult?.cnpj_vendas && (
+                <> · Vendas: <code className="bg-muted px-1 rounded">{testResult.cnpj_vendas}</code></>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
