@@ -230,8 +230,34 @@ export default function ActiveClientsPage() {
 
     const cardFields = fields.filter(f => f.show_on_card && !f.is_name_field && !f.is_phone_field && !f.is_last_visit_field);
 
+    // Activity status (em dia / hoje / atrasada / pendente)
+    const itemActivities = activities.filter(a => a.renovacao_id === item.id);
+    const pending = itemActivities.filter(a => !a.completed_at);
+    const overdue = pending.filter(a => new Date(a.scheduled_date) < new Date());
+    const today = pending.filter(a => {
+      const dt = new Date(a.scheduled_date);
+      const now = new Date();
+      return dt.toDateString() === now.toDateString() && dt >= now;
+    });
+    const hasOverdue = overdue.length > 0;
+    const hasToday = today.length > 0;
+    const hasPending = pending.length > 0 && !hasOverdue && !hasToday;
+
+    let cardBorderClass = "";
+    if (hasOverdue) {
+      cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
+    } else if (hasToday) {
+      cardBorderClass = "border-amber-400 bg-amber-500/5";
+    } else if (hasPending) {
+      cardBorderClass = "border-blue-400/50 bg-blue-500/5";
+    }
+
+    const nextActivity = [...pending].sort(
+      (a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
+    )[0];
+
     return (
-      <div className="bg-card border rounded-xl p-3 space-y-2 shadow-sm">
+      <div className={`bg-card border rounded-xl p-3 space-y-2 shadow-sm ${cardBorderClass}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-sm truncate">{d.nome || "Sem nome"}</p>
