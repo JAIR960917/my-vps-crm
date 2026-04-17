@@ -205,13 +205,13 @@ async function syncContasReceber(
           .replace(/[\s_-]+/g, " ")
           .trim();
 
-        // Situações ATIVAS (parcela ainda devida) = mantemos no kanban
+        // Situações ATIVAS (parcela ainda devida e SEM renegociação) = mantemos no kanban de cobranças
+        // "Renegociado" significa que a dívida virou um novo título — não é mais cobrança em atraso,
+        // o cliente deve ser tratado pela tela de Renovação.
         const isAtiva =
           situacao === "em aberto" ||
           situacao === "vencido" ||
-          situacao === "vencida" ||
-          situacao === "renegociado" ||
-          situacao === "renegociada";
+          situacao === "vencida";
 
         // Sinais de que a parcela JÁ FOI QUITADA (não é mais dívida)
         const foiBaixada = !!parcela.baixado_em;
