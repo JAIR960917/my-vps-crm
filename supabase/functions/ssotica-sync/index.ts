@@ -443,9 +443,13 @@ async function syncVendas(
   supabase: any,
   integ: Integration,
   forceFull = false,
+  clientesQuitados: number[] = [],
 ): Promise<{ processed: number; created: number; updated: number }> {
   const today = new Date();
-  const startDate = !forceFull && integ.initial_sync_done && integ.last_sync_vendas_at
+  // Se há clientes que acabaram de quitar, força janela completa para garantir
+  // que peguemos a última venda deles e criemos/atualizemos o card de Renovação.
+  const useFullWindow = forceFull || clientesQuitados.length > 0;
+  const startDate = !useFullWindow && integ.initial_sync_done && integ.last_sync_vendas_at
     ? addDays(new Date(integ.last_sync_vendas_at), -1)
     : addDays(today, -INITIAL_LOOKBACK_DAYS);
   const endDate = today;
