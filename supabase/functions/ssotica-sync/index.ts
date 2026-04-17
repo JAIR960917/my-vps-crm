@@ -387,6 +387,12 @@ async function syncContasReceber(
     }
   }
 
+  // Log de diagnóstico para entender por que parcelas estão sendo filtradas
+  const topSituacoes = Array.from(situacoesVistas.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} processed=${processed} created=${created} updated=${updated} removed=${removed} skipped=${JSON.stringify(skipped)} top_situacoes=${JSON.stringify(topSituacoes)}`);
+
   return { processed, created, updated, removed };
 }
 
