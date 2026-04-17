@@ -469,6 +469,8 @@ export default function CobrancasPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         cobrancaId={editingCobranca?.id || null}
+        ssoticaClienteId={(editingCobranca as any)?.ssotica_cliente_id ?? null}
+        ssoticaCompanyId={(editingCobranca as any)?.ssotica_company_id ?? null}
         formData={formData}
         setFormData={setFormData}
         formStatus={formStatus}
