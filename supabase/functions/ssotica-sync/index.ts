@@ -9,11 +9,11 @@ const corsHeaders = {
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
 const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
-const COBRANCAS_LOOKBACK_DAYS = 420; // 14 meses para boletos em atraso (não faz sentido buscar mais)
-// Vendas / Renovações: buscar até 96 meses, processado em chunks de 12 meses
+// Histórico total: 96 meses (8 anos), processado em chunks de 12 meses
 // para evitar timeout da edge function em lojas com histórico longo.
-const VENDAS_MAX_HISTORY_DAYS = 2880; // 96 meses
-const VENDAS_CHUNK_DAYS = 365;        // ~12 meses por chunk
+const MAX_HISTORY_DAYS = 2880; // 96 meses
+const CHUNK_DAYS = 365;        // ~12 meses por chunk
+const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
