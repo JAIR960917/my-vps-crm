@@ -430,6 +430,10 @@ export default function SSoticaIntegrationsPage() {
                             <History className="h-3 w-3 mr-1" />
                             Logs
                           </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setMappingFor(company)}>
+                            <Users className="h-3 w-3 mr-1" />
+                            Vendedores
+                          </Button>
                           <Button size="sm" variant="ghost" onClick={() => handleToggleActive(integ)}>
                             <Power className="h-3 w-3 mr-1" />
                             {integ.is_active ? "Desativar" : "Ativar"}
