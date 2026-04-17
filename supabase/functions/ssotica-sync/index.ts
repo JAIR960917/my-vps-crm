@@ -700,7 +700,7 @@ async function syncVendas(
     }
   }
 
-  return { processed, created, updated };
+  return { processed, created, updated, chunks: chunksProcessed };
 }
 
 Deno.serve(async (req) => {
