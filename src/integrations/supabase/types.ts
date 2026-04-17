@@ -459,6 +459,68 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_renovacao_form_fields: {
+        Row: {
+          created_at: string
+          date_status_ranges: Json | null
+          field_type: string
+          id: string
+          is_last_visit_field: boolean
+          is_name_field: boolean
+          is_phone_field: boolean
+          is_required: boolean
+          label: string
+          options: Json | null
+          parent_field_id: string | null
+          parent_trigger_value: string | null
+          position: number
+          show_on_card: boolean
+          status_mapping: Json | null
+        }
+        Insert: {
+          created_at?: string
+          date_status_ranges?: Json | null
+          field_type?: string
+          id?: string
+          is_last_visit_field?: boolean
+          is_name_field?: boolean
+          is_phone_field?: boolean
+          is_required?: boolean
+          label: string
+          options?: Json | null
+          parent_field_id?: string | null
+          parent_trigger_value?: string | null
+          position?: number
+          show_on_card?: boolean
+          status_mapping?: Json | null
+        }
+        Update: {
+          created_at?: string
+          date_status_ranges?: Json | null
+          field_type?: string
+          id?: string
+          is_last_visit_field?: boolean
+          is_name_field?: boolean
+          is_phone_field?: boolean
+          is_required?: boolean
+          label?: string
+          options?: Json | null
+          parent_field_id?: string | null
+          parent_trigger_value?: string | null
+          position?: number
+          show_on_card?: boolean
+          status_mapping?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_renovacao_form_fields_parent_field_id_fkey"
+            columns: ["parent_field_id"]
+            isOneToOne: false
+            referencedRelation: "crm_renovacao_form_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_renovacao_statuses: {
         Row: {
           color: string
