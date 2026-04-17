@@ -256,6 +256,11 @@ export default function CobrancaEditSheet(props: Props) {
                   onChange={e => setFormData({ ...formData, telefone: e.target.value })} />
               </div>
               <div className="space-y-2">
+                <Label>CPF</Label>
+                <Input value={formData.documento || formData.cpf || ""} placeholder="000.000.000-00"
+                  onChange={e => setFormData({ ...formData, documento: e.target.value, cpf: e.target.value })} />
+              </div>
+              <div className="space-y-2">
                 <Label>Valor (R$)</Label>
                 <Input type="number" step="0.01" value={formValor} placeholder="0,00"
                   onChange={e => setFormValor(e.target.value)} />

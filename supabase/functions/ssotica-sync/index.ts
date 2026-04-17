@@ -118,6 +118,14 @@ async function syncContasReceber(
   // Contas a Receber: usa o Código de Licença se disponível, senão usa o CNPJ.
   const empresaParam = normalizeIdentifier(integ.license_code || integ.cnpj);
 
+  // Atribui novas cobranças à Brenda automaticamente (responsável padrão por cobranças)
+  const { data: brendaProfile } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .ilike("full_name", "brenda%")
+    .maybeSingle();
+  const defaultAssignee: string | null = (brendaProfile as any)?.user_id ?? null;
+
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
   // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
   const parcelasAtivasIds = new Set<number>();
@@ -192,13 +200,16 @@ async function syncContasReceber(
 
         const colunaKey = statusKeyForDiasAtraso(diasAtraso);
 
-        const cliente = parcela.cliente ?? {};
+        // O cliente vem dentro de parcela.titulo.cliente (não direto em parcela.cliente)
+        const cliente = parcela.titulo?.cliente ?? parcela.cliente ?? {};
         const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
+        const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
         const data = {
           nome: cliente.nome ?? "Cliente SSótica",
           telefone,
-          documento: cliente.documento ?? cliente.cpf_cnpj ?? "",
-          email: cliente.email_principal ?? "",
+          documento,
+          cpf: documento,
+          email: cliente.email_principal ?? cliente.email ?? "",
           numero_documento: parcela.titulo?.numero_documento ?? "",
           descricao: parcela.titulo?.descricao ?? "",
           numero_parcela: parcela.numero_parcela ?? null,
@@ -235,6 +246,7 @@ async function syncContasReceber(
             ssotica_titulo_id: parcela.titulo?.id ?? null,
             ssotica_cliente_id: cliente.id ?? null,
             ssotica_company_id: integ.company_id,
+            assigned_to: defaultAssignee,
             data,
             valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
             vencimento,
