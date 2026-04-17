@@ -165,6 +165,19 @@ async function syncContasReceber(
   const windows = buildWindows(startDate, endDate);
 
   let processed = 0, created = 0, updated = 0, removed = 0;
+  // Contadores de diagnóstico (logados ao final para depurar filtros)
+  const skipped = {
+    naoAtiva: 0,
+    renegociada: 0,
+    baixada: 0,
+    cancelada: 0,
+    estornada: 0,
+    paga: 0,
+    semVencimento: 0,
+    naoEmAtraso: 0,
+    semCliente: 0,
+  };
+  const situacoesVistas = new Map<string, number>();
   // Contas a Receber: usa o Código de Licença se disponível, senão usa o CNPJ.
   const empresaParam = normalizeIdentifier(integ.license_code || integ.cnpj);
 
@@ -204,6 +217,7 @@ async function syncContasReceber(
           .toLowerCase()
           .replace(/[\s_-]+/g, " ")
           .trim();
+        situacoesVistas.set(situacao, (situacoesVistas.get(situacao) ?? 0) + 1);
 
         // Situações ATIVAS (parcela ainda devida e SEM renegociação) = mantemos no kanban de cobranças
         // "Renegociado" significa que a dívida virou um novo título — não é mais cobrança em atraso,
@@ -241,6 +255,14 @@ async function syncContasReceber(
           situacao === "liquidada" ||
           (valorParcela > 0 && valorRecebido >= valorParcela);
 
+        // Conta motivos de skip (em ordem de prioridade)
+        if (!isAtiva) skipped.naoAtiva++;
+        else if (foiRenegociada) skipped.renegociada++;
+        else if (foiBaixada) skipped.baixada++;
+        else if (foiCancelada) skipped.cancelada++;
+        else if (foiEstornada) skipped.estornada++;
+        else if (foiPaga) skipped.paga++;
+
         const isInativa =
           !isAtiva || foiRenegociada || foiBaixada || foiCancelada || foiEstornada || foiPaga;
 
@@ -252,12 +274,12 @@ async function syncContasReceber(
         }
 
         const vencimento = parcela.vencimento as string | null;
-        if (!vencimento) continue;
+        if (!vencimento) { skipped.semVencimento++; continue; }
         const vencDate = new Date(vencimento + "T00:00:00Z");
         const diasAtraso = daysBetween(vencDate, today);
 
         // Regra: SÓ incluir parcelas REALMENTE em atraso (venceu ontem ou antes)
-        if (diasAtraso < 1) continue;
+        if (diasAtraso < 1) { skipped.naoEmAtraso++; continue; }
 
         if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
 
@@ -284,7 +306,7 @@ async function syncContasReceber(
 
         // === 1 card por cliente: upsert por (ssotica_company_id, ssotica_cliente_id) ===
         // Mantemos sempre os dados da parcela MAIS ANTIGA em atraso para esse cliente.
-        if (!cliente?.id) continue;
+        if (!cliente?.id) { skipped.semCliente++; continue; }
 
         const { data: existing } = await supabase
           .from("crm_cobrancas")
@@ -364,6 +386,12 @@ async function syncContasReceber(
       removed++;
     }
   }
+
+  // Log de diagnóstico para entender por que parcelas estão sendo filtradas
+  const topSituacoes = Array.from(situacoesVistas.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} processed=${processed} created=${created} updated=${updated} removed=${removed} skipped=${JSON.stringify(skipped)} top_situacoes=${JSON.stringify(topSituacoes)}`);
 
   return { processed, created, updated, removed };
 }
