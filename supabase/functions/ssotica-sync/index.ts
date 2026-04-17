@@ -174,6 +174,7 @@ async function syncContasReceber(
   integ: Integration,
   windowOverride?: { start: Date; end: Date },
 ): Promise<{ processed: number; created: number; updated: number; removed: number; chunks: number; clientesQuitados: number[] }> {
+  const today = new Date();
   // Janela: por padrão, últimos 12 meses + 60 dias à frente (sync incremental).
   // Quando há windowOverride (modo backfill), processa apenas o chunk de 12 meses indicado.
   const overallStart = windowOverride?.start ?? addDays(today, -CHUNK_DAYS);
