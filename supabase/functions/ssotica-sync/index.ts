@@ -197,14 +197,12 @@ async function syncContasReceber(
         if (diasAtraso < -1) continue;
 
         if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
-        if (cliente?.id ?? parcela.titulo?.cliente?.id) {
-          clientesAfetados.add(Number(parcela.titulo?.cliente?.id ?? parcela.cliente?.id));
-        }
 
         const colunaKey = statusKeyForDiasAtraso(diasAtraso);
 
         // O cliente vem dentro de parcela.titulo.cliente (não direto em parcela.cliente)
         const cliente = parcela.titulo?.cliente ?? parcela.cliente ?? {};
+        if (cliente?.id) clientesAfetados.add(Number(cliente.id));
         const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
         const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
         const data = {
