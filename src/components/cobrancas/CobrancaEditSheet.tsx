@@ -77,6 +77,8 @@ export default function CobrancaEditSheet(props: Props) {
   const [tab, setTab] = useState("atividade");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [parcelas, setParcelas] = useState<ParcelaInfo[]>([]);
+  const [loadingParcelas, setLoadingParcelas] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [postingComment, setPostingComment] = useState(false);
 
