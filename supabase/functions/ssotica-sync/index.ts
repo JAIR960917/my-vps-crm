@@ -158,7 +158,7 @@ function isSamePerson(nameA: unknown, nameB: unknown): boolean {
 async function syncContasReceber(
   supabase: any,
   integ: Integration,
-): Promise<{ processed: number; created: number; updated: number; removed: number; clientesQuitados: number[] }> {
+): Promise<{ processed: number; created: number; updated: number; removed: number; chunks: number; clientesQuitados: number[] }> {
   const today = new Date();
   // Histórico total: 96 meses para trás + 60 dias à frente, em chunks de 12 meses.
   // Processa do mais recente ao mais antigo para que parcelas atuais entrem primeiro
