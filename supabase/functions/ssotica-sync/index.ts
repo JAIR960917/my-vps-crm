@@ -748,6 +748,40 @@ async function runBackfillChunk(
     }
 
     console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. ${finished ? 'CONCLUÍDO!' : `próximo em 3min (${nextRunAt})`}`);
+
+    // Quando o backfill é concluído, notifica todos os admins
+    if (finished) {
+      try {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("name")
+          .eq("id", integ.company_id)
+          .maybeSingle();
+        const companyName = company?.name ?? "loja";
+
+        const { data: admins } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "admin");
+
+        if (admins && admins.length > 0) {
+          const notifs = admins.map((a: any) => ({
+            user_id: a.user_id,
+            title: "Backfill SSótica concluído",
+            message: `A importação dos 96 meses de histórico da loja "${companyName}" foi concluída com sucesso.`,
+          }));
+          const { error: notifErr } = await supabase.from("notifications").insert(notifs);
+          if (notifErr) {
+            console.error(`[ssotica-sync][backfill] erro ao criar notificações:`, notifErr.message);
+          } else {
+            console.log(`[ssotica-sync][backfill] ${notifs.length} notificações criadas para admins`);
+          }
+        }
+      } catch (notifErr) {
+        console.error(`[ssotica-sync][backfill] falha ao notificar conclusão:`, notifErr);
+      }
+    }
+
     return { ok: true, chunk_index: idx, finished };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
