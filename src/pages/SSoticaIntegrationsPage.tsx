@@ -40,7 +40,15 @@ import {
   Pencil,
   Power,
   Building2,
+  Clock,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -91,16 +99,43 @@ export default function SSoticaIntegrationsPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [logsFor, setLogsFor] = useState<Integration | null>(null);
   const [logs, setLogs] = useState<SyncLog[]>([]);
+  const [syncHour, setSyncHour] = useState<string>("6");
+  const [savingHour, setSavingHour] = useState(false);
 
   async function fetchAll() {
     setLoading(true);
-    const [{ data: comps }, { data: integs }] = await Promise.all([
+    const [{ data: comps }, { data: integs }, { data: setting }] = await Promise.all([
       supabase.from("companies").select("id, name, cnpj").order("name"),
       supabase.from("ssotica_integrations").select("*"),
+      supabase.from("system_settings").select("setting_value").eq("setting_key", "ssotica_sync_hour").maybeSingle(),
     ]);
     setCompanies(comps ?? []);
     setIntegrations(integs ?? []);
+    if (setting?.setting_value) setSyncHour(setting.setting_value);
     setLoading(false);
+  }
+
+  async function handleSaveHour() {
+    setSavingHour(true);
+    try {
+      const { data: existing } = await supabase
+        .from("system_settings")
+        .select("id")
+        .eq("setting_key", "ssotica_sync_hour")
+        .maybeSingle();
+      if (existing) {
+        await supabase.from("system_settings").update({ setting_value: syncHour }).eq("id", existing.id);
+      } else {
+        await supabase.from("system_settings").insert({ setting_key: "ssotica_sync_hour", setting_value: syncHour });
+      }
+      const { error } = await supabase.rpc("manage_ssotica_cron" as any);
+      if (error) throw error;
+      toast({ title: "Horário salvo", description: `Sincronização diária agendada para ${syncHour}h (horário de Brasília).` });
+    } catch (e: any) {
+      toast({ title: "Erro ao salvar horário", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingHour(false);
+    }
   }
 
   useEffect(() => {
@@ -165,9 +200,12 @@ export default function SSoticaIntegrationsPage() {
       if (error) throw error;
       const result = data?.results?.[0];
       if (result?.ok) {
+        const cr = result.contas_receber;
+        const v = result.vendas;
+        const removidas = cr.removed ?? 0;
         toast({
           title: "Sincronização concluída",
-          description: `Cobranças: +${result.contas_receber.created} novas, ${result.contas_receber.updated} atualizadas. Renovações: +${result.vendas.created} novas, ${result.vendas.updated} atualizadas.`,
+          description: `Cobranças: +${cr.created} novas, ${cr.updated} atualizadas, ${removidas} quitadas/removidas. Renovações: +${v.created} novas, ${v.updated} atualizadas.`,
         });
       } else {
         toast({
@@ -227,10 +265,46 @@ export default function SSoticaIntegrationsPage() {
               <Plug className="h-6 w-6" /> Integrações SSótica
             </h1>
             <p className="text-muted-foreground text-sm">
-              Configure o token de acesso de cada loja. A sincronização roda automaticamente a cada 5 minutos.
+              Configure o token de acesso de cada loja. A sincronização roda automaticamente todos os dias.
             </p>
           </div>
         </div>
+
+        {/* Card de configuração do cron diário */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4" /> Sincronização automática diária
+            </CardTitle>
+            <CardDescription>
+              Escolha o horário (de Brasília) em que o sistema irá buscar atualizações de todas as lojas SSótica.
+              Cobranças quitadas serão removidas e clientes sem dívida vão automaticamente para Renovações.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="sync-hour">Horário diário</Label>
+                <Select value={syncHour} onValueChange={setSyncHour}>
+                  <SelectTrigger id="sync-hour" className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {Array.from({ length: 24 }).map((_, h) => (
+                      <SelectItem key={h} value={String(h)}>
+                        {String(h).padStart(2, "0")}:00
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleSaveHour} disabled={savingHour}>
+                {savingHour && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Salvar e reagendar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {loading ? (
           <div className="text-center py-12 text-muted-foreground">Carregando...</div>
