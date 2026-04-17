@@ -96,6 +96,35 @@ interface Integration {
   last_sync_receber_at: string | null;
 }
 
+type CompanyProfile = {
+  user_id: string;
+  full_name: string;
+};
+
+type CompanyRole = {
+  user_id: string;
+  role: AppRole;
+};
+
+type ExistingCobranca = {
+  id: string;
+  vencimento: string | null;
+  ssotica_parcela_id: number | null;
+};
+
+type ExistingRenovacao = {
+  id: string;
+  data_ultima_compra: string | null;
+  status: string;
+  assigned_to: string | null;
+};
+
+type StoredCobranca = {
+  id: string;
+  ssotica_parcela_id: number | null;
+  ssotica_cliente_id: number | null;
+};
+
 // Normaliza um valor para usar nas APIs do SSótica.
 // Para CNPJ: remove pontuação. Para código de licença: mantém como está.
 function normalizeIdentifier(value: string): string {
@@ -240,11 +269,12 @@ async function syncContasReceber(
           .eq("ssotica_company_id", integ.company_id)
           .eq("ssotica_cliente_id", cliente.id)
           .maybeSingle();
+        const existingCobranca = existing as ExistingCobranca | null;
 
-        if (existing) {
+        if (existingCobranca) {
           // Só atualiza para essa parcela se ela for mais antiga (ou igual) à atualmente armazenada
-          const existingVencDate = existing.vencimento
-            ? new Date(existing.vencimento + "T00:00:00Z").getTime()
+          const existingVencDate = existingCobranca.vencimento
+            ? new Date(existingCobranca.vencimento + "T00:00:00Z").getTime()
             : Number.POSITIVE_INFINITY;
           const novaVencTime = vencDate.getTime();
 
@@ -261,7 +291,7 @@ async function syncContasReceber(
                 status: colunaKey,
                 scheduled_date: vencimento,
               })
-              .eq("id", existing.id);
+              .eq("id", existingCobranca.id);
             updated++;
           }
         } else {
@@ -297,9 +327,10 @@ async function syncContasReceber(
     .select("id, ssotica_parcela_id, ssotica_cliente_id")
     .eq("ssotica_company_id", integ.company_id)
     .not("ssotica_cliente_id", "is", null);
+  const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
 
-  if (cobrancasNoBanco) {
-    for (const cob of cobrancasNoBanco) {
+  if (storedCobrancas.length > 0) {
+    for (const cob of storedCobrancas) {
       const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
       const clienteId = Number(cob.ssotica_cliente_id);
       // Se a parcela atual ainda está ativa OU o cliente foi atualizado nesta sync, mantém
@@ -333,22 +364,24 @@ async function syncVendas(
     .from("profiles")
     .select("user_id, full_name")
     .eq("company_id", integ.company_id);
+  const typedCompanyProfiles = (companyProfiles ?? []) as CompanyProfile[];
 
-  const companyUserIds = (companyProfiles ?? []).map((profile) => profile.user_id);
+  const companyUserIds = typedCompanyProfiles.map((profile) => profile.user_id);
   const { data: companyRoles } = companyUserIds.length > 0
     ? await supabase.from("user_roles").select("user_id, role").in("user_id", companyUserIds)
     : { data: [] as Array<{ user_id: string; role: AppRole }> };
+  const typedCompanyRoles = (companyRoles ?? []) as CompanyRole[];
 
   const roleByUserId = new Map<string, AppRole>(
-    (companyRoles ?? []).map((entry) => [entry.user_id, entry.role as AppRole]),
+    typedCompanyRoles.map((entry) => [entry.user_id, entry.role]),
   );
-  const managerUserId = (companyProfiles ?? []).find((profile) => roleByUserId.get(profile.user_id) === "gerente")?.user_id ?? null;
+  const managerUserId = typedCompanyProfiles.find((profile) => roleByUserId.get(profile.user_id) === "gerente")?.user_id ?? null;
   const findResponsibleProfile = (responsavelNome: string | null | undefined) => {
     if (!responsavelNome) return null;
 
-    return (companyProfiles ?? []).find(
+    return typedCompanyProfiles.find(
       (profile) => roleByUserId.get(profile.user_id) === "vendedor" && isSamePerson(profile.full_name, responsavelNome),
-    ) ?? (companyProfiles ?? []).find((profile) => isSamePerson(profile.full_name, responsavelNome)) ?? null;
+    ) ?? typedCompanyProfiles.find((profile) => isSamePerson(profile.full_name, responsavelNome)) ?? null;
   };
 
   // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
@@ -406,37 +439,36 @@ async function syncVendas(
     // Calcula dias desde a última compra para escolher a coluna
     const ultimaCompraDate = new Date(info.data + "T00:00:00Z");
     const diasDesdeUltimaCompra = daysBetween(ultimaCompraDate, today);
-    const renovacaoStatusKey = statusKeyForRenovacao(diasDesdeUltimaCompra);
-
     const { data: existing } = await supabase
       .from("crm_renovacoes")
       .select("id, data_ultima_compra, status, assigned_to")
       .eq("ssotica_cliente_id", clienteId)
       .eq("ssotica_company_id", integ.company_id)
       .maybeSingle();
+    const existingRenovacao = existing as ExistingRenovacao | null;
 
     const matchedProfile = findResponsibleProfile(responsavelNome);
-    const existingAssignedRole = existing?.assigned_to ? roleByUserId.get(existing.assigned_to) : null;
+    const existingAssignedRole = existingRenovacao?.assigned_to ? roleByUserId.get(existingRenovacao.assigned_to) : null;
     const preserveExistingVendedor = existingAssignedRole === "vendedor";
     const resolvedAssignedTo = preserveExistingVendedor
-      ? existing?.assigned_to ?? null
-      : matchedProfile?.user_id ?? managerUserId ?? existing?.assigned_to ?? null;
+      ? existingRenovacao?.assigned_to ?? null
+      : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null;
     const resolvedAssignedRole = resolvedAssignedTo ? roleByUserId.get(resolvedAssignedTo) : null;
     const hasAssignedVendedor = resolvedAssignedRole === "vendedor";
     const flowStatus = statusKeyForRenovacao(diasDesdeUltimaCompra);
 
-    if (existing) {
+    if (existingRenovacao) {
       // Não mexe se vendedor já está atendendo manualmente
-      const isManualStatus = existing.status === "em_atendimento" || existing.status === "nunca_fez_exame";
+      const isManualStatus = existingRenovacao.status === "em_atendimento" || existingRenovacao.status === "nunca_fez_exame";
       const newStatus = !hasAssignedVendedor
         ? DIRECIONAMENTO_STATUS
         : isManualStatus
-          ? existing.status
+          ? existingRenovacao.status
           : flowStatus;
       // Atualiza se a venda é mais recente OU se o status precisa mudar de coluna pelo tempo
-      const vendaMaisRecente = !existing.data_ultima_compra || existing.data_ultima_compra < info.data;
-      const statusMudou = existing.status !== newStatus;
-      const assignedMudou = (existing.assigned_to ?? null) !== resolvedAssignedTo;
+      const vendaMaisRecente = !existingRenovacao.data_ultima_compra || existingRenovacao.data_ultima_compra < info.data;
+      const statusMudou = existingRenovacao.status !== newStatus;
+      const assignedMudou = (existingRenovacao.assigned_to ?? null) !== resolvedAssignedTo;
       if (vendaMaisRecente || statusMudou || assignedMudou) {
         await supabase
           .from("crm_renovacoes")
@@ -449,7 +481,7 @@ async function syncVendas(
             scheduled_date: info.data,
             status: newStatus,
           })
-          .eq("id", existing.id);
+          .eq("id", existingRenovacao.id);
         updated++;
       }
     } else {
