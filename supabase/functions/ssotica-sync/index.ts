@@ -704,8 +704,8 @@ Deno.serve(async (req) => {
 
         // 1. Contas a Receber primeiro (para que Renovações saibam quem tem dívida)
         const cr = await syncContasReceber(supabase, integ);
-        // 2. Vendas (forceFull rebusca os últimos 6 meses, ignorando last_sync_vendas_at)
-        const v = await syncVendas(supabase, integ, forceFull);
+        // 2. Vendas (forceFull rebusca os últimos 14 meses; quitados também forçam janela cheia)
+        const v = await syncVendas(supabase, integ, forceFull, cr.clientesQuitados);
 
         const finishedAt = new Date().toISOString();
         await supabase.from("ssotica_integrations").update({
