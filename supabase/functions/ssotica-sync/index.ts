@@ -202,6 +202,7 @@ async function syncContasReceber(
 
         // O cliente vem dentro de parcela.titulo.cliente (não direto em parcela.cliente)
         const cliente = parcela.titulo?.cliente ?? parcela.cliente ?? {};
+        if (cliente?.id) clientesAfetados.add(Number(cliente.id));
         const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
         const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
         const data = {
@@ -226,7 +227,7 @@ async function syncContasReceber(
           .maybeSingle();
 
         if (existing) {
-          // Re-classifica SEMPRE: o card muda de coluna conforme o tempo passa
+          // status será reclassificado depois com base na parcela MAIS antiga do cliente
           await supabase
             .from("crm_cobrancas")
             .update({
