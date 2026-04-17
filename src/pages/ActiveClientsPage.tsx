@@ -5,22 +5,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarIcon, CalendarHeart } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarHeart } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import RenovacaoEditSheet from "@/components/renovacoes/RenovacaoEditSheet";
 
 type Renovacao = {
   id: string;
@@ -225,91 +217,6 @@ export default function ActiveClientsPage() {
 
   const getByStatus = (key: string) => filteredItems.filter(r => r.status === key);
 
-  const renderFormField = (field: FormField) => {
-    if (!isFieldVisible(field)) return null;
-    const fieldKey = `field_${field.id}`;
-    const rawValue = formData[fieldKey];
-    const value = typeof rawValue === "string" ? rawValue : rawValue == null ? "" : String(rawValue);
-    const checkboxValues: string[] = Array.isArray(rawValue) ? rawValue : [];
-    const selectedDate = parseStoredDate(rawValue);
-    const isLastVisit = field.is_last_visit_field;
-
-    return (
-      <div key={field.id} className={cn("space-y-2", field.parent_field_id && "ml-4 pl-3 border-l-2 border-primary/20", isLastVisit && "p-3 rounded-lg bg-primary/5 border border-primary/30")}>
-        <Label className="text-xs flex items-center gap-1.5">
-          {isLastVisit && <CalendarHeart className="h-3.5 w-3.5 text-primary" />}
-          {field.label}
-          {field.is_required && <span className="text-destructive ml-1">*</span>}
-          {isLastVisit && <span className="ml-1 text-[10px] uppercase font-bold text-primary">principal</span>}
-        </Label>
-
-        {field.field_type === "text" && (
-          <Input value={value} onChange={(e) => set(fieldKey, e.target.value)} required={field.is_required} className="h-9 text-sm" />
-        )}
-        {field.field_type === "number" && (
-          <Input type="number" value={value} onChange={(e) => set(fieldKey, e.target.value)} required={field.is_required} className="h-9 text-sm" />
-        )}
-        {field.field_type === "email" && (
-          <Input type="email" value={value} onChange={(e) => set(fieldKey, e.target.value)} required={field.is_required} className="h-9 text-sm" />
-        )}
-        {(field.field_type === "phone" || field.is_phone_field) && (
-          <Input type="tel" inputMode="numeric" placeholder="(00) 00000-0000"
-            value={formatPhoneBR(normalizePhoneDigits(rawValue))}
-            onChange={(e) => set(fieldKey, normalizePhoneDigits(e.target.value))}
-            required={field.is_required} maxLength={16} className="h-9 text-sm" />
-        )}
-        {field.field_type === "textarea" && (
-          <Textarea value={value} onChange={(e) => set(fieldKey, e.target.value)} rows={3} className="text-sm" />
-        )}
-        {field.field_type === "select" && field.options && (
-          <Select value={value} onValueChange={(v) => set(fieldKey, v)}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione" /></SelectTrigger>
-            <SelectContent>
-              {field.options.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-        {field.field_type === "checkbox_group" && field.options && (
-          <div className="flex flex-wrap gap-1.5">
-            {field.options.map(opt => {
-              const checked = checkboxValues.includes(opt);
-              return (
-                <label key={opt} className={cn("flex items-center gap-1 px-2 py-1 rounded-md border text-xs cursor-pointer transition-colors", checked ? "bg-primary/10 border-primary text-primary" : "bg-muted/50 border-border text-foreground hover:bg-muted")}>
-                  <Checkbox checked={checked} onCheckedChange={() => toggleArray(fieldKey, opt)} className="h-3 w-3" />
-                  {opt}
-                </label>
-              );
-            })}
-          </div>
-        )}
-        {field.field_type === "date" && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className={cn("w-full justify-start text-left font-normal h-9 text-sm", !value && "text-muted-foreground")}>
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {selectedDate ? format(selectedDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar mode="single" selected={selectedDate} onSelect={(d) => set(fieldKey, d ? format(d, "yyyy-MM-dd") : "")} initialFocus className="p-3 pointer-events-auto" />
-            </PopoverContent>
-          </Popover>
-        )}
-      </div>
-    );
-  };
-
-  const rootFields = fields.filter(f => !f.parent_field_id).sort((a, b) => a.position - b.position);
-  const childrenOf = (id: string) => fields.filter(f => f.parent_field_id === id).sort((a, b) => a.position - b.position);
-
-  const renderFieldTree = (field: FormField): JSX.Element[] => {
-    const result: JSX.Element[] = [];
-    const node = renderFormField(field);
-    if (node) result.push(node);
-    childrenOf(field.id).forEach(c => result.push(...renderFieldTree(c)));
-    return result;
-  };
-
   const renderCard = (item: Renovacao) => {
     const d = item.data as Record<string, any>;
     const lastVisit = item.data_ultima_compra
@@ -478,53 +385,25 @@ export default function ActiveClientsPage() {
         </div>
       </DragDropContext>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md p-0 max-h-[90vh] flex flex-col">
-          <DialogHeader className="px-6 pt-6">
-            <DialogTitle>{editingItem ? "Editar Renovação" : "Nova Renovação"}</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="flex-1 px-6">
-            <form id="renovacao-form" onSubmit={handleSave} className="space-y-4 py-4">
-              {fields.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Nenhuma pergunta configurada. Configure em <strong>Formulário Renovação</strong>.
-                </p>
-              )}
-              {rootFields.flatMap(f => renderFieldTree(f))}
-
-              <div className="space-y-2">
-                <Label>Valor (R$)</Label>
-                <Input type="number" step="0.01" value={formValor} onChange={e => setFormValor(e.target.value)} placeholder="0,00" />
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={formStatus} onValueChange={setFormStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {statuses.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              {(isAdmin || isGerente) && (
-                <div className="space-y-2">
-                  <Label>Responsável</Label>
-                  <Select value={formAssigned} onValueChange={setFormAssigned}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                    <SelectContent>
-                      {profiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </form>
-          </ScrollArea>
-          <div className="px-6 pb-6 pt-2 border-t">
-            <Button type="submit" form="renovacao-form" className="w-full" disabled={saving}>
-              {saving ? "Salvando..." : editingItem ? "Atualizar" : "Criar"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <RenovacaoEditSheet
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        renovacaoId={editingItem?.id || null}
+        formData={formData}
+        setFormData={setFormData}
+        formStatus={formStatus}
+        setFormStatus={setFormStatus}
+        formAssigned={formAssigned}
+        setFormAssigned={setFormAssigned}
+        formValor={formValor}
+        setFormValor={setFormValor}
+        statuses={statuses}
+        profiles={profiles}
+        fields={fields}
+        saving={saving}
+        onSave={handleSave}
+        canReassign={isAdmin || isGerente}
+      />
 
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
