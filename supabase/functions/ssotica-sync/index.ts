@@ -459,6 +459,16 @@ async function syncVendas(
     typedCompanyRoles.map((entry) => [entry.user_id, entry.role]),
   );
   const managerUserId = typedCompanyProfiles.find((profile) => roleByUserId.get(profile.user_id) === "gerente")?.user_id ?? null;
+
+  // Carrega mapeamento manual SSótica → CRM (vendedor por funcionário SSótica)
+  const { data: mappings } = await supabase
+    .from("ssotica_user_mappings")
+    .select("ssotica_funcionario_id, user_id")
+    .eq("company_id", integ.company_id);
+  const userIdByFuncionarioId = new Map<number, string>(
+    (mappings ?? []).map((m: any) => [Number(m.ssotica_funcionario_id), m.user_id as string]),
+  );
+
   const findResponsibleProfile = (responsavelNome: string | null | undefined) => {
     if (!responsavelNome) return null;
 
@@ -466,6 +476,9 @@ async function syncVendas(
       (profile) => roleByUserId.get(profile.user_id) === "vendedor" && isSamePerson(profile.full_name, responsavelNome),
     ) ?? typedCompanyProfiles.find((profile) => isSamePerson(profile.full_name, responsavelNome)) ?? null;
   };
+
+  // Cache de funcionários SSótica vistos nesta sync (alimenta a tela de mapeamento)
+  const funcionariosVistos = new Map<number, { nome: string; funcao: string }>();
 
   // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any; funcionario: any }>();
