@@ -105,8 +105,8 @@ export default function RenovacaoEditSheet(props: Props) {
       supabase.from("renovacao_activities" as any).select("*").eq("renovacao_id", renovacaoId).order("scheduled_date", { ascending: false }),
       supabase.from("crm_renovacao_notes" as any).select("*").eq("renovacao_id", renovacaoId).order("created_at", { ascending: false }),
     ]);
-    setActivities((acts || []) as Activity[]);
-    setNotes((ns || []) as Note[]);
+    setActivities((acts || []) as unknown as Activity[]);
+    setNotes((ns || []) as unknown as Note[]);
   };
 
   useEffect(() => {
