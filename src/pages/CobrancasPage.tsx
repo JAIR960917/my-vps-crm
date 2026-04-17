@@ -454,7 +454,7 @@ export default function CobrancasPage() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map(status => {
-            const items = getByStatus(status.key);
+            const { all, visible, hasMore } = getVisibleByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
@@ -462,7 +462,7 @@ export default function CobrancasPage() {
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
-                    {items.length}
+                    {all.length}
                   </span>
                 </div>
                 <Droppable droppableId={status.key}>
@@ -474,7 +474,7 @@ export default function CobrancasPage() {
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
                       }`}
                     >
-                      {items.map((c, index) => (
+                      {visible.map((c, index) => (
                         <Draggable key={c.id} draggableId={c.id} index={index}>
                           {(provided, snapshot) => (
                             <div
@@ -489,6 +489,14 @@ export default function CobrancasPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
+                      {hasMore && (
+                        <button
+                          onClick={() => showMore(status.key)}
+                          className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-primary/30 transition-colors"
+                        >
+                          Carregar mais ({all.length - visible.length} restantes)
+                        </button>
+                      )}
                       {canCreate && (
                         <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
                           + Adicionar cobrança
