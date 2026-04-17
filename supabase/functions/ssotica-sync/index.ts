@@ -163,7 +163,7 @@ async function syncContasReceber(
   // SEMPRE buscar 180 dias para trás para garantir que parcelas em atraso antigas sejam pegas.
   // Não usar last_sync_receber_at aqui porque parcelas vencidas há muito tempo continuam ativas
   // até serem pagas, e podem não aparecer em janelas curtas se o sync rodar todos os dias.
-  const startDate = addDays(today, -INITIAL_LOOKBACK_DAYS);
+  const startDate = addDays(today, -COBRANCAS_LOOKBACK_DAYS);
   // janela termina 60 dias à frente para pegar parcelas que vencem em breve
   const endDate = addDays(today, 60);
   const windows = buildWindows(startDate, endDate);
