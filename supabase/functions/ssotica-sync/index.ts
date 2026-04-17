@@ -9,7 +9,7 @@ const corsHeaders = {
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
 const MAX_WINDOW_DAYS = 30; // limite da API
-const INITIAL_LOOKBACK_DAYS = 180; // 6 meses na carga inicial
+const INITIAL_LOOKBACK_DAYS = 420; // 14 meses na carga inicial / resync
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
