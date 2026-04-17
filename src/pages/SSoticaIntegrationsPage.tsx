@@ -212,25 +212,35 @@ export default function SSoticaIntegrationsPage() {
   async function handleSyncNow(integ: Integration, forceFull = false) {
     setSyncingId(integ.id);
     try {
-      const { data, error } = await supabase.functions.invoke("ssotica-sync", {
-        body: { integration_id: integ.id, force_full: forceFull },
-      });
+      const body = forceFull
+        ? { mode: "start_backfill", integration_id: integ.id }
+        : { integration_id: integ.id };
+      const { data, error } = await supabase.functions.invoke("ssotica-sync", { body });
       if (error) throw error;
-      const result = data?.results?.[0];
-      if (result?.ok) {
-        const cr = result.contas_receber;
-        const v = result.vendas;
-        const removidas = cr.removed ?? 0;
+
+      if (forceFull) {
+        // Backfill iniciado: 1º chunk já rodou, próximos 7 vão automaticamente a cada 3 min
         toast({
-          title: forceFull ? "Resincronização completa concluída" : "Sincronização concluída",
-          description: `Cobranças: +${cr.created} novas, ${cr.updated} atualizadas, ${removidas} quitadas/removidas. Renovações: +${v.created} novas, ${v.updated} atualizadas.`,
+          title: "Backfill de 96 meses iniciado",
+          description: "O 1º chunk (12 meses mais recentes) foi processado. Os próximos 7 chunks rodarão automaticamente, 1 a cada 3 minutos. Total estimado: ~25 min.",
         });
       } else {
-        toast({
-          title: "Erro na sincronização",
-          description: result?.error ?? "Erro desconhecido",
-          variant: "destructive",
-        });
+        const result = data?.results?.[0];
+        if (result?.ok) {
+          const cr = result.contas_receber;
+          const v = result.vendas;
+          const removidas = cr.removed ?? 0;
+          toast({
+            title: "Sincronização concluída",
+            description: `Cobranças: +${cr.created} novas, ${cr.updated} atualizadas, ${removidas} quitadas/removidas. Renovações: +${v.created} novas, ${v.updated} atualizadas.`,
+          });
+        } else {
+          toast({
+            title: "Erro na sincronização",
+            description: result?.error ?? "Erro desconhecido",
+            variant: "destructive",
+          });
+        }
       }
       await fetchAll();
     } catch (e: any) {
@@ -417,15 +427,15 @@ export default function SSoticaIntegrationsPage() {
                             size="sm"
                             variant="secondary"
                             onClick={() => {
-                              if (confirm("Resincronizar os últimos 6 meses de vendas? Use isso para corrigir cards antigos sem vendedor vinculado. Pode demorar alguns minutos.")) {
+                              if (confirm("Iniciar backfill de 96 meses (8 anos)?\n\nO 1º chunk de 12 meses roda agora; os próximos 7 rodam automaticamente, 1 a cada 3 minutos.\nTotal estimado: ~25 minutos por loja.\n\nFaça uma loja por vez para evitar sobrecarga.")) {
                                 handleSyncNow(integ, true);
                               }
                             }}
                             disabled={syncingId === integ.id || !integ.is_active}
-                            title="Reprocessa os últimos 6 meses para reaplicar vínculos de vendedor"
+                            title="Backfill completo de 96 meses em chunks de 12 meses, com 3 min entre cada"
                           >
                             <RefreshCw className="h-3 w-3 mr-1" />
-                            Resync 6m
+                            Backfill 96m
                           </Button>
                           <Button
                             size="sm"

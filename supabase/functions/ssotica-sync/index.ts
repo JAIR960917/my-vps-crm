@@ -98,6 +98,20 @@ interface Integration {
   initial_sync_done: boolean;
   last_sync_vendas_at: string | null;
   last_sync_receber_at: string | null;
+  backfill_chunk_index: number;
+  backfill_total_chunks: number;
+  backfill_status: string; // 'idle' | 'running' | 'done' | 'error'
+  backfill_started_at: string | null;
+  backfill_next_run_at: string | null;
+}
+
+// Calcula a janela de datas de um chunk específico (chunk 0 = mais recente).
+// chunk 0 → últimos 12 meses; chunk 1 → 12-24 meses atrás; ... ; chunk 7 → 84-96 meses atrás.
+function chunkDateRange(chunkIndex: number, futureDays = 0): { start: Date; end: Date } {
+  const today = new Date();
+  const end = addDays(today, futureDays - chunkIndex * CHUNK_DAYS);
+  const start = addDays(end, -(CHUNK_DAYS - 1));
+  return { start, end };
 }
 
 type CompanyProfile = {
@@ -158,13 +172,14 @@ function isSamePerson(nameA: unknown, nameB: unknown): boolean {
 async function syncContasReceber(
   supabase: any,
   integ: Integration,
+  windowOverride?: { start: Date; end: Date },
 ): Promise<{ processed: number; created: number; updated: number; removed: number; chunks: number; clientesQuitados: number[] }> {
   const today = new Date();
-  // Histórico total: 96 meses para trás + 60 dias à frente, em chunks de 12 meses.
-  // Processa do mais recente ao mais antigo para que parcelas atuais entrem primeiro
-  // e os logs mostrem progresso incremental.
-  const overallStart = addDays(today, -MAX_HISTORY_DAYS);
-  const overallEnd = addDays(today, COBRANCAS_FUTURE_DAYS);
+  // Janela: por padrão, últimos 12 meses + 60 dias à frente (sync incremental).
+  // Quando há windowOverride (modo backfill), processa apenas o chunk de 12 meses indicado.
+  const overallStart = windowOverride?.start ?? addDays(today, -CHUNK_DAYS);
+  const overallEnd = windowOverride?.end ?? addDays(today, COBRANCAS_FUTURE_DAYS);
+  const isBackfillChunk = !!windowOverride;
 
   let processed = 0, created = 0, updated = 0, removed = 0;
   // Contadores de diagnóstico (logados ao final para depurar filtros)
@@ -198,153 +213,127 @@ async function syncContasReceber(
   // Agrupa todas as parcelas em atraso por cliente para upsert único depois
   const parcelasPorCliente = new Map<number, { cliente: any; parcelas: any[] }>();
 
-  // Quebra o intervalo total em chunks de ~12 meses, do mais recente ao mais antigo.
-  // Cada chunk gera ~12 janelas de 30 dias (limite da API SSótica).
-  const chunks: Array<{ start: Date; end: Date }> = [];
-  let chunkEnd = new Date(overallEnd);
-  while (chunkEnd >= overallStart) {
-    const chunkStart = addDays(chunkEnd, -(CHUNK_DAYS - 1));
-    const realStart = chunkStart < overallStart ? overallStart : chunkStart;
-    chunks.push({ start: realStart, end: chunkEnd });
-    chunkEnd = addDays(realStart, -1);
-  }
+  // Janela única (definida por overallStart/overallEnd) dividida em sub-janelas de 30 dias
+  // por causa do limite da API SSótica.
+  const windows = buildWindows(overallStart, overallEnd);
+  for (const w of windows) {
+    let page = 1;
+    while (true) {
+      const url =
+        `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${encodeURIComponent(empresaParam)}&inicio_periodo=${w.start}&fim_periodo=${w.end}&page=${page}&perPage=100`;
+      const json = await fetchSSotica(url, integ.bearer_token) as {
+        currentPage?: number;
+        totalPages?: number;
+        data?: any[];
+      };
+      const items: any[] = json.data ?? [];
+      if (items.length === 0) break;
 
-  let chunksProcessed = 0;
-  for (const chunk of chunks) {
-    const windows = buildWindows(chunk.start, chunk.end);
-    const chunkStartProcessed = processed;
-    for (const w of windows) {
-      let page = 1;
-      while (true) {
-        const url =
-          `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${encodeURIComponent(empresaParam)}&inicio_periodo=${w.start}&fim_periodo=${w.end}&page=${page}&perPage=100`;
-        const json = await fetchSSotica(url, integ.bearer_token) as {
-          currentPage?: number;
-          totalPages?: number;
-          data?: any[];
-        };
-        const items: any[] = json.data ?? [];
-        if (items.length === 0) break;
+      for (const parcela of items) {
+        processed++;
+        // Normaliza situação: remove acentos, lowercase, troca espaço/underscore
+        const situacaoRaw = String(parcela.situacao ?? parcela["situação"] ?? "");
+        const situacao = situacaoRaw
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[\s_-]+/g, " ")
+          .trim();
+        situacoesVistas.set(situacao, (situacoesVistas.get(situacao) ?? 0) + 1);
 
-        for (const parcela of items) {
-          processed++;
-          // Normaliza situação: remove acentos, lowercase, troca espaço/underscore
-          const situacaoRaw = String(parcela.situacao ?? parcela["situação"] ?? "");
-          const situacao = situacaoRaw
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .toLowerCase()
-            .replace(/[\s_-]+/g, " ")
-            .trim();
-          situacoesVistas.set(situacao, (situacoesVistas.get(situacao) ?? 0) + 1);
+        const isAtiva =
+          situacao === "em aberto" ||
+          situacao === "vencido" ||
+          situacao === "vencida" ||
+          situacao === "em atraso" ||
+          situacao === "atrasado" ||
+          situacao === "atrasada" ||
+          situacao.startsWith("negativado") ||
+          situacao === "a vencer" ||
+          situacao === "vencer";
 
-          // Situações ATIVAS (parcela ainda devida e SEM renegociação) = mantemos no kanban de cobranças
-          // O SSótica retorna nomes variados conforme configuração da loja:
-          //   "em aberto", "vencido"/"vencida", "em atraso", "negativado serasa", "a vencer", etc.
-          // "Renegociado" é tratado separadamente abaixo.
-          const isAtiva =
-            situacao === "em aberto" ||
-            situacao === "vencido" ||
-            situacao === "vencida" ||
-            situacao === "em atraso" ||
-            situacao === "atrasado" ||
-            situacao === "atrasada" ||
-            situacao.startsWith("negativado") ||
-            situacao === "a vencer" ||
-            situacao === "vencer";
+        const renegociacaoObj = parcela.renegociacao ?? parcela.renegociacao_info ?? null;
+        const temObjetoRenegociacao =
+          !!renegociacaoObj &&
+          typeof renegociacaoObj === "object" &&
+          !Array.isArray(renegociacaoObj) &&
+          (renegociacaoObj.id != null || renegociacaoObj.valor_renegociacao != null);
+        const foiRenegociada = situacao.startsWith("renegoc") || temObjetoRenegociacao;
 
-          // Detecta renegociação por DOIS sinais (qualquer um basta):
-          //  1) campo `situacao` começa com "renegoc" (Renegociado, Renegociada, etc.)
-          //  2) objeto `renegociacao` preenchido na parcela (id != null)
-          const renegociacaoObj = parcela.renegociacao ?? parcela.renegociacao_info ?? null;
-          const temObjetoRenegociacao =
-            !!renegociacaoObj &&
-            typeof renegociacaoObj === "object" &&
-            !Array.isArray(renegociacaoObj) &&
-            (renegociacaoObj.id != null || renegociacaoObj.valor_renegociacao != null);
-          const foiRenegociada = situacao.startsWith("renegoc") || temObjetoRenegociacao;
+        const foiBaixada = !!parcela.baixado_em;
+        const foiCancelada = !!parcela.cancelado_em;
+        const foiEstornada = !!parcela.estornado_em;
+        const dataPagamento = parcela.data_pagamento ?? parcela.dataPagamento ?? null;
+        const valorRecebido = Number(parcela.valor_recebido ?? parcela.valorRecebido ?? 0);
+        const valorParcela = Number(parcela.valor ?? 0);
+        const foiPaga =
+          !!dataPagamento ||
+          situacao === "pago" ||
+          situacao === "paga" ||
+          situacao === "quitado" ||
+          situacao === "quitada" ||
+          situacao === "liquidado" ||
+          situacao === "liquidada" ||
+          (valorParcela > 0 && valorRecebido >= valorParcela);
 
-          // Sinais de que a parcela JÁ FOI QUITADA (não é mais dívida)
-          const foiBaixada = !!parcela.baixado_em;
-          const foiCancelada = !!parcela.cancelado_em;
-          const foiEstornada = !!parcela.estornado_em;
-          const dataPagamento = parcela.data_pagamento ?? parcela.dataPagamento ?? null;
-          const valorRecebido = Number(parcela.valor_recebido ?? parcela.valorRecebido ?? 0);
-          const valorParcela = Number(parcela.valor ?? 0);
-          const foiPaga =
-            !!dataPagamento ||
-            situacao === "pago" ||
-            situacao === "paga" ||
-            situacao === "quitado" ||
-            situacao === "quitada" ||
-            situacao === "liquidado" ||
-            situacao === "liquidada" ||
-            (valorParcela > 0 && valorRecebido >= valorParcela);
+        if (!isAtiva) skipped.naoAtiva++;
+        else if (foiRenegociada) skipped.renegociada++;
+        else if (foiBaixada) skipped.baixada++;
+        else if (foiCancelada) skipped.cancelada++;
+        else if (foiEstornada) skipped.estornada++;
+        else if (foiPaga) skipped.paga++;
 
-          // Conta motivos de skip (em ordem de prioridade)
-          if (!isAtiva) skipped.naoAtiva++;
-          else if (foiRenegociada) skipped.renegociada++;
-          else if (foiBaixada) skipped.baixada++;
-          else if (foiCancelada) skipped.cancelada++;
-          else if (foiEstornada) skipped.estornada++;
-          else if (foiPaga) skipped.paga++;
+        const isInativa =
+          !isAtiva || foiRenegociada || foiBaixada || foiCancelada || foiEstornada || foiPaga;
 
-          const isInativa =
-            !isAtiva || foiRenegociada || foiBaixada || foiCancelada || foiEstornada || foiPaga;
-
-          if (isInativa) {
-            // Marca cliente para reclassificação (a parcela em si é tratada no pós-processamento)
-            const cliInativa = parcela.titulo?.cliente ?? parcela.cliente ?? {};
-            if (cliInativa?.id) clientesAfetados.add(Number(cliInativa.id));
-            continue;
-          }
-
-          const vencimento = parcela.vencimento as string | null;
-          if (!vencimento) { skipped.semVencimento++; continue; }
-          const vencDate = new Date(vencimento + "T00:00:00Z");
-          const diasAtraso = daysBetween(vencDate, today);
-
-          // Regra: SÓ incluir parcelas REALMENTE em atraso (venceu ontem ou antes)
-          if (diasAtraso < 1) { skipped.naoEmAtraso++; continue; }
-
-          if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
-
-          // O cliente vem dentro de parcela.titulo.cliente (não direto em parcela.cliente)
-          const cliente = parcela.titulo?.cliente ?? parcela.cliente ?? {};
-          if (!cliente?.id) { skipped.semCliente++; continue; }
-          clientesAfetados.add(Number(cliente.id));
-
-          // Acumula a parcela na lista do cliente. O upsert é feito DEPOIS de coletar tudo.
-          const clienteIdNum = Number(cliente.id);
-          let bucket = parcelasPorCliente.get(clienteIdNum);
-          if (!bucket) {
-            bucket = { cliente, parcelas: [] };
-            parcelasPorCliente.set(clienteIdNum, bucket);
-          }
-          bucket.parcelas.push({
-            parcela_id: parcela.id ? Number(parcela.id) : null,
-            titulo_id: parcela.titulo?.id ? Number(parcela.titulo.id) : null,
-            numero_parcela: parcela.numero_parcela ?? null,
-            vencimento,
-            dias_atraso: diasAtraso,
-            valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
-            situacao: situacaoRaw,
-            forma_pagamento: parcela.forma_pagamento ?? "",
-            numero_documento: parcela.titulo?.numero_documento ?? "",
-            descricao: parcela.titulo?.descricao ?? "",
-            boleto_nosso_numero: parcela.boleto?.nosso_numero ?? null,
-            ssotica_raw: parcela,
-          });
+        if (isInativa) {
+          const cliInativa = parcela.titulo?.cliente ?? parcela.cliente ?? {};
+          if (cliInativa?.id) clientesAfetados.add(Number(cliInativa.id));
+          continue;
         }
 
-        const totalPages = json.totalPages ?? 1;
-        if (page >= totalPages) break;
-        page++;
+        const vencimento = parcela.vencimento as string | null;
+        if (!vencimento) { skipped.semVencimento++; continue; }
+        const vencDate = new Date(vencimento + "T00:00:00Z");
+        const diasAtraso = daysBetween(vencDate, today);
+
+        if (diasAtraso < 1) { skipped.naoEmAtraso++; continue; }
+
+        if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
+
+        const cliente = parcela.titulo?.cliente ?? parcela.cliente ?? {};
+        if (!cliente?.id) { skipped.semCliente++; continue; }
+        clientesAfetados.add(Number(cliente.id));
+
+        const clienteIdNum = Number(cliente.id);
+        let bucket = parcelasPorCliente.get(clienteIdNum);
+        if (!bucket) {
+          bucket = { cliente, parcelas: [] };
+          parcelasPorCliente.set(clienteIdNum, bucket);
+        }
+        bucket.parcelas.push({
+          parcela_id: parcela.id ? Number(parcela.id) : null,
+          titulo_id: parcela.titulo?.id ? Number(parcela.titulo.id) : null,
+          numero_parcela: parcela.numero_parcela ?? null,
+          vencimento,
+          dias_atraso: diasAtraso,
+          valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
+          situacao: situacaoRaw,
+          forma_pagamento: parcela.forma_pagamento ?? "",
+          numero_documento: parcela.titulo?.numero_documento ?? "",
+          descricao: parcela.titulo?.descricao ?? "",
+          boleto_nosso_numero: parcela.boleto?.nosso_numero ?? null,
+          ssotica_raw: parcela,
+        });
       }
+
+      const totalPages = json.totalPages ?? 1;
+      if (page >= totalPages) break;
+      page++;
     }
-    chunksProcessed++;
-    console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} chunk=${chunksProcessed}/${chunks.length} (${ymd(chunk.start)}→${ymd(chunk.end)}) parcelas_no_chunk=${processed - chunkStartProcessed} clientes_em_atraso_acumulado=${parcelasPorCliente.size}`);
   }
+  const chunksProcessed = 1;
+  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_em_atraso=${parcelasPorCliente.size} backfill_chunk=${isBackfillChunk}`);
 
   // ===== Upsert por cliente: 1 card com a lista de TODAS as parcelas em atraso =====
   for (const [clienteIdNum, { cliente, parcelas }] of parcelasPorCliente.entries()) {
@@ -424,29 +413,28 @@ async function syncContasReceber(
   }
 
   // ===== Pós-processamento: remover cards de clientes que não têm mais nenhuma parcela em atraso =====
-  // Como agora há apenas 1 card por cliente, basta remover cards cuja parcela atual não esteja mais ativa
-  // E que não tenham sido atualizados nesta sync (cliente sem nenhuma parcela ativa).
-  const { data: cobrancasNoBanco } = await supabase
-    .from("crm_cobrancas")
-    .select("id, ssotica_parcela_id, ssotica_cliente_id")
-    .eq("ssotica_company_id", integ.company_id)
-    .not("ssotica_cliente_id", "is", null);
-  const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
-
-  // Clientes que tinham cobrança no banco mas não têm mais parcela ativa = QUITARAM
+  // ATENÇÃO: pulamos este passo em modo backfill (chunk antigo) porque vimos só 12 meses
+  // específicos da API — não dá pra concluir que uma parcela "sumiu" baseado numa janela parcial.
+  // O delete só roda no sync incremental (que cobre 12 meses recentes + 60 dias futuros).
   const clientesQuitadosSet = new Set<number>();
+  if (!isBackfillChunk) {
+    const { data: cobrancasNoBanco } = await supabase
+      .from("crm_cobrancas")
+      .select("id, ssotica_parcela_id, ssotica_cliente_id")
+      .eq("ssotica_company_id", integ.company_id)
+      .not("ssotica_cliente_id", "is", null);
+    const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
 
-  if (storedCobrancas.length > 0) {
-    for (const cob of storedCobrancas) {
-      const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
-      const clienteId = Number(cob.ssotica_cliente_id);
-      // Se a parcela atual ainda está ativa OU o cliente foi atualizado nesta sync, mantém
-      if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
-      if (clientesAfetados.has(clienteId) && parcelasPorCliente.has(clienteId)) continue;
-      // Cliente sumiu da API ou todas as parcelas viraram inativas → remove o card e marca como quitado
-      await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
-      removed++;
-      clientesQuitadosSet.add(clienteId);
+    if (storedCobrancas.length > 0) {
+      for (const cob of storedCobrancas) {
+        const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
+        const clienteId = Number(cob.ssotica_cliente_id);
+        if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
+        if (clientesAfetados.has(clienteId) && parcelasPorCliente.has(clienteId)) continue;
+        await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
+        removed++;
+        clientesQuitadosSet.add(clienteId);
+      }
     }
   }
 
@@ -464,16 +452,24 @@ async function syncVendas(
   integ: Integration,
   forceFull = false,
   clientesQuitados: number[] = [],
+  windowOverride?: { start: Date; end: Date },
 ): Promise<{ processed: number; created: number; updated: number; chunks: number }> {
   const today = new Date();
-  // Se há clientes que acabaram de quitar OU é a primeira sync OU resync forçado,
-  // varre todo o histórico de 96 meses (em chunks). Caso contrário, sync incremental
-  // a partir do último sync.
-  const useFullWindow = forceFull || clientesQuitados.length > 0 || !integ.initial_sync_done;
-  const overallStart = !useFullWindow && integ.last_sync_vendas_at
-    ? addDays(new Date(integ.last_sync_vendas_at), -1)
-    : addDays(today, -MAX_HISTORY_DAYS);
-  const overallEnd = today;
+  const isBackfillChunk = !!windowOverride;
+  // Janela:
+  //  - windowOverride (modo backfill): processa só o chunk indicado.
+  //  - sync incremental: a partir do último sync (ou últimos 12 meses se primeira vez).
+  let overallStart: Date;
+  let overallEnd: Date;
+  if (windowOverride) {
+    overallStart = windowOverride.start;
+    overallEnd = windowOverride.end;
+  } else {
+    overallEnd = today;
+    overallStart = integ.last_sync_vendas_at && !forceFull && clientesQuitados.length === 0 && integ.initial_sync_done
+      ? addDays(new Date(integ.last_sync_vendas_at), -1)
+      : addDays(today, -CHUNK_DAYS); // 12 meses na primeira sync
+  }
 
   let processed = 0, created = 0, updated = 0;
   // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
@@ -527,68 +523,48 @@ async function syncVendas(
   // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any; funcionario: any }>();
 
-  // Quebra o intervalo total em chunks de ~12 meses, do mais recente ao mais antigo.
-  // Isso evita timeout (cada chunk processa ~12 janelas de 30 dias) e permite logar
-  // progresso por chunk. Como agregamos apenas a ÚLTIMA compra por cliente, processar
-  // do mais recente para o mais antigo já popula corretamente o mapa.
-  const chunks: Array<{ start: Date; end: Date }> = [];
-  let chunkEnd = new Date(overallEnd);
-  while (chunkEnd >= overallStart) {
-    const chunkStart = addDays(chunkEnd, -(CHUNK_DAYS - 1));
-    const realStart = chunkStart < overallStart ? overallStart : chunkStart;
-    chunks.push({ start: realStart, end: chunkEnd });
-    chunkEnd = addDays(realStart, -1);
-  }
+  // Janela única (definida por overallStart/overallEnd) dividida em sub-janelas de 30 dias.
+  const windows = buildWindows(overallStart, overallEnd);
+  for (const w of windows) {
+    const url =
+      `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+    const vendas = await fetchSSotica(url, integ.bearer_token) as any[];
+    if (!Array.isArray(vendas)) continue;
 
-  let chunksProcessed = 0;
-  for (const chunk of chunks) {
-    const windows = buildWindows(chunk.start, chunk.end);
-    let chunkVendas = 0;
-    for (const w of windows) {
-      const url =
-        `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
-      const vendas = await fetchSSotica(url, integ.bearer_token) as any[];
-      if (!Array.isArray(vendas)) continue;
-
-      for (const venda of vendas) {
-        processed++;
-        chunkVendas++;
-        // Cacheia funcionário visto ANTES de qualquer filtro (pra alimentar a tela de mapeamento)
-        const func = venda.funcionario;
-        if (func) {
-          const nome = String(func.nome ?? "").trim();
-          const funcao = String(func.funcao ?? "").trim();
-          // Se não tiver id, usa hash negativo do nome para ter chave estável
-          let funcKey: number | null = null;
-          if (func.id != null && !Number.isNaN(Number(func.id))) {
-            funcKey = Number(func.id);
-          } else if (nome) {
-            // Hash simples do nome → número negativo (não colide com IDs reais positivos)
-            let h = 0;
-            for (let i = 0; i < nome.length; i++) h = ((h << 5) - h + nome.charCodeAt(i)) | 0;
-            funcKey = -Math.abs(h) || -1;
-          }
-          if (funcKey !== null && (nome || funcao)) {
-            funcionariosVistos.set(funcKey, { nome: nome || "(sem nome)", funcao });
-          }
+    for (const venda of vendas) {
+      processed++;
+      // Cacheia funcionário visto ANTES de qualquer filtro (pra alimentar a tela de mapeamento)
+      const func = venda.funcionario;
+      if (func) {
+        const nome = String(func.nome ?? "").trim();
+        const funcao = String(func.funcao ?? "").trim();
+        let funcKey: number | null = null;
+        if (func.id != null && !Number.isNaN(Number(func.id))) {
+          funcKey = Number(func.id);
+        } else if (nome) {
+          let h = 0;
+          for (let i = 0; i < nome.length; i++) h = ((h << 5) - h + nome.charCodeAt(i)) | 0;
+          funcKey = -Math.abs(h) || -1;
         }
-
-        const statusVenda = String(venda.status ?? "").toUpperCase();
-        // Aceita ATIVA ou status ausente/vazio (algumas lojas omitem o campo)
-        if (statusVenda && statusVenda !== "ATIVA") continue;
-        const cliente = venda.cliente;
-        if (!cliente?.id) continue;
-        const data = venda.data as string;
-        const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
-        const prev = ultimaCompraPorCliente.get(cliente.id);
-        if (!prev || prev.data < data) {
-          ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
+        if (funcKey !== null && (nome || funcao)) {
+          funcionariosVistos.set(funcKey, { nome: nome || "(sem nome)", funcao });
         }
       }
+
+      const statusVenda = String(venda.status ?? "").toUpperCase();
+      if (statusVenda && statusVenda !== "ATIVA") continue;
+      const cliente = venda.cliente;
+      if (!cliente?.id) continue;
+      const data = venda.data as string;
+      const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
+      const prev = ultimaCompraPorCliente.get(cliente.id);
+      if (!prev || prev.data < data) {
+        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
+      }
     }
-    chunksProcessed++;
-    console.log(`[ssotica-sync][vendas] empresa=${integ.company_id} chunk=${chunksProcessed}/${chunks.length} (${ymd(chunk.start)}→${ymd(chunk.end)}) vendas=${chunkVendas} clientes_unicos_acumulado=${ultimaCompraPorCliente.size}`);
   }
+  const chunksProcessed = 1;
+  console.log(`[ssotica-sync][vendas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_unicos=${ultimaCompraPorCliente.size} backfill_chunk=${isBackfillChunk}`);
 
   // Persiste cache de funcionários SSótica vistos (upsert)
   if (funcionariosVistos.size > 0) {
@@ -719,6 +695,81 @@ async function syncVendas(
   return { processed, created, updated, chunks: chunksProcessed };
 }
 
+// Helper: roda 1 chunk de backfill (vendas + cobranças daquela janela de 12 meses).
+async function runBackfillChunk(
+  supabase: any,
+  integ: Integration,
+): Promise<{ ok: true; chunk_index: number; finished: boolean } | { ok: false; error: string }> {
+  const total = integ.backfill_total_chunks || 8;
+  const idx = integ.backfill_chunk_index || 0;
+  // chunk 0 = mais recente (últimos 12 meses) — futureDays=COBRANCAS_FUTURE_DAYS pra pegar parcelas a vencer
+  const futureDays = idx === 0 ? COBRANCAS_FUTURE_DAYS : 0;
+  const range = chunkDateRange(idx, futureDays);
+  console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} iniciando chunk ${idx + 1}/${total} (${ymd(range.start)}→${ymd(range.end)})`);
+
+  const { data: log } = await supabase.from("ssotica_sync_logs").insert({
+    integration_id: integ.id,
+    sync_type: `backfill_chunk_${idx + 1}_of_${total}`,
+    status: "running",
+  }).select("id").single();
+  const logId = log?.id ?? null;
+
+  try {
+    const cr = await syncContasReceber(supabase, integ, range);
+    const v = await syncVendas(supabase, integ, false, [], range);
+
+    const nextIdx = idx + 1;
+    const finished = nextIdx >= total;
+    // Próxima execução: 3 minutos depois (ou null se terminou)
+    const nextRunAt = finished ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
+    const finishedAt = new Date().toISOString();
+
+    await supabase.from("ssotica_integrations").update({
+      backfill_chunk_index: nextIdx,
+      backfill_status: finished ? "done" : "running",
+      backfill_next_run_at: nextRunAt,
+      sync_status: finished ? "idle" : "running",
+      // Quando termina, marca initial_sync_done para o sync incremental funcionar
+      initial_sync_done: finished ? true : integ.initial_sync_done,
+      last_sync_receber_at: finished ? finishedAt : integ.last_sync_receber_at,
+      last_sync_vendas_at: finished ? finishedAt : integ.last_sync_vendas_at,
+      last_error: null,
+    }).eq("id", integ.id);
+
+    if (logId) {
+      await supabase.from("ssotica_sync_logs").update({
+        finished_at: finishedAt,
+        status: "success",
+        items_processed: cr.processed + v.processed,
+        items_created: cr.created + v.created,
+        items_updated: cr.updated + v.updated,
+        details: { chunk_index: idx, total_chunks: total, range: { start: ymd(range.start), end: ymd(range.end) }, contas_receber: cr, vendas: v },
+      }).eq("id", logId);
+    }
+
+    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. ${finished ? 'CONCLUÍDO!' : `próximo em 3min (${nextRunAt})`}`);
+    return { ok: true, chunk_index: idx, finished };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1} FALHOU:`, msg);
+    // Em caso de erro, agenda retry em 3 minutos no MESMO chunk (não avança)
+    await supabase.from("ssotica_integrations").update({
+      backfill_status: "running",
+      backfill_next_run_at: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+      sync_status: "error",
+      last_error: msg.slice(0, 1000),
+    }).eq("id", integ.id);
+    if (logId) {
+      await supabase.from("ssotica_sync_logs").update({
+        finished_at: new Date().toISOString(),
+        status: "error",
+        error_message: msg.slice(0, 2000),
+      }).eq("id", logId);
+    }
+    return { ok: false, error: msg };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -729,9 +780,73 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    const mode: string = body.mode ?? (body.start_backfill ? "start_backfill" : "incremental");
     const onlyIntegrationId: string | undefined = body.integration_id;
     const forceFull: boolean = body.force_full === true;
 
+    // ========== MODO 1: tick do cron — processa próximo chunk de qualquer integração pronta ==========
+    if (mode === "backfill_tick") {
+      const { data: pending } = await supabase
+        .from("ssotica_integrations")
+        .select("*")
+        .eq("is_active", true)
+        .eq("backfill_status", "running")
+        .lte("backfill_next_run_at", new Date().toISOString())
+        .limit(5); // até 5 lojas em paralelo no mesmo tick
+      const list = (pending ?? []) as Integration[];
+      if (list.length === 0) {
+        return new Response(JSON.stringify({ ok: true, message: "Nenhum chunk pronto" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const results: any[] = [];
+      for (const integ of list) {
+        const r = await runBackfillChunk(supabase, integ);
+        results.push({ integration_id: integ.id, ...r });
+      }
+      return new Response(JSON.stringify({ ok: true, mode: "backfill_tick", results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ========== MODO 2: iniciar backfill de 96 meses (botão "Resincronizar tudo") ==========
+    if (mode === "start_backfill") {
+      if (!onlyIntegrationId) {
+        return new Response(JSON.stringify({ ok: false, error: "integration_id obrigatório" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // Reseta o progresso e marca pra rodar AGORA (próximo tick do cron pega)
+      const { data: integ, error } = await supabase
+        .from("ssotica_integrations")
+        .update({
+          backfill_chunk_index: 0,
+          backfill_total_chunks: 8,
+          backfill_status: "running",
+          backfill_started_at: new Date().toISOString(),
+          backfill_next_run_at: new Date().toISOString(),
+          sync_status: "running",
+          last_error: null,
+        })
+        .eq("id", onlyIntegrationId)
+        .select("*")
+        .single();
+      if (error || !integ) throw error ?? new Error("Integração não encontrada");
+
+      // Já roda o primeiro chunk imediatamente (sem esperar o tick)
+      const r = await runBackfillChunk(supabase, integ as Integration);
+      return new Response(JSON.stringify({
+        ok: true,
+        mode: "start_backfill",
+        message: "Backfill de 96 meses iniciado. Os próximos 7 chunks rodarão automaticamente, 1 a cada 3 minutos.",
+        first_chunk: r,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ========== MODO 3 (default): sync incremental ==========
     const query = supabase
       .from("ssotica_integrations")
       .select("*")
@@ -748,20 +863,19 @@ Deno.serve(async (req) => {
 
     const results: any[] = [];
     for (const integ of integrations as Integration[]) {
-      const startedAt = new Date().toISOString();
       let logId: string | null = null;
       try {
         await supabase.from("ssotica_integrations").update({ sync_status: "running", last_error: null }).eq("id", integ.id);
         const { data: log } = await supabase.from("ssotica_sync_logs").insert({
           integration_id: integ.id,
-          sync_type: forceFull ? "full_force" : "full",
+          sync_type: forceFull ? "full_force" : "incremental",
           status: "running",
         }).select("id").single();
         logId = log?.id ?? null;
 
         // 1. Contas a Receber primeiro (para que Renovações saibam quem tem dívida)
         const cr = await syncContasReceber(supabase, integ);
-        // 2. Vendas (forceFull rebusca os últimos 14 meses; quitados também forçam janela cheia)
+        // 2. Vendas
         const v = await syncVendas(supabase, integ, forceFull, cr.clientesQuitados);
 
         const finishedAt = new Date().toISOString();
