@@ -209,31 +209,44 @@ async function syncContasReceber(
           ssotica_raw: parcela,
         };
 
-        // upsert por ssotica_parcela_id
+        // === 1 card por cliente: upsert por (ssotica_company_id, ssotica_cliente_id) ===
+        // Mantemos sempre os dados da parcela MAIS ANTIGA em atraso para esse cliente.
+        if (!cliente?.id) continue;
+
         const { data: existing } = await supabase
           .from("crm_cobrancas")
-          .select("id")
-          .eq("ssotica_parcela_id", parcela.id)
+          .select("id, vencimento, ssotica_parcela_id")
+          .eq("ssotica_company_id", integ.company_id)
+          .eq("ssotica_cliente_id", cliente.id)
           .maybeSingle();
 
         if (existing) {
-          // status será reclassificado depois com base na parcela MAIS antiga do cliente
-          await supabase
-            .from("crm_cobrancas")
-            .update({
-              data,
-              valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
-              vencimento,
-              dias_atraso: diasAtraso,
-              status: colunaKey,
-              scheduled_date: vencimento,
-            })
-            .eq("id", existing.id);
-          updated++;
+          // Só atualiza para essa parcela se ela for mais antiga (ou igual) à atualmente armazenada
+          const existingVencDate = existing.vencimento
+            ? new Date(existing.vencimento + "T00:00:00Z").getTime()
+            : Number.POSITIVE_INFINITY;
+          const novaVencTime = vencDate.getTime();
+
+          if (novaVencTime <= existingVencDate) {
+            await supabase
+              .from("crm_cobrancas")
+              .update({
+                ssotica_parcela_id: parcela.id ?? null,
+                ssotica_titulo_id: parcela.titulo?.id ?? null,
+                data,
+                valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
+                vencimento,
+                dias_atraso: diasAtraso,
+                status: colunaKey,
+                scheduled_date: vencimento,
+              })
+              .eq("id", existing.id);
+            updated++;
+          }
         } else {
           await supabase.from("crm_cobrancas").insert({
             company_id: integ.company_id,
-            ssotica_parcela_id: parcela.id,
+            ssotica_parcela_id: parcela.id ?? null,
             ssotica_titulo_id: parcela.titulo?.id ?? null,
             ssotica_cliente_id: cliente.id ?? null,
             ssotica_company_id: integ.company_id,
