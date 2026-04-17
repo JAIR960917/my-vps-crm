@@ -130,12 +130,18 @@ async function syncContasReceber(
         const situacao = String(parcela.situacao ?? parcela["situação"] ?? "").toLowerCase();
         // Só processamos parcelas em aberto / vencidas
         if (situacao !== "em aberto" && situacao !== "em_aberto" && situacao !== "vencido" && situacao !== "vencida") {
-          // Se já existe na cobrança e foi paga/cancelada, marcar como paga e seguir
+          // Se já existe na cobrança e foi paga/cancelada → remove do kanban
           if (parcela.id && (situacao === "pago" || situacao === "pago_parcial" || situacao === "cancelado")) {
-            await supabase
+            const { data: existingPaid } = await supabase
               .from("crm_cobrancas")
-              .update({ status: situacao === "pago" ? "pago" : "cancelado" })
-              .eq("ssotica_parcela_id", parcela.id);
+              .select("id, ssotica_cliente_id")
+              .eq("ssotica_parcela_id", parcela.id)
+              .maybeSingle();
+            if (existingPaid) {
+              if (existingPaid.ssotica_cliente_id) clientesAfetados.add(Number(existingPaid.ssotica_cliente_id));
+              await supabase.from("crm_cobrancas").delete().eq("id", existingPaid.id);
+              removed++;
+            }
           }
           continue;
         }
@@ -147,6 +153,8 @@ async function syncContasReceber(
 
         // Regra: incluir se já venceu OU vence em até 1 dia
         if (diasAtraso < -1) continue;
+
+        if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
 
         const colunaKey = statusKeyForDiasAtraso(diasAtraso);
 
