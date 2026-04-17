@@ -496,11 +496,33 @@ async function syncVendas(
       if (!cliente?.id) continue;
       const data = venda.data as string;
       const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
+      // Cacheia funcionário visto pra alimentar a tela de mapeamento
+      const func = venda.funcionario;
+      if (func?.id) {
+        funcionariosVistos.set(Number(func.id), {
+          nome: String(func.nome ?? "").trim(),
+          funcao: String(func.funcao ?? "").trim(),
+        });
+      }
       const prev = ultimaCompraPorCliente.get(cliente.id);
       if (!prev || prev.data < data) {
         ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
       }
     }
+  }
+
+  // Persiste cache de funcionários SSótica vistos (upsert)
+  if (funcionariosVistos.size > 0) {
+    const rows = Array.from(funcionariosVistos.entries()).map(([id, f]) => ({
+      company_id: integ.company_id,
+      ssotica_funcionario_id: id,
+      nome: f.nome || "(sem nome)",
+      funcao: f.funcao || null,
+      last_seen_at: new Date().toISOString(),
+    }));
+    await supabase
+      .from("ssotica_funcionarios")
+      .upsert(rows, { onConflict: "company_id,ssotica_funcionario_id" });
   }
 
   // Para cada cliente que comprou: se NÃO tem cobrança em aberto/vencida, vai para Renovações
