@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
 
     const { data: integ, error } = await supabase
       .from("ssotica_integrations")
-      .select("id, cnpj, bearer_token")
+      .select("id, cnpj, license_code, bearer_token")
       .eq("id", integrationId)
       .maybeSingle();
 
@@ -46,11 +46,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Mesma lógica do ssotica-sync: aceita CNPJ ou código alfanumérico
-    const raw = (integ.cnpj ?? "").trim();
-    const onlyDigits = raw.replace(/\D/g, "");
-    const isCnpj = !/[a-zA-Z]/.test(raw) && onlyDigits.length === 14;
-    const empresa = isCnpj ? onlyDigits : raw;
+    function normalize(v: string | null): string {
+      const raw = (v ?? "").trim();
+      const onlyDigits = raw.replace(/\D/g, "");
+      const isCnpj = !/[a-zA-Z]/.test(raw) && onlyDigits.length === 14;
+      return isCnpj ? onlyDigits : raw;
+    }
+
+    // Receber: usa código de licença se disponível, senão CNPJ
+    const empresaReceber = normalize(integ.license_code || integ.cnpj);
+    // Vendas: sempre CNPJ
+    const cnpjVendas = normalize(integ.cnpj);
 
     // Janela curta: últimos 7 dias
     const today = new Date();
@@ -60,7 +66,7 @@ Deno.serve(async (req) => {
     const results: any[] = [];
 
     // Teste 1: Contas a Receber
-    const urlReceber = `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${encodeURIComponent(empresa)}&inicio_periodo=${ymd(start)}&fim_periodo=${ymd(today)}&page=1&perPage=1`;
+    const urlReceber = `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${encodeURIComponent(empresaReceber)}&inicio_periodo=${ymd(start)}&fim_periodo=${ymd(today)}&page=1&perPage=1`;
     try {
       const res = await fetch(urlReceber, {
         headers: { Authorization: `Bearer ${integ.bearer_token}`, Accept: "application/json" },
@@ -83,8 +89,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Teste 2: Vendas (usa cnpj= em vez de empresa=)
-    const urlVendas = `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(empresa)}&inicio_periodo=${ymd(start)}&fim_periodo=${ymd(today)}`;
+    // Teste 2: Vendas (usa cnpj= e exige CNPJ puro)
+    const urlVendas = `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${ymd(start)}&fim_periodo=${ymd(today)}`;
     try {
       const res = await fetch(urlVendas, {
         headers: { Authorization: `Bearer ${integ.bearer_token}`, Accept: "application/json" },
@@ -111,8 +117,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         ok: allOk,
-        empresa_param: empresa,
-        is_cnpj_format: isCnpj,
+        empresa_param: empresaReceber,
+        cnpj_vendas: cnpjVendas,
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

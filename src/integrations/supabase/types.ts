@@ -954,6 +954,7 @@ export type Database = {
           last_error: string | null
           last_sync_receber_at: string | null
           last_sync_vendas_at: string | null
+          license_code: string | null
           sync_status: string
           updated_at: string
         }
@@ -968,6 +969,7 @@ export type Database = {
           last_error?: string | null
           last_sync_receber_at?: string | null
           last_sync_vendas_at?: string | null
+          license_code?: string | null
           sync_status?: string
           updated_at?: string
         }
@@ -982,6 +984,7 @@ export type Database = {
           last_error?: string | null
           last_sync_receber_at?: string | null
           last_sync_vendas_at?: string | null
+          license_code?: string | null
           sync_status?: string
           updated_at?: string
         }

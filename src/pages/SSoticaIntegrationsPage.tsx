@@ -63,6 +63,7 @@ interface Integration {
   id: string;
   company_id: string;
   cnpj: string;
+  license_code: string | null;
   bearer_token: string;
   is_active: boolean;
   initial_sync_done: boolean;
@@ -95,7 +96,7 @@ export default function SSoticaIntegrationsPage() {
     company: Company;
     integration?: Integration;
   } | null>(null);
-  const [form, setForm] = useState({ cnpj: "", bearer_token: "", is_active: true });
+  const [form, setForm] = useState({ cnpj: "", license_code: "", bearer_token: "", is_active: true });
   const [saving, setSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -159,6 +160,7 @@ export default function SSoticaIntegrationsPage() {
     setEditing({ company, integration });
     setForm({
       cnpj: integration?.cnpj ?? company.cnpj ?? "",
+      license_code: integration?.license_code ?? "",
       bearer_token: integration?.bearer_token ?? "",
       is_active: integration?.is_active ?? true,
     });
@@ -172,8 +174,7 @@ export default function SSoticaIntegrationsPage() {
     }
     setSaving(true);
     try {
-      // Aceita CNPJ ou Código de Licença alfanumérico do SSótica.
-      // Só remove pontuação se for um CNPJ puramente numérico de 14 dígitos.
+      // CNPJ: limpa pontuação se for um CNPJ numérico de 14 dígitos.
       const rawCnpj = form.cnpj.trim();
       const onlyDigits = rawCnpj.replace(/\D/g, "");
       const isCnpj = !/[a-zA-Z]/.test(rawCnpj) && onlyDigits.length === 14;
@@ -181,6 +182,7 @@ export default function SSoticaIntegrationsPage() {
       const payload = {
         company_id: editing.company.id,
         cnpj: cnpjToSave,
+        license_code: form.license_code.trim() || null,
         bearer_token: form.bearer_token.trim(),
         is_active: form.is_active,
       };
@@ -357,8 +359,9 @@ export default function SSoticaIntegrationsPage() {
                           <Building2 className="h-4 w-4 shrink-0" />
                           {company.name}
                         </CardTitle>
-                        <CardDescription className="truncate">
+                        <CardDescription className="truncate text-xs">
                           CNPJ: {integ?.cnpj || company.cnpj || "—"}
+                          {integ?.license_code && <> · Lic: {integ.license_code}</>}
                         </CardDescription>
                       </div>
                       {statusBadge(integ)}
@@ -447,24 +450,36 @@ export default function SSoticaIntegrationsPage() {
               {editing?.integration ? "Editar integração" : "Conectar loja"}: {editing?.company.name}
             </DialogTitle>
             <DialogDescription>
-              Cole o CNPJ (apenas números) ou o Código de Licença (alfanumérico) e o Bearer Token fornecido pelo SSótica.
+              CNPJ é usado para puxar Vendas. Código de Licença é usado para puxar Contas a Receber. Os dois são fornecidos pelo SSótica.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="cnpj">CNPJ ou Código de Licença</Label>
+              <Label htmlFor="cnpj">CNPJ da loja <span className="text-destructive">*</span></Label>
               <Input
                 id="cnpj"
                 value={form.cnpj}
                 onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                placeholder="CNPJ (00000000000000) ou código alfanumérico"
+                placeholder="00000000000000"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                O SSótica aceita ambos. Se o CNPJ não funcionar, tente o código de licença da loja.
+                CNPJ puro (14 dígitos). Usado no endpoint de <strong>Vendas</strong>.
               </p>
             </div>
             <div>
-              <Label htmlFor="token">Bearer Token</Label>
+              <Label htmlFor="license_code">Código de Licença SSótica</Label>
+              <Input
+                id="license_code"
+                value={form.license_code}
+                onChange={(e) => setForm({ ...form, license_code: e.target.value })}
+                placeholder="Ex: SXGP-CQM3"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Código alfanumérico fornecido pelo SSótica. Usado no endpoint de <strong>Contas a Receber</strong>. Se vazio, usa o CNPJ.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="token">Bearer Token <span className="text-destructive">*</span></Label>
               <Input
                 id="token"
                 type="password"
@@ -562,8 +577,10 @@ export default function SSoticaIntegrationsPage() {
             </DialogTitle>
             <DialogDescription>
               {testResult?._company && <span className="font-medium">{testResult._company} · </span>}
-              Parâmetro enviado: <code className="bg-muted px-1 rounded">{testResult?.empresa_param}</code>{" "}
-              ({testResult?.is_cnpj_format ? "formato CNPJ" : "código alfanumérico"})
+              Receber: <code className="bg-muted px-1 rounded">{testResult?.empresa_param}</code>
+              {testResult?.cnpj_vendas && (
+                <> · Vendas: <code className="bg-muted px-1 rounded">{testResult.cnpj_vendas}</code></>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

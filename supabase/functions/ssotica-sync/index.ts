@@ -86,10 +86,20 @@ interface Integration {
   id: string;
   company_id: string;
   cnpj: string;
+  license_code: string | null;
   bearer_token: string;
   initial_sync_done: boolean;
   last_sync_vendas_at: string | null;
   last_sync_receber_at: string | null;
+}
+
+// Normaliza um valor para usar nas APIs do SSótica.
+// Para CNPJ: remove pontuação. Para código de licença: mantém como está.
+function normalizeIdentifier(value: string): string {
+  const raw = (value ?? "").trim();
+  const onlyDigits = raw.replace(/\D/g, "");
+  const isCnpj = !/[a-zA-Z]/.test(raw) && onlyDigits.length === 14;
+  return isCnpj ? onlyDigits : raw;
 }
 
 async function syncContasReceber(
@@ -105,12 +115,8 @@ async function syncContasReceber(
   const windows = buildWindows(startDate, endDate);
 
   let processed = 0, created = 0, updated = 0, removed = 0;
-  // Aceita CNPJ (só dígitos) OU código de licença alfanumérico do SSótica.
-  // Só remove pontuação se o valor for um CNPJ formatado (tem 14 dígitos quando limpo E não tem letras).
-  const raw = (integ.cnpj ?? "").trim();
-  const onlyDigits = raw.replace(/\D/g, "");
-  const isCnpj = !/[a-zA-Z]/.test(raw) && onlyDigits.length === 14;
-  const cnpjClean = isCnpj ? onlyDigits : raw;
+  // Contas a Receber: usa o Código de Licença se disponível, senão usa o CNPJ.
+  const empresaParam = normalizeIdentifier(integ.license_code || integ.cnpj);
 
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
   // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
@@ -121,7 +127,7 @@ async function syncContasReceber(
     let page = 1;
     while (true) {
       const url =
-        `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${cnpjClean}&inicio_periodo=${w.start}&fim_periodo=${w.end}&page=${page}&perPage=100`;
+        `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${encodeURIComponent(empresaParam)}&inicio_periodo=${w.start}&fim_periodo=${w.end}&page=${page}&perPage=100`;
       const json = await fetchSSotica(url, integ.bearer_token) as {
         currentPage?: number;
         totalPages?: number;
@@ -284,17 +290,15 @@ async function syncVendas(
   const windows = buildWindows(startDate, endDate);
 
   let processed = 0, created = 0, updated = 0;
-  const raw = (integ.cnpj ?? "").trim();
-  const onlyDigits = raw.replace(/\D/g, "");
-  const isCnpj = !/[a-zA-Z]/.test(raw) && onlyDigits.length === 14;
-  const cnpjClean = isCnpj ? onlyDigits : raw;
+  // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
+  const cnpjVendas = normalizeIdentifier(integ.cnpj);
 
   // Mapa cliente_id -> última venda (data + venda_id + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; cliente: any }>();
 
   for (const w of windows) {
     const url =
-      `${SSOTICA_BASE}/vendas/periodo?cnpj=${cnpjClean}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+      `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
     const vendas = await fetchSSotica(url, integ.bearer_token) as any[];
     if (!Array.isArray(vendas)) continue;
 
