@@ -154,7 +154,7 @@ function isSamePerson(nameA: unknown, nameB: unknown): boolean {
 async function syncContasReceber(
   supabase: any,
   integ: Integration,
-): Promise<{ processed: number; created: number; updated: number; removed: number }> {
+): Promise<{ processed: number; created: number; updated: number; removed: number; clientesQuitados: number[] }> {
   const today = new Date();
   // SEMPRE buscar 180 dias para trás para garantir que parcelas em atraso antigas sejam pegas.
   // Não usar last_sync_receber_at aqui porque parcelas vencidas há muito tempo continuam ativas
@@ -394,6 +394,13 @@ async function syncContasReceber(
       });
       created++;
     }
+
+    // Cliente entrou em cobrança → remove da Renovação (se estiver lá)
+    await supabase
+      .from("crm_renovacoes")
+      .delete()
+      .eq("ssotica_cliente_id", clienteIdNum)
+      .eq("ssotica_company_id", integ.company_id);
   }
 
   // ===== Pós-processamento: remover cards de clientes que não têm mais nenhuma parcela em atraso =====
@@ -406,16 +413,20 @@ async function syncContasReceber(
     .not("ssotica_cliente_id", "is", null);
   const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
 
+  // Clientes que tinham cobrança no banco mas não têm mais parcela ativa = QUITARAM
+  const clientesQuitadosSet = new Set<number>();
+
   if (storedCobrancas.length > 0) {
     for (const cob of storedCobrancas) {
       const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
       const clienteId = Number(cob.ssotica_cliente_id);
       // Se a parcela atual ainda está ativa OU o cliente foi atualizado nesta sync, mantém
       if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
-      if (clientesAfetados.has(clienteId)) continue;
-      // Cliente sumiu da API → remove o card
+      if (clientesAfetados.has(clienteId) && parcelasPorCliente.has(clienteId)) continue;
+      // Cliente sumiu da API ou todas as parcelas viraram inativas → remove o card e marca como quitado
       await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
       removed++;
+      clientesQuitadosSet.add(clienteId);
     }
   }
 
@@ -423,18 +434,22 @@ async function syncContasReceber(
   const topSituacoes = Array.from(situacoesVistas.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
-  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} processed=${processed} created=${created} updated=${updated} removed=${removed} skipped=${JSON.stringify(skipped)} top_situacoes=${JSON.stringify(topSituacoes)}`);
+  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} processed=${processed} created=${created} updated=${updated} removed=${removed} quitados=${clientesQuitadosSet.size} skipped=${JSON.stringify(skipped)} top_situacoes=${JSON.stringify(topSituacoes)}`);
 
-  return { processed, created, updated, removed };
+  return { processed, created, updated, removed, clientesQuitados: Array.from(clientesQuitadosSet) };
 }
 
 async function syncVendas(
   supabase: any,
   integ: Integration,
   forceFull = false,
+  clientesQuitados: number[] = [],
 ): Promise<{ processed: number; created: number; updated: number }> {
   const today = new Date();
-  const startDate = !forceFull && integ.initial_sync_done && integ.last_sync_vendas_at
+  // Se há clientes que acabaram de quitar, força janela completa para garantir
+  // que peguemos a última venda deles e criemos/atualizemos o card de Renovação.
+  const useFullWindow = forceFull || clientesQuitados.length > 0;
+  const startDate = !useFullWindow && integ.initial_sync_done && integ.last_sync_vendas_at
     ? addDays(new Date(integ.last_sync_vendas_at), -1)
     : addDays(today, -INITIAL_LOOKBACK_DAYS);
   const endDate = today;
@@ -689,8 +704,8 @@ Deno.serve(async (req) => {
 
         // 1. Contas a Receber primeiro (para que Renovações saibam quem tem dívida)
         const cr = await syncContasReceber(supabase, integ);
-        // 2. Vendas (forceFull rebusca os últimos 6 meses, ignorando last_sync_vendas_at)
-        const v = await syncVendas(supabase, integ, forceFull);
+        // 2. Vendas (forceFull rebusca os últimos 14 meses; quitados também forçam janela cheia)
+        const v = await syncVendas(supabase, integ, forceFull, cr.clientesQuitados);
 
         const finishedAt = new Date().toISOString();
         await supabase.from("ssotica_integrations").update({
