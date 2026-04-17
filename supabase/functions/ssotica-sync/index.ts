@@ -306,7 +306,7 @@ async function syncContasReceber(
 
         // === 1 card por cliente: upsert por (ssotica_company_id, ssotica_cliente_id) ===
         // Mantemos sempre os dados da parcela MAIS ANTIGA em atraso para esse cliente.
-        if (!cliente?.id) continue;
+        if (!cliente?.id) { skipped.semCliente++; continue; }
 
         const { data: existing } = await supabase
           .from("crm_cobrancas")
