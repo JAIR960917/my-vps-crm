@@ -448,16 +448,16 @@ async function syncVendas(
   integ: Integration,
   forceFull = false,
   clientesQuitados: number[] = [],
-): Promise<{ processed: number; created: number; updated: number }> {
+): Promise<{ processed: number; created: number; updated: number; chunks: number }> {
   const today = new Date();
-  // Se há clientes que acabaram de quitar, força janela completa para garantir
-  // que peguemos a última venda deles e criemos/atualizemos o card de Renovação.
-  const useFullWindow = forceFull || clientesQuitados.length > 0;
-  const startDate = !useFullWindow && integ.initial_sync_done && integ.last_sync_vendas_at
+  // Se há clientes que acabaram de quitar OU é a primeira sync OU resync forçado,
+  // varre todo o histórico de 96 meses (em chunks). Caso contrário, sync incremental
+  // a partir do último sync.
+  const useFullWindow = forceFull || clientesQuitados.length > 0 || !integ.initial_sync_done;
+  const overallStart = !useFullWindow && integ.last_sync_vendas_at
     ? addDays(new Date(integ.last_sync_vendas_at), -1)
-    : addDays(today, -INITIAL_LOOKBACK_DAYS);
-  const endDate = today;
-  const windows = buildWindows(startDate, endDate);
+    : addDays(today, -VENDAS_MAX_HISTORY_DAYS);
+  const overallEnd = today;
 
   let processed = 0, created = 0, updated = 0;
   // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
