@@ -111,19 +111,35 @@ export default function CobrancaEditSheet(props: Props) {
   };
 
   const fetchParcelas = async () => {
-    if (!ssoticaClienteId || !ssoticaCompanyId) {
+    setLoadingParcelas(true);
+    const onlyDigits = (s: string) => (s || "").replace(/\D/g, "");
+    const cpfDigits = onlyDigits(formData.documento || formData.cpf || "");
+    const nome = (formData.nome || "").trim();
+
+    let query = supabase
+      .from("crm_cobrancas")
+      .select("id, valor, vencimento, dias_atraso, status, data, ssotica_cliente_id")
+      .order("vencimento", { ascending: true });
+
+    // Estratégia 1: vinculado ao SSótica → busca por cliente_id + company_id
+    if (ssoticaClienteId && ssoticaCompanyId) {
+      query = query.eq("ssotica_cliente_id", ssoticaClienteId).eq("ssotica_company_id", ssoticaCompanyId);
+    } else if (cpfDigits.length >= 11) {
+      // Estratégia 2: busca por CPF (igualando só dígitos do JSON data->>documento)
+      query = query.or(`data->>documento.eq.${cpfDigits},data->>cpf.eq.${cpfDigits}`);
+    } else if (nome) {
+      // Estratégia 3: busca por nome exato (caso manual sem SSótica e sem CPF)
+      query = query.eq("data->>nome", nome);
+    } else {
       setParcelas([]);
+      setLoadingParcelas(false);
       return;
     }
-    setLoadingParcelas(true);
-    const { data, error } = await supabase
-      .from("crm_cobrancas")
-      .select("id, valor, vencimento, dias_atraso, status, data")
-      .eq("ssotica_cliente_id", ssoticaClienteId)
-      .eq("ssotica_company_id", ssoticaCompanyId)
-      .order("vencimento", { ascending: true });
+
+    const { data, error } = await query;
     if (!error && data) {
-      const list: ParcelaInfo[] = data.map((p: any) => ({
+      // Filtra duplicatas por id
+      const list: ParcelaInfo[] = (data as any[]).map((p: any) => ({
         id: p.id,
         numero_parcela: p.data?.numero_parcela ? Number(p.data.numero_parcela) : null,
         vencimento: p.vencimento,
@@ -133,6 +149,8 @@ export default function CobrancaEditSheet(props: Props) {
         is_current: p.id === cobrancaId,
       }));
       setParcelas(list);
+    } else {
+      setParcelas([]);
     }
     setLoadingParcelas(false);
   };
@@ -145,6 +163,7 @@ export default function CobrancaEditSheet(props: Props) {
       setNewComment("");
       setTaskOpen(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, cobrancaId, ssoticaClienteId, ssoticaCompanyId]);
 
   const timeline = useMemo(() => {
