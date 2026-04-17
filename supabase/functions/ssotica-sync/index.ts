@@ -193,6 +193,8 @@ async function syncContasReceber(
   // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
   const parcelasAtivasIds = new Set<number>();
   const clientesAfetados = new Set<number>();
+  // Agrupa todas as parcelas em atraso por cliente para upsert único depois
+  const parcelasPorCliente = new Map<number, { cliente: any; parcelas: any[] }>();
 
   for (const w of windows) {
     let page = 1;
