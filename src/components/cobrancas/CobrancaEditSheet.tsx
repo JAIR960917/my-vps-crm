@@ -430,16 +430,14 @@ export default function CobrancaEditSheet(props: Props) {
               {tab === "parcelas" && (
                 <ScrollArea className="flex-1">
                   <div className="p-5 space-y-4">
-                    {!ssoticaClienteId || !ssoticaCompanyId ? (
-                      <div className="text-center text-sm text-muted-foreground py-12">
-                        Esta cobrança não está vinculada ao SSótica.
-                        <br />
-                        Não é possível listar outras parcelas do cliente.
-                      </div>
-                    ) : loadingParcelas ? (
+                    {loadingParcelas ? (
                       <p className="text-center text-sm text-muted-foreground py-12">Carregando parcelas...</p>
                     ) : parcelas.length === 0 ? (
-                      <p className="text-center text-sm text-muted-foreground py-12">Nenhuma parcela encontrada.</p>
+                      <div className="text-center text-sm text-muted-foreground py-12">
+                        Nenhuma outra parcela encontrada para este cliente.
+                        <br />
+                        <span className="text-xs">Cadastre o CPF ou sincronize com o SSótica para agrupar parcelas do mesmo cliente.</span>
+                      </div>
                     ) : (
                       <>
                         {/* Summary cards */}
