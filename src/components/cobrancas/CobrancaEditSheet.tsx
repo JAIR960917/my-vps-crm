@@ -525,6 +525,7 @@ export default function CobrancaEditSheet(props: Props) {
               )}
 
               {/* Timeline */}
+              {tab !== "parcelas" && (
               <ScrollArea className="flex-1">
                 <div className="p-5 space-y-3">
                   {tab === "atividade" && timeline.length === 0 && (
