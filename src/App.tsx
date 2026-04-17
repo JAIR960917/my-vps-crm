@@ -12,6 +12,7 @@ import UsersPage from "./pages/UsersPage";
 import ColumnsPage from "./pages/ColumnsPage";
 import CompaniesPage from "./pages/CompaniesPage";
 import FormBuilderPage from "./pages/FormBuilderPage";
+import RenovacaoFormBuilderPage from "./pages/RenovacaoFormBuilderPage";
 import NewLeadPage from "./pages/NewLeadPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -78,6 +79,7 @@ const AppRoutes = () => {
       <Route path="/empresas" element={<RoleGate><CompaniesPage /></RoleGate>} />
       <Route path="/colunas" element={<RoleGate><ColumnsPage /></RoleGate>} />
       <Route path="/formulario" element={<RoleGate><FormBuilderPage /></RoleGate>} />
+      <Route path="/formulario-renovacao" element={<RoleGate><RenovacaoFormBuilderPage /></RoleGate>} />
       <Route path="/novo-lead" element={<RoleGate><NewLeadPage /></RoleGate>} />
       <Route path="/configuracoes" element={<RoleGate><SettingsPage /></RoleGate>} />
       <Route path="/perfil" element={<RoleGate><ProfilePage /></RoleGate>} />
