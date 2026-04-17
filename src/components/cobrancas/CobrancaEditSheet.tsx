@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil } from "lucide-react";
+import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
@@ -30,10 +30,22 @@ type Note = {
   id: string; cobranca_id: string; user_id: string; content: string; created_at: string;
 };
 
+type ParcelaInfo = {
+  id: string;
+  numero_parcela: number | null;
+  vencimento: string | null;
+  valor: number;
+  dias_atraso: number | null;
+  status: string;
+  is_current: boolean;
+};
+
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   cobrancaId: string | null;
+  ssoticaClienteId?: number | null;
+  ssoticaCompanyId?: string | null;
   formData: Record<string, any>;
   setFormData: (d: Record<string, any>) => void;
   formStatus: string;
