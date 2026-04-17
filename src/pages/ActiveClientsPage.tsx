@@ -89,16 +89,18 @@ export default function ActiveClientsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: items }, { data: sts }, { data: profs }, { data: ff }] = await Promise.all([
+    const [{ data: items }, { data: sts }, { data: profs }, { data: ff }, { data: acts }] = await Promise.all([
       supabase.from("crm_renovacoes").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
+      supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
     ]);
     setRenovacoes((items || []) as Renovacao[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setFields((ff || []) as unknown as FormField[]);
+    setActivities((acts || []) as RenovacaoActivity[]);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
