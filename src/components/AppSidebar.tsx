@@ -76,7 +76,7 @@ export default function AppSidebar({ onNavigate }: Props) {
 
   return (
     <aside className="flex h-screen w-60 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex items-center gap-2 px-5 py-5">
+      <div className="flex items-center gap-2 px-5 py-5 flex-shrink-0">
         {settings.logo_url ? (
           <img src={settings.logo_url} alt="Logo" className="h-8 w-8 rounded-lg object-contain" />
         ) : (
