@@ -98,6 +98,20 @@ interface Integration {
   initial_sync_done: boolean;
   last_sync_vendas_at: string | null;
   last_sync_receber_at: string | null;
+  backfill_chunk_index: number;
+  backfill_total_chunks: number;
+  backfill_status: string; // 'idle' | 'running' | 'done' | 'error'
+  backfill_started_at: string | null;
+  backfill_next_run_at: string | null;
+}
+
+// Calcula a janela de datas de um chunk específico (chunk 0 = mais recente).
+// chunk 0 → últimos 12 meses; chunk 1 → 12-24 meses atrás; ... ; chunk 7 → 84-96 meses atrás.
+function chunkDateRange(chunkIndex: number, futureDays = 0): { start: Date; end: Date } {
+  const today = new Date();
+  const end = addDays(today, futureDays - chunkIndex * CHUNK_DAYS);
+  const start = addDays(end, -(CHUNK_DAYS - 1));
+  return { start, end };
 }
 
 type CompanyProfile = {
