@@ -425,13 +425,21 @@ export default function CobrancasPage() {
       {/* Mobile: Active column */}
       <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
         {statuses.filter(s => s.key === mobileTab).map(status => {
-          const items = getByStatus(status.key);
+          const { all, visible, hasMore } = getVisibleByStatus(status.key);
           return (
             <div key={status.key}>
-              {items.length === 0 && (
+              {all.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhuma cobrança nesta coluna</p>
               )}
-              {items.map(c => <div key={c.id} className="mb-2">{renderCard(c)}</div>)}
+              {visible.map(c => <div key={c.id} className="mb-2">{renderCard(c)}</div>)}
+              {hasMore && (
+                <button
+                  onClick={() => showMore(status.key)}
+                  className="w-full py-2.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-primary/30 mb-2 transition-colors"
+                >
+                  Carregar mais ({all.length - visible.length} restantes)
+                </button>
+              )}
               {canCreate && (
                 <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
                   + Adicionar cobrança
