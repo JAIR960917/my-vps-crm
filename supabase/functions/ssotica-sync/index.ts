@@ -246,6 +246,7 @@ async function syncContasReceber(
             ssotica_titulo_id: parcela.titulo?.id ?? null,
             ssotica_cliente_id: cliente.id ?? null,
             ssotica_company_id: integ.company_id,
+            assigned_to: defaultAssignee,
             data,
             valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
             vencimento,
