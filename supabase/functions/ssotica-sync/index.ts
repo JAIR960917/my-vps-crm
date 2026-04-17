@@ -394,6 +394,13 @@ async function syncContasReceber(
       });
       created++;
     }
+
+    // Cliente entrou em cobrança → remove da Renovação (se estiver lá)
+    await supabase
+      .from("crm_renovacoes")
+      .delete()
+      .eq("ssotica_cliente_id", clienteIdNum)
+      .eq("ssotica_company_id", integ.company_id);
   }
 
   // ===== Pós-processamento: remover cards de clientes que não têm mais nenhuma parcela em atraso =====
