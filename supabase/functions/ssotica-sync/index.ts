@@ -154,7 +154,7 @@ function isSamePerson(nameA: unknown, nameB: unknown): boolean {
 async function syncContasReceber(
   supabase: any,
   integ: Integration,
-): Promise<{ processed: number; created: number; updated: number; removed: number }> {
+): Promise<{ processed: number; created: number; updated: number; removed: number; clientesQuitados: number[] }> {
   const today = new Date();
   // SEMPRE buscar 180 dias para trás para garantir que parcelas em atraso antigas sejam pegas.
   // Não usar last_sync_receber_at aqui porque parcelas vencidas há muito tempo continuam ativas
