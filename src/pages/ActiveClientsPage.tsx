@@ -558,6 +558,8 @@ export default function ActiveClientsPage() {
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map(status => {
             const items = getByStatus(status.key);
+            const visibleItems = items.slice(0, getVisibleCount(status.key));
+            const hasMore = items.length > visibleItems.length;
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
@@ -568,11 +570,15 @@ export default function ActiveClientsPage() {
                 </div>
                 <Droppable droppableId={status.key}>
                   {(provided, snapshot) => (
-                    <div ref={provided.innerRef} {...provided.droppableProps}
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      onScroll={(e) => handleColumnScroll(e, status.key)}
                       className={`flex-1 rounded-xl p-2 space-y-2 transition-colors overflow-y-auto min-h-0 ${
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
-                      }`}>
-                      {items.map((r, index) => (
+                      }`}
+                    >
+                      {visibleItems.map((r, index) => (
                         <Draggable key={r.id} draggableId={r.id} index={index}>
                           {(provided, snapshot) => (
                             <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}
@@ -583,6 +589,14 @@ export default function ActiveClientsPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
+                      {hasMore && (
+                        <button
+                          onClick={() => loadMore(status.key)}
+                          className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-dashed border-primary/40 transition-colors"
+                        >
+                          Carregar mais ({items.length - visibleItems.length} restantes)
+                        </button>
+                      )}
                       <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
                         + Adicionar renovação
                       </button>
