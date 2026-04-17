@@ -152,7 +152,7 @@ function isSamePerson(nameA: unknown, nameB: unknown): boolean {
 }
 
 async function syncContasReceber(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   integ: Integration,
 ): Promise<{ processed: number; created: number; updated: number; removed: number }> {
   const today = new Date();
@@ -346,7 +346,7 @@ async function syncContasReceber(
 }
 
 async function syncVendas(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   integ: Integration,
 ): Promise<{ processed: number; created: number; updated: number }> {
   const today = new Date();
