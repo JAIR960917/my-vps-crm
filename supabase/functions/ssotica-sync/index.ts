@@ -485,6 +485,14 @@ async function syncVendas(
     (mappings ?? []).map((m: any) => [Number(m.ssotica_funcionario_id), m.user_id as string]),
   );
 
+  // Pool de vendedores ATIVOS da loja para fallback round-robin (quando nenhum
+  // vendedor SSótica está mapeado e nenhum match por nome foi encontrado).
+  // Inclui apenas role "vendedor" — gerente fica como último fallback.
+  const vendedoresPool = typedCompanyProfiles
+    .filter((p) => roleByUserId.get(p.user_id) === "vendedor")
+    .map((p) => p.user_id)
+    .sort(); // ordem estável
+
   const findResponsibleProfile = (responsavelNome: string | null | undefined) => {
     if (!responsavelNome) return null;
 
