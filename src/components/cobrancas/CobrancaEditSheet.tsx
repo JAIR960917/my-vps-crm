@@ -116,19 +116,48 @@ export default function CobrancaEditSheet(props: Props) {
     const cpfDigits = onlyDigits(formData.documento || formData.cpf || "");
     const nome = (formData.nome || "").trim();
 
+    // Estratégia 1 (preferida): se vinculado ao SSótica, lê a lista completa de parcelas
+    // que o sync já gravou no JSON `data.parcelas_atrasadas` deste card.
+    if (ssoticaClienteId && ssoticaCompanyId && cobrancaId) {
+      const { data: card, error } = await supabase
+        .from("crm_cobrancas")
+        .select("data, ssotica_parcela_id")
+        .eq("id", cobrancaId)
+        .maybeSingle();
+
+      const lista = (card as any)?.data?.parcelas_atrasadas as any[] | undefined;
+      const currentParcelaId = (card as any)?.ssotica_parcela_id;
+      if (!error && Array.isArray(lista) && lista.length > 0) {
+        const parcelasInfo: ParcelaInfo[] = lista.map((p: any, idx: number) => ({
+          id: String(p.parcela_id ?? `${p.titulo_id ?? "tit"}-${p.numero_parcela ?? idx}`),
+          numero_parcela: p.numero_parcela != null ? Number(p.numero_parcela) : null,
+          vencimento: p.vencimento,
+          valor: Number(p.valor || 0),
+          dias_atraso: p.dias_atraso ?? null,
+          status: null,
+          is_current: currentParcelaId != null && String(p.parcela_id) === String(currentParcelaId),
+        }));
+        // Ordena por vencimento (mais antiga primeiro)
+        parcelasInfo.sort((a, b) =>
+          (a.vencimento ?? "") < (b.vencimento ?? "") ? -1 : (a.vencimento ?? "") > (b.vencimento ?? "") ? 1 : 0
+        );
+        setParcelas(parcelasInfo);
+        setLoadingParcelas(false);
+        return;
+      }
+    }
+
+    // Fallback: agrupa cards do mesmo cliente (manual / sem SSótica)
     let query = supabase
       .from("crm_cobrancas")
       .select("id, valor, vencimento, dias_atraso, status, data, ssotica_cliente_id")
       .order("vencimento", { ascending: true });
 
-    // Estratégia 1: vinculado ao SSótica → busca por cliente_id + company_id
     if (ssoticaClienteId && ssoticaCompanyId) {
       query = query.eq("ssotica_cliente_id", ssoticaClienteId).eq("ssotica_company_id", ssoticaCompanyId);
     } else if (cpfDigits.length >= 11) {
-      // Estratégia 2: busca por CPF (igualando só dígitos do JSON data->>documento)
       query = query.or(`data->>documento.eq.${cpfDigits},data->>cpf.eq.${cpfDigits}`);
     } else if (nome) {
-      // Estratégia 3: busca por nome exato (caso manual sem SSótica e sem CPF)
       query = query.eq("data->>nome", nome);
     } else {
       setParcelas([]);
@@ -138,7 +167,6 @@ export default function CobrancaEditSheet(props: Props) {
 
     const { data, error } = await query;
     if (!error && data) {
-      // Filtra duplicatas por id
       const list: ParcelaInfo[] = (data as any[]).map((p: any) => ({
         id: p.id,
         numero_parcela: p.data?.numero_parcela ? Number(p.data.numero_parcela) : null,

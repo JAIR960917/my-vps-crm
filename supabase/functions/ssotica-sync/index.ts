@@ -193,6 +193,8 @@ async function syncContasReceber(
   // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
   const parcelasAtivasIds = new Set<number>();
   const clientesAfetados = new Set<number>();
+  // Agrupa todas as parcelas em atraso por cliente para upsert único depois
+  const parcelasPorCliente = new Map<number, { cliente: any; parcelas: any[] }>();
 
   for (const w of windows) {
     let page = 1;
@@ -290,84 +292,107 @@ async function syncContasReceber(
 
         if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
 
-        const colunaKey = statusKeyForDiasAtraso(diasAtraso);
-
         // O cliente vem dentro de parcela.titulo.cliente (não direto em parcela.cliente)
         const cliente = parcela.titulo?.cliente ?? parcela.cliente ?? {};
-        if (cliente?.id) clientesAfetados.add(Number(cliente.id));
-        const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
-        const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
-        const data = {
-          nome: cliente.nome ?? "Cliente SSótica",
-          telefone,
-          documento,
-          cpf: documento,
-          email: cliente.email_principal ?? cliente.email ?? "",
+        if (!cliente?.id) { skipped.semCliente++; continue; }
+        clientesAfetados.add(Number(cliente.id));
+
+        // Acumula a parcela na lista do cliente. O upsert é feito DEPOIS de coletar tudo.
+        const clienteIdNum = Number(cliente.id);
+        let bucket = parcelasPorCliente.get(clienteIdNum);
+        if (!bucket) {
+          bucket = { cliente, parcelas: [] };
+          parcelasPorCliente.set(clienteIdNum, bucket);
+        }
+        bucket.parcelas.push({
+          parcela_id: parcela.id ? Number(parcela.id) : null,
+          titulo_id: parcela.titulo?.id ? Number(parcela.titulo.id) : null,
+          numero_parcela: parcela.numero_parcela ?? null,
+          vencimento,
+          dias_atraso: diasAtraso,
+          valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
+          situacao: situacaoRaw,
+          forma_pagamento: parcela.forma_pagamento ?? "",
           numero_documento: parcela.titulo?.numero_documento ?? "",
           descricao: parcela.titulo?.descricao ?? "",
-          numero_parcela: parcela.numero_parcela ?? null,
-          forma_pagamento: parcela.forma_pagamento ?? "",
           boleto_nosso_numero: parcela.boleto?.nosso_numero ?? null,
           ssotica_raw: parcela,
-        };
-
-        // === 1 card por cliente: upsert por (ssotica_company_id, ssotica_cliente_id) ===
-        // Mantemos sempre os dados da parcela MAIS ANTIGA em atraso para esse cliente.
-        if (!cliente?.id) { skipped.semCliente++; continue; }
-
-        const { data: existing } = await supabase
-          .from("crm_cobrancas")
-          .select("id, vencimento, ssotica_parcela_id")
-          .eq("ssotica_company_id", integ.company_id)
-          .eq("ssotica_cliente_id", cliente.id)
-          .maybeSingle();
-        const existingCobranca = existing as ExistingCobranca | null;
-
-        if (existingCobranca) {
-          // Só atualiza para essa parcela se ela for mais antiga (ou igual) à atualmente armazenada
-          const existingVencDate = existingCobranca.vencimento
-            ? new Date(existingCobranca.vencimento + "T00:00:00Z").getTime()
-            : Number.POSITIVE_INFINITY;
-          const novaVencTime = vencDate.getTime();
-
-          if (novaVencTime <= existingVencDate) {
-            await supabase
-              .from("crm_cobrancas")
-              .update({
-                ssotica_parcela_id: parcela.id ?? null,
-                ssotica_titulo_id: parcela.titulo?.id ?? null,
-                data,
-                valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
-                vencimento,
-                dias_atraso: diasAtraso,
-                status: colunaKey,
-                scheduled_date: vencimento,
-              })
-              .eq("id", existingCobranca.id);
-            updated++;
-          }
-        } else {
-          await supabase.from("crm_cobrancas").insert({
-            company_id: integ.company_id,
-            ssotica_parcela_id: parcela.id ?? null,
-            ssotica_titulo_id: parcela.titulo?.id ?? null,
-            ssotica_cliente_id: cliente.id ?? null,
-            ssotica_company_id: integ.company_id,
-            assigned_to: defaultAssignee,
-            data,
-            valor: Number(parcela.valor_reajustado ?? parcela.valor_original ?? 0),
-            vencimento,
-            dias_atraso: diasAtraso,
-            status: colunaKey,
-            scheduled_date: vencimento,
-          });
-          created++;
-        }
+        });
       }
 
       const totalPages = json.totalPages ?? 1;
       if (page >= totalPages) break;
       page++;
+    }
+  }
+
+  // ===== Upsert por cliente: 1 card com a lista de TODAS as parcelas em atraso =====
+  for (const [clienteIdNum, { cliente, parcelas }] of parcelasPorCliente.entries()) {
+    // Ordena parcelas pelo vencimento mais antigo primeiro
+    parcelas.sort((a, b) => (a.vencimento < b.vencimento ? -1 : a.vencimento > b.vencimento ? 1 : 0));
+    const maisAntiga = parcelas[0];
+    const totalAtraso = parcelas.reduce((s, p) => s + p.valor, 0);
+    const colunaKey = statusKeyForDiasAtraso(maisAntiga.dias_atraso);
+
+    const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
+    const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
+    const data = {
+      nome: cliente.nome ?? "Cliente SSótica",
+      telefone,
+      documento,
+      cpf: documento,
+      email: cliente.email_principal ?? cliente.email ?? "",
+      numero_documento: maisAntiga.numero_documento,
+      descricao: maisAntiga.descricao,
+      numero_parcela: maisAntiga.numero_parcela,
+      forma_pagamento: maisAntiga.forma_pagamento,
+      boleto_nosso_numero: maisAntiga.boleto_nosso_numero,
+      // Lista completa de parcelas em atraso desse cliente (consumida pela aba Parcelas no front)
+      parcelas_atrasadas: parcelas,
+      total_atraso: totalAtraso,
+      qtd_parcelas_atrasadas: parcelas.length,
+      ssotica_raw: maisAntiga.ssotica_raw,
+    };
+
+    const { data: existing } = await supabase
+      .from("crm_cobrancas")
+      .select("id")
+      .eq("ssotica_company_id", integ.company_id)
+      .eq("ssotica_cliente_id", clienteIdNum)
+      .maybeSingle();
+    const existingCobranca = existing as ExistingCobranca | null;
+
+    if (existingCobranca) {
+      await supabase
+        .from("crm_cobrancas")
+        .update({
+          ssotica_parcela_id: maisAntiga.parcela_id,
+          ssotica_titulo_id: maisAntiga.titulo_id,
+          data,
+          valor: totalAtraso,
+          vencimento: maisAntiga.vencimento,
+          dias_atraso: maisAntiga.dias_atraso,
+          status: colunaKey,
+          scheduled_date: maisAntiga.vencimento,
+        })
+        .eq("id", existingCobranca.id);
+      updated++;
+    } else {
+      await supabase.from("crm_cobrancas").insert({
+        company_id: integ.company_id,
+        ssotica_parcela_id: maisAntiga.parcela_id,
+        ssotica_titulo_id: maisAntiga.titulo_id,
+        ssotica_cliente_id: clienteIdNum,
+        ssotica_company_id: integ.company_id,
+        assigned_to: defaultAssignee,
+        data,
+        valor: totalAtraso,
+        vencimento: maisAntiga.vencimento,
+        dias_atraso: maisAntiga.dias_atraso,
+        status: colunaKey,
+        scheduled_date: maisAntiga.vencimento,
+      });
+      created++;
     }
   }
 
