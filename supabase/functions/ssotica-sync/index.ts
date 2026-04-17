@@ -316,8 +316,8 @@ async function syncVendas(
   // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
   const cnpjVendas = normalizeIdentifier(integ.cnpj);
 
-  // Mapa cliente_id -> última venda (data + venda_id + cliente)
-  const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; cliente: any }>();
+  // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
+  const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any }>();
 
   for (const w of windows) {
     const url =
@@ -331,9 +331,10 @@ async function syncVendas(
       const cliente = venda.cliente;
       if (!cliente?.id) continue;
       const data = venda.data as string;
+      const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
       const prev = ultimaCompraPorCliente.get(cliente.id);
       if (!prev || prev.data < data) {
-        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, cliente });
+        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente });
       }
     }
   }
