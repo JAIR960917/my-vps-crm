@@ -349,61 +349,180 @@ export default function CobrancaEditSheet(props: Props) {
             </div>
           ) : (
             <>
-              {/* Comment / Task input bar */}
-              <div className="px-5 py-3 border-b flex items-center gap-2">
-                <Input
-                  placeholder="Adicionar comentário..."
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handlePostComment(); } }}
-                />
-                <Button onClick={handlePostComment} disabled={postingComment || !newComment.trim()} variant="destructive">
-                  Enviar
-                </Button>
-                <Popover open={taskOpen} onOpenChange={setTaskOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Plus className="h-4 w-4 mr-1" /> Tarefa
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80" align="end">
-                    <div className="space-y-3">
-                      <h4 className="font-semibold text-sm">Nova Tarefa</h4>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Título</Label>
-                        <Input value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="Ligar para cliente..." />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Descrição (opcional)</Label>
-                        <Textarea rows={2} value={taskDescription} onChange={e => setTaskDescription(e.target.value)} />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Data</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" size="sm" className={cn("w-full justify-start", !taskDate && "text-muted-foreground")}>
-                                <CalendarIcon className="h-3 w-3 mr-1" />
-                                {taskDate ? format(taskDate, "dd/MM/yy") : "Selecionar"}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                              <Calendar mode="single" selected={taskDate} onSelect={setTaskDate} locale={ptBR} />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Hora</Label>
-                          <Input type="time" value={taskTime} onChange={e => setTaskTime(e.target.value)} />
-                        </div>
-                      </div>
-                      <Button onClick={handleCreateTask} disabled={savingTask} className="w-full" size="sm">
-                        {savingTask ? "Criando..." : "Criar tarefa"}
+              {/* Comment / Task input bar - hidden on Parcelas tab */}
+              {tab !== "parcelas" && (
+                <div className="px-5 py-3 border-b flex items-center gap-2">
+                  <Input
+                    placeholder="Adicionar comentário..."
+                    value={newComment}
+                    onChange={e => setNewComment(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handlePostComment(); } }}
+                  />
+                  <Button onClick={handlePostComment} disabled={postingComment || !newComment.trim()} variant="destructive">
+                    Enviar
+                  </Button>
+                  <Popover open={taskOpen} onOpenChange={setTaskOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Plus className="h-4 w-4 mr-1" /> Tarefa
                       </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="end">
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-sm">Nova Tarefa</h4>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Título</Label>
+                          <Input value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="Ligar para cliente..." />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Descrição (opcional)</Label>
+                          <Textarea rows={2} value={taskDescription} onChange={e => setTaskDescription(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Data</Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm" className={cn("w-full justify-start", !taskDate && "text-muted-foreground")}>
+                                  <CalendarIcon className="h-3 w-3 mr-1" />
+                                  {taskDate ? format(taskDate, "dd/MM/yy") : "Selecionar"}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                <Calendar mode="single" selected={taskDate} onSelect={setTaskDate} locale={ptBR} />
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Hora</Label>
+                            <Input type="time" value={taskTime} onChange={e => setTaskTime(e.target.value)} />
+                          </div>
+                        </div>
+                        <Button onClick={handleCreateTask} disabled={savingTask} className="w-full" size="sm">
+                          {savingTask ? "Criando..." : "Criar tarefa"}
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+
+              {/* Parcelas content */}
+              {tab === "parcelas" && (
+                <ScrollArea className="flex-1">
+                  <div className="p-5 space-y-4">
+                    {!ssoticaClienteId || !ssoticaCompanyId ? (
+                      <div className="text-center text-sm text-muted-foreground py-12">
+                        Esta cobrança não está vinculada ao SSótica.
+                        <br />
+                        Não é possível listar outras parcelas do cliente.
+                      </div>
+                    ) : loadingParcelas ? (
+                      <p className="text-center text-sm text-muted-foreground py-12">Carregando parcelas...</p>
+                    ) : parcelas.length === 0 ? (
+                      <p className="text-center text-sm text-muted-foreground py-12">Nenhuma parcela encontrada.</p>
+                    ) : (
+                      <>
+                        {/* Summary cards */}
+                        {(() => {
+                          const atrasadas = parcelas.filter(p => (p.dias_atraso ?? 0) > 0);
+                          const totalAtraso = atrasadas.reduce((s, p) => s + p.valor, 0);
+                          const totalGeral = parcelas.reduce((s, p) => s + p.valor, 0);
+                          return (
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                                <div className="text-[10px] uppercase font-bold text-red-500">Em atraso</div>
+                                <div className="text-2xl font-bold text-red-500 mt-1">{atrasadas.length}</div>
+                                <div className="text-[11px] text-muted-foreground">parcelas</div>
+                              </div>
+                              <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                                <div className="text-[10px] uppercase font-bold text-red-500">Valor atrasado</div>
+                                <div className="text-base font-bold text-red-500 mt-1">
+                                  R$ {totalAtraso.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                              </div>
+                              <div className="rounded-lg border bg-card p-3">
+                                <div className="text-[10px] uppercase font-bold text-muted-foreground">Total cliente</div>
+                                <div className="text-base font-bold text-foreground mt-1">
+                                  R$ {totalGeral.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground">{parcelas.length} parcela(s)</div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Parcelas list */}
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-muted-foreground uppercase mt-2">Parcelas em atraso</div>
+                          {parcelas.filter(p => (p.dias_atraso ?? 0) > 0).length === 0 && (
+                            <p className="text-sm text-muted-foreground italic">Nenhuma parcela em atraso.</p>
+                          )}
+                          {parcelas.filter(p => (p.dias_atraso ?? 0) > 0).map(p => {
+                            const venc = p.vencimento ? format(new Date(p.vencimento), "dd/MM/yyyy", { locale: ptBR }) : "—";
+                            return (
+                              <div
+                                key={p.id}
+                                className={cn(
+                                  "rounded-lg border p-3 flex items-center justify-between gap-3",
+                                  p.is_current ? "border-red-500 bg-red-500/10" : "border-red-500/30 bg-red-500/5"
+                                )}
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="h-9 w-9 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center shrink-0">
+                                    <Receipt className="h-4 w-4" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                      Parcela {p.numero_parcela ?? "—"}
+                                      {p.is_current && (
+                                        <span className="text-[9px] font-bold uppercase bg-red-500 text-white px-1.5 py-0.5 rounded">Atual</span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Venceu em {venc} · <span className="text-red-500 font-semibold">{p.dias_atraso} dia(s) em atraso</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="text-sm font-bold text-red-500">
+                                    R$ {p.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {parcelas.filter(p => (p.dias_atraso ?? 0) <= 0).length > 0 && (
+                            <>
+                              <div className="text-xs font-semibold text-muted-foreground uppercase mt-4">Outras parcelas</div>
+                              {parcelas.filter(p => (p.dias_atraso ?? 0) <= 0).map(p => {
+                                const venc = p.vencimento ? format(new Date(p.vencimento), "dd/MM/yyyy", { locale: ptBR }) : "—";
+                                return (
+                                  <div key={p.id} className="rounded-lg border border-border bg-card p-3 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <div className="h-9 w-9 rounded-full bg-muted text-muted-foreground flex items-center justify-center shrink-0">
+                                        <Receipt className="h-4 w-4" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-semibold text-foreground">Parcela {p.numero_parcela ?? "—"}</div>
+                                        <div className="text-xs text-muted-foreground">Vence em {venc}</div>
+                                      </div>
+                                    </div>
+                                    <div className="text-sm font-bold text-foreground">
+                                      R$ {p.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </ScrollArea>
+              )}
 
               {/* Timeline */}
               <ScrollArea className="flex-1">
