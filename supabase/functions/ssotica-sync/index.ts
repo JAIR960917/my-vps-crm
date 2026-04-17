@@ -576,7 +576,8 @@ async function syncVendas(
         ? existingRenovacao?.assigned_to ?? null
         : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null);
     const resolvedAssignedRole = resolvedAssignedTo ? roleByUserId.get(resolvedAssignedTo) : null;
-    const hasAssignedVendedor = resolvedAssignedRole === "vendedor";
+    // Mapeamento manual conta como vendedor designado mesmo se a role for diferente
+    const hasAssignedVendedor = !!manualUserId || resolvedAssignedRole === "vendedor";
     const flowStatus = statusKeyForRenovacao(diasDesdeUltimaCompra);
 
     if (existingRenovacao) {
