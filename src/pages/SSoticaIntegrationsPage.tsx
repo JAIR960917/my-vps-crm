@@ -63,6 +63,7 @@ interface Integration {
   id: string;
   company_id: string;
   cnpj: string;
+  license_code: string | null;
   bearer_token: string;
   is_active: boolean;
   initial_sync_done: boolean;
@@ -95,7 +96,7 @@ export default function SSoticaIntegrationsPage() {
     company: Company;
     integration?: Integration;
   } | null>(null);
-  const [form, setForm] = useState({ cnpj: "", bearer_token: "", is_active: true });
+  const [form, setForm] = useState({ cnpj: "", license_code: "", bearer_token: "", is_active: true });
   const [saving, setSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -159,6 +160,7 @@ export default function SSoticaIntegrationsPage() {
     setEditing({ company, integration });
     setForm({
       cnpj: integration?.cnpj ?? company.cnpj ?? "",
+      license_code: integration?.license_code ?? "",
       bearer_token: integration?.bearer_token ?? "",
       is_active: integration?.is_active ?? true,
     });
@@ -172,8 +174,7 @@ export default function SSoticaIntegrationsPage() {
     }
     setSaving(true);
     try {
-      // Aceita CNPJ ou Código de Licença alfanumérico do SSótica.
-      // Só remove pontuação se for um CNPJ puramente numérico de 14 dígitos.
+      // CNPJ: limpa pontuação se for um CNPJ numérico de 14 dígitos.
       const rawCnpj = form.cnpj.trim();
       const onlyDigits = rawCnpj.replace(/\D/g, "");
       const isCnpj = !/[a-zA-Z]/.test(rawCnpj) && onlyDigits.length === 14;
@@ -181,6 +182,7 @@ export default function SSoticaIntegrationsPage() {
       const payload = {
         company_id: editing.company.id,
         cnpj: cnpjToSave,
+        license_code: form.license_code.trim() || null,
         bearer_token: form.bearer_token.trim(),
         is_active: form.is_active,
       };
