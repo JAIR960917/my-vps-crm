@@ -89,8 +89,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Teste 2: Vendas (usa cnpj= em vez de empresa=)
-    const urlVendas = `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(empresa)}&inicio_periodo=${ymd(start)}&fim_periodo=${ymd(today)}`;
+    // Teste 2: Vendas (usa cnpj= e exige CNPJ puro)
+    const urlVendas = `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${ymd(start)}&fim_periodo=${ymd(today)}`;
     try {
       const res = await fetch(urlVendas, {
         headers: { Authorization: `Bearer ${integ.bearer_token}`, Accept: "application/json" },
@@ -117,8 +117,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         ok: allOk,
-        empresa_param: empresa,
-        is_cnpj_format: isCnpj,
+        empresa_param: empresaReceber,
+        cnpj_vendas: cnpjVendas,
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
