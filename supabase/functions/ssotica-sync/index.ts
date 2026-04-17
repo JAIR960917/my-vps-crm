@@ -213,13 +213,25 @@ async function syncContasReceber(
           situacao === "renegociado" ||
           situacao === "renegociada";
 
-        // Situações INATIVAS (já não é mais dívida) = removemos do kanban
-        // Inclui também: parcela com baixado_em ou cancelado_em ou estornado_em preenchido
+        // Sinais de que a parcela JÁ FOI QUITADA (não é mais dívida)
         const foiBaixada = !!parcela.baixado_em;
         const foiCancelada = !!parcela.cancelado_em;
         const foiEstornada = !!parcela.estornado_em;
+        const dataPagamento = parcela.data_pagamento ?? parcela.dataPagamento ?? null;
+        const valorRecebido = Number(parcela.valor_recebido ?? parcela.valorRecebido ?? 0);
+        const valorParcela = Number(parcela.valor ?? 0);
+        const foiPaga =
+          !!dataPagamento ||
+          situacao === "pago" ||
+          situacao === "paga" ||
+          situacao === "quitado" ||
+          situacao === "quitada" ||
+          situacao === "liquidado" ||
+          situacao === "liquidada" ||
+          (valorParcela > 0 && valorRecebido >= valorParcela);
+
         const isInativa =
-          !isAtiva || foiBaixada || foiCancelada || foiEstornada;
+          !isAtiva || foiBaixada || foiCancelada || foiEstornada || foiPaga;
 
         if (isInativa) {
           // Marca cliente para reclassificação (a parcela em si é tratada no pós-processamento)
@@ -233,8 +245,8 @@ async function syncContasReceber(
         const vencDate = new Date(vencimento + "T00:00:00Z");
         const diasAtraso = daysBetween(vencDate, today);
 
-        // Regra: incluir se já venceu OU vence em até 1 dia
-        if (diasAtraso < -1) continue;
+        // Regra: SÓ incluir parcelas REALMENTE em atraso (venceu ontem ou antes)
+        if (diasAtraso < 1) continue;
 
         if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
 
