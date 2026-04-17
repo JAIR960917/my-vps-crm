@@ -77,6 +77,7 @@ export default function ActiveClientsPage() {
   const [renovacoes, setRenovacoes] = useState<Renovacao[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
   const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -87,8 +88,26 @@ export default function ActiveClientsPage() {
   const [formValor, setFormValor] = useState("");
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterCompanyId, setFilterCompanyId] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    const [{ data: items }, { data: sts }, { data: profs }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
+      supabase.from("crm_renovacoes").select("*").order("updated_at", { ascending: false }),
+      supabase.from("crm_renovacao_statuses").select("*").order("position"),
+      supabase.rpc("get_profile_names"),
+      supabase.from("companies").select("id, name").order("name"),
+      supabase.from("crm_renovacao_form_fields").select("*").order("position"),
+      supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
+    ]);
+    setRenovacoes((items || []) as Renovacao[]);
+    setStatuses((sts || []) as CrmStatus[]);
+    setProfiles((profs || []) as Profile[]);
+    setCompanies((comps || []) as Company[]);
+    setFields((ff || []) as unknown as FormField[]);
+    setActivities((acts || []) as RenovacaoActivity[]);
+  }, []);
 
   const fetchAll = useCallback(async () => {
     const [{ data: items }, { data: sts }, { data: profs }, { data: ff }, { data: acts }] = await Promise.all([
