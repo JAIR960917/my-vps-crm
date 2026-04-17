@@ -6,7 +6,7 @@ import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarHeart } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -29,6 +29,7 @@ type Renovacao = {
 
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
+type RenovacaoActivity = { id: string; renovacao_id: string; title: string; scheduled_date: string; completed_at: string | null };
 
 type FormField = {
   id: string;
@@ -75,6 +76,7 @@ export default function ActiveClientsPage() {
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
+  const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Renovacao | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -87,16 +89,18 @@ export default function ActiveClientsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: items }, { data: sts }, { data: profs }, { data: ff }] = await Promise.all([
+    const [{ data: items }, { data: sts }, { data: profs }, { data: ff }, { data: acts }] = await Promise.all([
       supabase.from("crm_renovacoes").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
+      supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
     ]);
     setRenovacoes((items || []) as Renovacao[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setFields((ff || []) as unknown as FormField[]);
+    setActivities((acts || []) as RenovacaoActivity[]);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -226,8 +230,34 @@ export default function ActiveClientsPage() {
 
     const cardFields = fields.filter(f => f.show_on_card && !f.is_name_field && !f.is_phone_field && !f.is_last_visit_field);
 
+    // Activity status (em dia / hoje / atrasada / pendente)
+    const itemActivities = activities.filter(a => a.renovacao_id === item.id);
+    const pending = itemActivities.filter(a => !a.completed_at);
+    const overdue = pending.filter(a => new Date(a.scheduled_date) < new Date());
+    const today = pending.filter(a => {
+      const dt = new Date(a.scheduled_date);
+      const now = new Date();
+      return dt.toDateString() === now.toDateString() && dt >= now;
+    });
+    const hasOverdue = overdue.length > 0;
+    const hasToday = today.length > 0;
+    const hasPending = pending.length > 0 && !hasOverdue && !hasToday;
+
+    let cardBorderClass = "";
+    if (hasOverdue) {
+      cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
+    } else if (hasToday) {
+      cardBorderClass = "border-amber-400 bg-amber-500/5";
+    } else if (hasPending) {
+      cardBorderClass = "border-blue-400/50 bg-blue-500/5";
+    }
+
+    const nextActivity = [...pending].sort(
+      (a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
+    )[0];
+
     return (
-      <div className="bg-card border rounded-xl p-3 space-y-2 shadow-sm">
+      <div className={`bg-card border rounded-xl p-3 space-y-2 shadow-sm ${cardBorderClass}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-sm truncate">{d.nome || "Sem nome"}</p>
@@ -284,6 +314,46 @@ export default function ActiveClientsPage() {
             </div>
           );
         })()}
+        {/* Activity status badges */}
+        <div className="pt-2 border-t">
+          {hasOverdue && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full uppercase">
+              <AlertTriangle className="h-3 w-3" />
+              Atrasada
+            </span>
+          )}
+          {hasToday && !hasOverdue && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <CalendarClock className="h-3 w-3" />
+              Hoje
+            </span>
+          )}
+          {hasPending && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <Clock className="h-3 w-3" />
+              Pendente
+            </span>
+          )}
+          {!hasOverdue && !hasToday && !hasPending && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-500 px-2 py-0.5 rounded-full uppercase">
+              <CheckCircle2 className="h-3 w-3" />
+              Em dia
+            </span>
+          )}
+
+          {nextActivity && (
+            <div className={`text-xs mt-1.5 ${hasOverdue ? "text-red-600" : hasToday ? "text-amber-600" : "text-muted-foreground"}`}>
+              <p className="font-medium truncate">{nextActivity.title}</p>
+              <p className="text-[10px]">
+                {(() => {
+                  try { return format(new Date(nextActivity.scheduled_date), "dd/MM 'às' HH:mm", { locale: ptBR }); }
+                  catch { return ""; }
+                })()}
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-1 justify-end pt-1">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(item)}>
             <Pencil className="h-3 w-3" />
