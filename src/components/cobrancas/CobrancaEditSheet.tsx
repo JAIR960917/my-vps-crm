@@ -712,6 +712,7 @@ export default function CobrancaEditSheet(props: Props) {
                   })}
                 </div>
               </ScrollArea>
+              )}
             </>
           )}
         </div>
