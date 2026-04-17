@@ -359,8 +359,9 @@ export default function SSoticaIntegrationsPage() {
                           <Building2 className="h-4 w-4 shrink-0" />
                           {company.name}
                         </CardTitle>
-                        <CardDescription className="truncate">
+                        <CardDescription className="truncate text-xs">
                           CNPJ: {integ?.cnpj || company.cnpj || "—"}
+                          {integ?.license_code && <> · Lic: {integ.license_code}</>}
                         </CardDescription>
                       </div>
                       {statusBadge(integ)}
