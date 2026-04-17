@@ -695,6 +695,81 @@ async function syncVendas(
   return { processed, created, updated, chunks: chunksProcessed };
 }
 
+// Helper: roda 1 chunk de backfill (vendas + cobranças daquela janela de 12 meses).
+async function runBackfillChunk(
+  supabase: any,
+  integ: Integration,
+): Promise<{ ok: true; chunk_index: number; finished: boolean } | { ok: false; error: string }> {
+  const total = integ.backfill_total_chunks || 8;
+  const idx = integ.backfill_chunk_index || 0;
+  // chunk 0 = mais recente (últimos 12 meses) — futureDays=COBRANCAS_FUTURE_DAYS pra pegar parcelas a vencer
+  const futureDays = idx === 0 ? COBRANCAS_FUTURE_DAYS : 0;
+  const range = chunkDateRange(idx, futureDays);
+  console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} iniciando chunk ${idx + 1}/${total} (${ymd(range.start)}→${ymd(range.end)})`);
+
+  const { data: log } = await supabase.from("ssotica_sync_logs").insert({
+    integration_id: integ.id,
+    sync_type: `backfill_chunk_${idx + 1}_of_${total}`,
+    status: "running",
+  }).select("id").single();
+  const logId = log?.id ?? null;
+
+  try {
+    const cr = await syncContasReceber(supabase, integ, range);
+    const v = await syncVendas(supabase, integ, false, [], range);
+
+    const nextIdx = idx + 1;
+    const finished = nextIdx >= total;
+    // Próxima execução: 3 minutos depois (ou null se terminou)
+    const nextRunAt = finished ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
+    const finishedAt = new Date().toISOString();
+
+    await supabase.from("ssotica_integrations").update({
+      backfill_chunk_index: nextIdx,
+      backfill_status: finished ? "done" : "running",
+      backfill_next_run_at: nextRunAt,
+      sync_status: finished ? "idle" : "running",
+      // Quando termina, marca initial_sync_done para o sync incremental funcionar
+      initial_sync_done: finished ? true : integ.initial_sync_done,
+      last_sync_receber_at: finished ? finishedAt : integ.last_sync_receber_at,
+      last_sync_vendas_at: finished ? finishedAt : integ.last_sync_vendas_at,
+      last_error: null,
+    }).eq("id", integ.id);
+
+    if (logId) {
+      await supabase.from("ssotica_sync_logs").update({
+        finished_at: finishedAt,
+        status: "success",
+        items_processed: cr.processed + v.processed,
+        items_created: cr.created + v.created,
+        items_updated: cr.updated + v.updated,
+        details: { chunk_index: idx, total_chunks: total, range: { start: ymd(range.start), end: ymd(range.end) }, contas_receber: cr, vendas: v },
+      }).eq("id", logId);
+    }
+
+    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. ${finished ? 'CONCLUÍDO!' : `próximo em 3min (${nextRunAt})`}`);
+    return { ok: true, chunk_index: idx, finished };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1} FALHOU:`, msg);
+    // Em caso de erro, agenda retry em 3 minutos no MESMO chunk (não avança)
+    await supabase.from("ssotica_integrations").update({
+      backfill_status: "running",
+      backfill_next_run_at: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+      sync_status: "error",
+      last_error: msg.slice(0, 1000),
+    }).eq("id", integ.id);
+    if (logId) {
+      await supabase.from("ssotica_sync_logs").update({
+        finished_at: new Date().toISOString(),
+        status: "error",
+        error_message: msg.slice(0, 2000),
+      }).eq("id", logId);
+    }
+    return { ok: false, error: msg };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -705,9 +780,73 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    const mode: string = body.mode ?? (body.start_backfill ? "start_backfill" : "incremental");
     const onlyIntegrationId: string | undefined = body.integration_id;
     const forceFull: boolean = body.force_full === true;
 
+    // ========== MODO 1: tick do cron — processa próximo chunk de qualquer integração pronta ==========
+    if (mode === "backfill_tick") {
+      const { data: pending } = await supabase
+        .from("ssotica_integrations")
+        .select("*")
+        .eq("is_active", true)
+        .eq("backfill_status", "running")
+        .lte("backfill_next_run_at", new Date().toISOString())
+        .limit(5); // até 5 lojas em paralelo no mesmo tick
+      const list = (pending ?? []) as Integration[];
+      if (list.length === 0) {
+        return new Response(JSON.stringify({ ok: true, message: "Nenhum chunk pronto" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const results: any[] = [];
+      for (const integ of list) {
+        const r = await runBackfillChunk(supabase, integ);
+        results.push({ integration_id: integ.id, ...r });
+      }
+      return new Response(JSON.stringify({ ok: true, mode: "backfill_tick", results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ========== MODO 2: iniciar backfill de 96 meses (botão "Resincronizar tudo") ==========
+    if (mode === "start_backfill") {
+      if (!onlyIntegrationId) {
+        return new Response(JSON.stringify({ ok: false, error: "integration_id obrigatório" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      // Reseta o progresso e marca pra rodar AGORA (próximo tick do cron pega)
+      const { data: integ, error } = await supabase
+        .from("ssotica_integrations")
+        .update({
+          backfill_chunk_index: 0,
+          backfill_total_chunks: 8,
+          backfill_status: "running",
+          backfill_started_at: new Date().toISOString(),
+          backfill_next_run_at: new Date().toISOString(),
+          sync_status: "running",
+          last_error: null,
+        })
+        .eq("id", onlyIntegrationId)
+        .select("*")
+        .single();
+      if (error || !integ) throw error ?? new Error("Integração não encontrada");
+
+      // Já roda o primeiro chunk imediatamente (sem esperar o tick)
+      const r = await runBackfillChunk(supabase, integ as Integration);
+      return new Response(JSON.stringify({
+        ok: true,
+        mode: "start_backfill",
+        message: "Backfill de 96 meses iniciado. Os próximos 7 chunks rodarão automaticamente, 1 a cada 3 minutos.",
+        first_chunk: r,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ========== MODO 3 (default): sync incremental ==========
     const query = supabase
       .from("ssotica_integrations")
       .select("*")
@@ -724,20 +863,19 @@ Deno.serve(async (req) => {
 
     const results: any[] = [];
     for (const integ of integrations as Integration[]) {
-      const startedAt = new Date().toISOString();
       let logId: string | null = null;
       try {
         await supabase.from("ssotica_integrations").update({ sync_status: "running", last_error: null }).eq("id", integ.id);
         const { data: log } = await supabase.from("ssotica_sync_logs").insert({
           integration_id: integ.id,
-          sync_type: forceFull ? "full_force" : "full",
+          sync_type: forceFull ? "full_force" : "incremental",
           status: "running",
         }).select("id").single();
         logId = log?.id ?? null;
 
         // 1. Contas a Receber primeiro (para que Renovações saibam quem tem dívida)
         const cr = await syncContasReceber(supabase, integ);
-        // 2. Vendas (forceFull rebusca os últimos 14 meses; quitados também forçam janela cheia)
+        // 2. Vendas
         const v = await syncVendas(supabase, integ, forceFull, cr.clientesQuitados);
 
         const finishedAt = new Date().toISOString();
