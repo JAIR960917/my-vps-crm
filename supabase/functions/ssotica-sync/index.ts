@@ -192,13 +192,16 @@ async function syncContasReceber(
 
         const colunaKey = statusKeyForDiasAtraso(diasAtraso);
 
-        const cliente = parcela.cliente ?? {};
+        // O cliente vem dentro de parcela.titulo.cliente (não direto em parcela.cliente)
+        const cliente = parcela.titulo?.cliente ?? parcela.cliente ?? {};
         const telefone = cliente.telefone_principal ?? cliente.telefone ?? "";
+        const documento = cliente.documento ?? cliente.cpf_cnpj ?? cliente.cpf ?? "";
         const data = {
           nome: cliente.nome ?? "Cliente SSótica",
           telefone,
-          documento: cliente.documento ?? cliente.cpf_cnpj ?? "",
-          email: cliente.email_principal ?? "",
+          documento,
+          cpf: documento,
+          email: cliente.email_principal ?? cliente.email ?? "",
           numero_documento: parcela.titulo?.numero_documento ?? "",
           descricao: parcela.titulo?.descricao ?? "",
           numero_parcela: parcela.numero_parcela ?? null,
