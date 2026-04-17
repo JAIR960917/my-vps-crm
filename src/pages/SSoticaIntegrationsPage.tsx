@@ -107,6 +107,7 @@ export default function SSoticaIntegrationsPage() {
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [syncHour, setSyncHour] = useState<string>("6");
   const [savingHour, setSavingHour] = useState(false);
+  const [mappingFor, setMappingFor] = useState<Company | null>(null);
 
   async function fetchAll() {
     setLoading(true);
