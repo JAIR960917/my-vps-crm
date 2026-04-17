@@ -79,14 +79,45 @@ async function fetchSSotica(
   url: string,
   token: string,
 ): Promise<unknown> {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`SSótica ${res.status}: ${text.slice(0, 300)}`);
+  // Retry com backoff exponencial para erros transientes (502/503/504/timeouts).
+  // SSótica costuma devolver 502 Bad Gateway sob carga — esperar e tentar de novo resolve.
+  const MAX_ATTEMPTS = 4;
+  const TRANSIENT_STATUS = new Set([429, 500, 502, 503, 504]);
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        const err = new Error(`SSótica ${res.status}: ${text.slice(0, 300)}`);
+        if (TRANSIENT_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
+          const waitMs = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s
+          console.warn(`[ssotica-sync] ${res.status} tentativa ${attempt}/${MAX_ATTEMPTS}, aguardando ${waitMs}ms...`);
+          await new Promise((r) => setTimeout(r, waitMs));
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+      return await res.json();
+    } catch (e) {
+      const err = e instanceof Error ? e : new Error(String(e));
+      // Erros de rede (timeout, conexão) também merecem retry
+      const isNetwork = err.message.includes("network") || err.message.includes("timeout") || err.message.includes("ECONN");
+      if (isNetwork && attempt < MAX_ATTEMPTS) {
+        const waitMs = 2000 * Math.pow(2, attempt - 1);
+        console.warn(`[ssotica-sync] erro de rede tentativa ${attempt}/${MAX_ATTEMPTS}, aguardando ${waitMs}ms... (${err.message})`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
   }
-  return await res.json();
+  throw lastError ?? new Error("SSótica: falha após todas as tentativas");
 }
 
 interface Integration {
