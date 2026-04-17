@@ -127,7 +127,7 @@ async function syncContasReceber(
     let page = 1;
     while (true) {
       const url =
-        `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${cnpjClean}&inicio_periodo=${w.start}&fim_periodo=${w.end}&page=${page}&perPage=100`;
+        `${SSOTICA_BASE}/financeiro/contas-a-receber/periodo?empresa=${encodeURIComponent(empresaParam)}&inicio_periodo=${w.start}&fim_periodo=${w.end}&page=${page}&perPage=100`;
       const json = await fetchSSotica(url, integ.bearer_token) as {
         currentPage?: number;
         totalPages?: number;
@@ -290,17 +290,15 @@ async function syncVendas(
   const windows = buildWindows(startDate, endDate);
 
   let processed = 0, created = 0, updated = 0;
-  const raw = (integ.cnpj ?? "").trim();
-  const onlyDigits = raw.replace(/\D/g, "");
-  const isCnpj = !/[a-zA-Z]/.test(raw) && onlyDigits.length === 14;
-  const cnpjClean = isCnpj ? onlyDigits : raw;
+  // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
+  const cnpjVendas = normalizeIdentifier(integ.cnpj);
 
   // Mapa cliente_id -> última venda (data + venda_id + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; cliente: any }>();
 
   for (const w of windows) {
     const url =
-      `${SSOTICA_BASE}/vendas/periodo?cnpj=${cnpjClean}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+      `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
     const vendas = await fetchSSotica(url, integ.bearer_token) as any[];
     if (!Array.isArray(vendas)) continue;
 
