@@ -142,6 +142,11 @@ async function syncContasReceber(
         data?: any[];
       };
       const items: any[] = json.data ?? [];
+      console.log(`[receber][${integ.company_id}] window=${w.start}..${w.end} page=${page} items=${items.length}`);
+      if (items.length > 0 && page === 1) {
+        const sit = items.slice(0, 3).map(p => ({ id: p.id, situacao: p.situacao, vencimento: p.vencimento, baixado_em: p.baixado_em }));
+        console.log(`[receber][${integ.company_id}] sample: ${JSON.stringify(sit)}`);
+      }
       if (items.length === 0) break;
 
       for (const parcela of items) {
