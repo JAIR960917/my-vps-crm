@@ -362,6 +362,19 @@ export default function SSoticaIntegrationsPage() {
               Configure o token de acesso de cada loja. A sincronização roda automaticamente todos os dias.
             </p>
           </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleStopAllBackfills}
+            disabled={stoppingAll}
+          >
+            {stoppingAll ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <StopCircle className="h-4 w-4 mr-2" />
+            )}
+            Parar todos os backfills
+          </Button>
         </div>
 
         {/* Card de configuração do cron diário */}
