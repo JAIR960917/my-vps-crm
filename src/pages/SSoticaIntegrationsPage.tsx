@@ -212,25 +212,35 @@ export default function SSoticaIntegrationsPage() {
   async function handleSyncNow(integ: Integration, forceFull = false) {
     setSyncingId(integ.id);
     try {
-      const { data, error } = await supabase.functions.invoke("ssotica-sync", {
-        body: { integration_id: integ.id, force_full: forceFull },
-      });
+      const body = forceFull
+        ? { mode: "start_backfill", integration_id: integ.id }
+        : { integration_id: integ.id };
+      const { data, error } = await supabase.functions.invoke("ssotica-sync", { body });
       if (error) throw error;
-      const result = data?.results?.[0];
-      if (result?.ok) {
-        const cr = result.contas_receber;
-        const v = result.vendas;
-        const removidas = cr.removed ?? 0;
+
+      if (forceFull) {
+        // Backfill iniciado: 1º chunk já rodou, próximos 7 vão automaticamente a cada 3 min
         toast({
-          title: forceFull ? "Resincronização completa concluída" : "Sincronização concluída",
-          description: `Cobranças: +${cr.created} novas, ${cr.updated} atualizadas, ${removidas} quitadas/removidas. Renovações: +${v.created} novas, ${v.updated} atualizadas.`,
+          title: "Backfill de 96 meses iniciado",
+          description: "O 1º chunk (12 meses mais recentes) foi processado. Os próximos 7 chunks rodarão automaticamente, 1 a cada 3 minutos. Total estimado: ~25 min.",
         });
       } else {
-        toast({
-          title: "Erro na sincronização",
-          description: result?.error ?? "Erro desconhecido",
-          variant: "destructive",
-        });
+        const result = data?.results?.[0];
+        if (result?.ok) {
+          const cr = result.contas_receber;
+          const v = result.vendas;
+          const removidas = cr.removed ?? 0;
+          toast({
+            title: "Sincronização concluída",
+            description: `Cobranças: +${cr.created} novas, ${cr.updated} atualizadas, ${removidas} quitadas/removidas. Renovações: +${v.created} novas, ${v.updated} atualizadas.`,
+          });
+        } else {
+          toast({
+            title: "Erro na sincronização",
+            description: result?.error ?? "Erro desconhecido",
+            variant: "destructive",
+          });
+        }
       }
       await fetchAll();
     } catch (e: any) {
