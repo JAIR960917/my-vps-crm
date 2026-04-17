@@ -200,9 +200,12 @@ export default function SSoticaIntegrationsPage() {
       if (error) throw error;
       const result = data?.results?.[0];
       if (result?.ok) {
+        const cr = result.contas_receber;
+        const v = result.vendas;
+        const removidas = cr.removed ?? 0;
         toast({
           title: "Sincronização concluída",
-          description: `Cobranças: +${result.contas_receber.created} novas, ${result.contas_receber.updated} atualizadas. Renovações: +${result.vendas.created} novas, ${result.vendas.updated} atualizadas.`,
+          description: `Cobranças: +${cr.created} novas, ${cr.updated} atualizadas, ${removidas} quitadas/removidas. Renovações: +${v.created} novas, ${v.updated} atualizadas.`,
         });
       } else {
         toast({
