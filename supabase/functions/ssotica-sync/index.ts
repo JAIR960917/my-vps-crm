@@ -534,7 +534,7 @@ async function syncVendas(
   const chunks: Array<{ start: Date; end: Date }> = [];
   let chunkEnd = new Date(overallEnd);
   while (chunkEnd >= overallStart) {
-    const chunkStart = addDays(chunkEnd, -(VENDAS_CHUNK_DAYS - 1));
+    const chunkStart = addDays(chunkEnd, -(CHUNK_DAYS - 1));
     const realStart = chunkStart < overallStart ? overallStart : chunkStart;
     chunks.push({ start: realStart, end: chunkEnd });
     chunkEnd = addDays(realStart, -1);
