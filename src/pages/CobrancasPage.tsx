@@ -76,15 +76,32 @@ export default function CobrancasPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
-      supabase.from("crm_cobrancas").select("*").order("updated_at", { ascending: false }),
+    // Busca TODAS as cobranças em batches de 1000 (limite padrão do PostgREST)
+    // para empresas com mais de 1000 registros, como Parelhas.
+    const PAGE_SIZE = 1000;
+    let allCobs: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("crm_cobrancas")
+        .select("*")
+        .order("updated_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) break;
+      const batch = data || [];
+      allCobs = allCobs.concat(batch);
+      if (batch.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    const [{ data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
       supabase.from("cobranca_activities").select("id, cobranca_id, title, scheduled_date, completed_at"),
     ]);
-    setCobrancas((cobs || []) as Cobranca[]);
+    setCobrancas(allCobs as Cobranca[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
