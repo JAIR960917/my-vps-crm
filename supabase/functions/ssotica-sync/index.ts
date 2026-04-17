@@ -218,7 +218,53 @@ async function syncContasReceber(
     }
   }
 
-  return { processed, created, updated };
+  // ===== Pós-processamento: detectar cobranças "fantasmas" e reclassificar clientes =====
+  // 1. Buscar TODAS as cobranças desta loja que estavam em aberto no banco
+  const { data: cobrancasNoBanco } = await supabase
+    .from("crm_cobrancas")
+    .select("id, ssotica_parcela_id, ssotica_cliente_id, vencimento")
+    .eq("ssotica_company_id", integ.company_id)
+    .not("ssotica_parcela_id", "is", null);
+
+  // 2. Cobranças que estavam no banco mas NÃO vieram mais como em-aberto/vencido na API → foram pagas
+  if (cobrancasNoBanco) {
+    for (const cob of cobrancasNoBanco) {
+      const parcelaId = Number(cob.ssotica_parcela_id);
+      if (parcelasAtivasIds.has(parcelaId)) continue; // ainda está ativa
+      // Sumiu da API → considerar paga: remover e marcar cliente para reclassificação
+      if (cob.ssotica_cliente_id) clientesAfetados.add(Number(cob.ssotica_cliente_id));
+      await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
+      removed++;
+    }
+  }
+
+  // 3. Para cada cliente afetado, reclassificar a coluna baseado na DÍVIDA MAIS ANTIGA restante
+  for (const clienteId of clientesAfetados) {
+    const { data: restantes } = await supabase
+      .from("crm_cobrancas")
+      .select("id, vencimento")
+      .eq("ssotica_company_id", integ.company_id)
+      .eq("ssotica_cliente_id", clienteId)
+      .order("vencimento", { ascending: true });
+
+    if (!restantes || restantes.length === 0) continue; // sem dívidas → vai pra renovação no syncVendas
+
+    // Pega a parcela com vencimento MAIS ANTIGO (maior atraso)
+    const maisAntiga = restantes[0];
+    if (!maisAntiga.vencimento) continue;
+    const vencDate = new Date(maisAntiga.vencimento + "T00:00:00Z");
+    const diasAtraso = daysBetween(vencDate, today);
+    const novaColuna = statusKeyForDiasAtraso(diasAtraso);
+
+    // Atualiza TODAS as cobranças deste cliente nesta loja para a coluna da mais antiga
+    await supabase
+      .from("crm_cobrancas")
+      .update({ status: novaColuna })
+      .eq("ssotica_company_id", integ.company_id)
+      .eq("ssotica_cliente_id", clienteId);
+  }
+
+  return { processed, created, updated, removed };
 }
 
 async function syncVendas(
