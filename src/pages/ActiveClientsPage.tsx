@@ -315,6 +315,13 @@ export default function ActiveClientsPage() {
     if (filterCompanyId !== "all") {
       items = items.filter(r => (r as any).ssotica_company_id === filterCompanyId);
     }
+    if (filterAssignedTo !== "all") {
+      if (filterAssignedTo === "__unassigned__") {
+        items = items.filter(r => !r.assigned_to);
+      } else {
+        items = items.filter(r => r.assigned_to === filterAssignedTo);
+      }
+    }
     if (!searchQuery.trim()) return items;
     const q = searchQuery.toLowerCase();
     return items.filter(r => {
@@ -323,7 +330,7 @@ export default function ActiveClientsPage() {
         || (d.telefone || "").includes(q)
         || String(r.valor).includes(q);
     });
-  }, [renovacoes, searchQuery, filterCompanyId]);
+  }, [renovacoes, searchQuery, filterCompanyId, filterAssignedTo]);
 
   const getByStatus = (key: string) => filteredItems.filter(r => r.status === key);
 
