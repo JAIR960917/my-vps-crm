@@ -41,6 +41,7 @@ type FormField = {
   is_name_field: boolean;
   is_phone_field: boolean;
   is_last_visit_field: boolean;
+  is_cpf_field?: boolean;
   show_on_card: boolean;
   parent_field_id: string | null;
   parent_trigger_value: string | null;
