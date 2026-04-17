@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Plus, Search, Pencil, Trash2, Phone, User, Building2, AlertTriangle, CalendarClock, CheckCircle2, Clock } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import CobrancaEditSheet from "@/components/cobrancas/CobrancaEditSheet";
 import { format } from "date-fns";
