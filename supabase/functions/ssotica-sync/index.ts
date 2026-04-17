@@ -95,7 +95,7 @@ interface Integration {
 async function syncContasReceber(
   supabase: ReturnType<typeof createClient>,
   integ: Integration,
-): Promise<{ processed: number; created: number; updated: number }> {
+): Promise<{ processed: number; created: number; updated: number; removed: number }> {
   const today = new Date();
   const startDate = integ.initial_sync_done && integ.last_sync_receber_at
     ? addDays(new Date(integ.last_sync_receber_at), -1)
@@ -104,8 +104,13 @@ async function syncContasReceber(
   const endDate = addDays(today, 60);
   const windows = buildWindows(startDate, endDate);
 
-  let processed = 0, created = 0, updated = 0;
+  let processed = 0, created = 0, updated = 0, removed = 0;
   const cnpjClean = integ.cnpj.replace(/\D/g, "");
+
+  // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
+  // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
+  const parcelasAtivasIds = new Set<number>();
+  const clientesAfetados = new Set<number>();
 
   for (const w of windows) {
     let page = 1;
