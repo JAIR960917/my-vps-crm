@@ -29,6 +29,7 @@ type Renovacao = {
 
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
+type RenovacaoActivity = { id: string; renovacao_id: string; title: string; scheduled_date: string; completed_at: string | null };
 
 type FormField = {
   id: string;
