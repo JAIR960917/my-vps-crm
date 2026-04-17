@@ -99,16 +99,43 @@ export default function SSoticaIntegrationsPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [logsFor, setLogsFor] = useState<Integration | null>(null);
   const [logs, setLogs] = useState<SyncLog[]>([]);
+  const [syncHour, setSyncHour] = useState<string>("6");
+  const [savingHour, setSavingHour] = useState(false);
 
   async function fetchAll() {
     setLoading(true);
-    const [{ data: comps }, { data: integs }] = await Promise.all([
+    const [{ data: comps }, { data: integs }, { data: setting }] = await Promise.all([
       supabase.from("companies").select("id, name, cnpj").order("name"),
       supabase.from("ssotica_integrations").select("*"),
+      supabase.from("system_settings").select("setting_value").eq("setting_key", "ssotica_sync_hour").maybeSingle(),
     ]);
     setCompanies(comps ?? []);
     setIntegrations(integs ?? []);
+    if (setting?.setting_value) setSyncHour(setting.setting_value);
     setLoading(false);
+  }
+
+  async function handleSaveHour() {
+    setSavingHour(true);
+    try {
+      const { data: existing } = await supabase
+        .from("system_settings")
+        .select("id")
+        .eq("setting_key", "ssotica_sync_hour")
+        .maybeSingle();
+      if (existing) {
+        await supabase.from("system_settings").update({ setting_value: syncHour }).eq("id", existing.id);
+      } else {
+        await supabase.from("system_settings").insert({ setting_key: "ssotica_sync_hour", setting_value: syncHour });
+      }
+      const { error } = await supabase.rpc("manage_ssotica_cron" as any);
+      if (error) throw error;
+      toast({ title: "Horário salvo", description: `Sincronização diária agendada para ${syncHour}h (horário de Brasília).` });
+    } catch (e: any) {
+      toast({ title: "Erro ao salvar horário", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingHour(false);
+    }
   }
 
   useEffect(() => {
