@@ -226,15 +226,19 @@ export default function ActiveClientsPage() {
   const getProfileName = (uid: string | null) => uid ? (profiles.find(p => p.user_id === uid)?.full_name || "") : "";
 
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return renovacoes;
+    let items = renovacoes;
+    if (filterCompanyId !== "all") {
+      items = items.filter(r => (r as any).ssotica_company_id === filterCompanyId);
+    }
+    if (!searchQuery.trim()) return items;
     const q = searchQuery.toLowerCase();
-    return renovacoes.filter(r => {
+    return items.filter(r => {
       const d = r.data as Record<string, any>;
       return (d.nome || "").toLowerCase().includes(q)
         || (d.telefone || "").includes(q)
         || String(r.valor).includes(q);
     });
-  }, [renovacoes, searchQuery]);
+  }, [renovacoes, searchQuery, filterCompanyId]);
 
   const getByStatus = (key: string) => filteredItems.filter(r => r.status === key);
 
