@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -112,9 +112,38 @@ export default function ActiveClientsPage() {
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Lazy rendering: 20 cards por coluna, "carrega mais" ao rolar
+  const ITEMS_PER_PAGE = 20;
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || ITEMS_PER_PAGE;
+  const loadMore = (statusKey: string) =>
+    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE }));
+  const handleColumnScroll = (e: React.UIEvent<HTMLDivElement>, statusKey: string) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) loadMore(statusKey);
+  };
+
+  const fetchAllRenovacoes = async () => {
+    const PAGE_SIZE = 1000;
+    let all: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("crm_renovacoes")
+        .select("*")
+        .order("updated_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error || !data) break;
+      all = all.concat(data);
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+    return all;
+  };
+
   const fetchAll = useCallback(async () => {
-    const [{ data: items }, { data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
-      supabase.from("crm_renovacoes").select("*").order("updated_at", { ascending: false }),
+    const [items, { data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
+      fetchAllRenovacoes(),
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("user_roles").select("user_id, role"),
@@ -133,6 +162,9 @@ export default function ActiveClientsPage() {
 
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Reseta a paginação quando filtros/busca mudam
+  useEffect(() => { setVisibleCounts({}); }, [filterCompanyId, searchQuery]);
 
   useEffect(() => {
     if (statuses.length > 0 && !mobileTab) setMobileTab(statuses[0].key);
@@ -500,10 +532,20 @@ export default function ActiveClientsPage() {
       <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
         {statuses.filter(s => s.key === mobileTab).map(status => {
           const items = getByStatus(status.key);
+          const visibleItems = items.slice(0, getVisibleCount(status.key));
+          const hasMore = items.length > visibleItems.length;
           return (
             <div key={status.key}>
               {items.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Nenhuma renovação nesta coluna</p>}
-              {items.map(r => <div key={r.id} className="mb-2">{renderCard(r)}</div>)}
+              {visibleItems.map(r => <div key={r.id} className="mb-2">{renderCard(r)}</div>)}
+              {hasMore && (
+                <button
+                  onClick={() => loadMore(status.key)}
+                  className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-dashed border-primary/40 transition-colors mb-2"
+                >
+                  Carregar mais ({items.length - visibleItems.length} restantes)
+                </button>
+              )}
               <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
                 + Adicionar renovação
               </button>
@@ -516,6 +558,8 @@ export default function ActiveClientsPage() {
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map(status => {
             const items = getByStatus(status.key);
+            const visibleItems = items.slice(0, getVisibleCount(status.key));
+            const hasMore = items.length > visibleItems.length;
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
@@ -526,11 +570,15 @@ export default function ActiveClientsPage() {
                 </div>
                 <Droppable droppableId={status.key}>
                   {(provided, snapshot) => (
-                    <div ref={provided.innerRef} {...provided.droppableProps}
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      onScroll={(e) => handleColumnScroll(e, status.key)}
                       className={`flex-1 rounded-xl p-2 space-y-2 transition-colors overflow-y-auto min-h-0 ${
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
-                      }`}>
-                      {items.map((r, index) => (
+                      }`}
+                    >
+                      {visibleItems.map((r, index) => (
                         <Draggable key={r.id} draggableId={r.id} index={index}>
                           {(provided, snapshot) => (
                             <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}
@@ -541,6 +589,14 @@ export default function ActiveClientsPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
+                      {hasMore && (
+                        <button
+                          onClick={() => loadMore(status.key)}
+                          className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-dashed border-primary/40 transition-colors"
+                        >
+                          Carregar mais ({items.length - visibleItems.length} restantes)
+                        </button>
+                      )}
                       <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
                         + Adicionar renovação
                       </button>
