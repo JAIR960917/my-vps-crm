@@ -485,6 +485,14 @@ async function syncVendas(
     (mappings ?? []).map((m: any) => [Number(m.ssotica_funcionario_id), m.user_id as string]),
   );
 
+  // Pool de vendedores ATIVOS da loja para fallback round-robin (quando nenhum
+  // vendedor SSótica está mapeado e nenhum match por nome foi encontrado).
+  // Inclui apenas role "vendedor" — gerente fica como último fallback.
+  const vendedoresPool = typedCompanyProfiles
+    .filter((p) => roleByUserId.get(p.user_id) === "vendedor")
+    .map((p) => p.user_id)
+    .sort(); // ordem estável
+
   const findResponsibleProfile = (responsavelNome: string | null | undefined) => {
     if (!responsavelNome) return null;
 
@@ -608,10 +616,18 @@ async function syncVendas(
     const matchedProfile = manualUserId ? null : findResponsibleProfile(responsavelNome);
     const existingAssignedRole = existingRenovacao?.assigned_to ? roleByUserId.get(existingRenovacao.assigned_to) : null;
     const preserveExistingVendedor = existingAssignedRole === "vendedor" && !manualUserId;
+
+    // Round-robin estável por clienteId quando não há mapeamento, match por nome
+    // nem vendedor existente. Garante que cada cliente sem responsável recebe
+    // um vendedor da loja (distribuição equilibrada).
+    const fallbackVendedor = vendedoresPool.length > 0
+      ? vendedoresPool[Math.abs(clienteId) % vendedoresPool.length]
+      : null;
+
     const resolvedAssignedTo = manualUserId
       ?? (preserveExistingVendedor
         ? existingRenovacao?.assigned_to ?? null
-        : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null);
+        : matchedProfile?.user_id ?? existingRenovacao?.assigned_to ?? fallbackVendedor ?? managerUserId ?? null);
     // Qualquer usuário atribuído (vendedor, gerente, admin, financeiro) conta como responsável
     const hasAssignedVendedor = !!resolvedAssignedTo;
     const flowStatus = statusKeyForRenovacao(diasDesdeUltimaCompra);

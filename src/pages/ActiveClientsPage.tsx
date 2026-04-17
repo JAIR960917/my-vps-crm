@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -112,6 +112,32 @@ export default function ActiveClientsPage() {
   const [filterAssignedTo, setFilterAssignedTo] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [autoAssigning, setAutoAssigning] = useState(false);
+  const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
+
+  const unassignedCount = useMemo(() => {
+    let items = renovacoes.filter(r => !r.assigned_to && (r as any).ssotica_company_id);
+    if (filterCompanyId !== "all") items = items.filter(r => (r as any).ssotica_company_id === filterCompanyId);
+    return items.length;
+  }, [renovacoes, filterCompanyId]);
+
+  const runAutoAssign = async () => {
+    setAutoAssigning(true);
+    try {
+      const body: any = {};
+      if (filterCompanyId !== "all") body.company_id = filterCompanyId;
+      const { data, error } = await supabase.functions.invoke("auto-assign-renovacoes", { body });
+      if (error) throw error;
+      const total = (data as any)?.total_assigned ?? 0;
+      toast.success(`${total} lead${total !== 1 ? "s" : ""} distribuído${total !== 1 ? "s" : ""} entre os vendedores`);
+      await fetchAll();
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao distribuir leads");
+    } finally {
+      setAutoAssigning(false);
+      setAutoAssignConfirm(false);
+    }
+  };
 
   // Lazy rendering: 20 cards por coluna, "carrega mais" ao rolar
   const ITEMS_PER_PAGE = 20;
@@ -523,6 +549,18 @@ export default function ActiveClientsPage() {
               </SelectContent>
             </Select>
           )}
+          {(isAdmin || isGerente) && unassignedCount > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAutoAssignConfirm(true)}
+              disabled={autoAssigning}
+              className="border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+            >
+              {autoAssigning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shuffle className="mr-2 h-4 w-4" />}
+              Distribuir {unassignedCount} sem responsável
+            </Button>
+          )}
           <div className="relative flex-1 sm:flex-initial">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-8 h-9 w-full sm:w-48" />
@@ -664,6 +702,25 @@ export default function ActiveClientsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={autoAssignConfirm} onOpenChange={open => !autoAssigning && setAutoAssignConfirm(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Distribuir {unassignedCount} lead{unassignedCount !== 1 ? "s" : ""} sem responsável?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Os leads serão divididos em partes iguais (round-robin) entre os vendedores ativos de cada loja.
+              {filterCompanyId !== "all" ? " Apenas a loja filtrada será afetada." : " Todas as lojas serão processadas."}
+              {" "}Daqui pra frente, novos leads vindos do SSótica também recebem vendedor automaticamente quando não houver mapeamento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={autoAssigning}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={runAutoAssign} disabled={autoAssigning}>
+              {autoAssigning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Distribuindo...</> : "Distribuir agora"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
