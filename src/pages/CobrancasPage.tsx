@@ -215,7 +215,15 @@ export default function CobrancasPage() {
     });
   }, [cobrancas, searchQuery, filterCompanyId]);
 
+  // Reseta a paginação visual quando filtros/busca mudam
+  useEffect(() => { setVisibleCounts({}); }, [searchQuery, filterCompanyId]);
+
   const getByStatus = (key: string) => filteredCobrancas.filter(c => c.status === key);
+  const getVisibleByStatus = (key: string) => {
+    const all = getByStatus(key);
+    const limit = visibleCounts[key] ?? PAGE_INCREMENT;
+    return { all, visible: all.slice(0, limit), hasMore: all.length > limit };
+  };
 
   const renderCard = (cobranca: Cobranca) => {
     const d = cobranca.data as Record<string, any>;
