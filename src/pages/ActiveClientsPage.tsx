@@ -532,10 +532,20 @@ export default function ActiveClientsPage() {
       <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
         {statuses.filter(s => s.key === mobileTab).map(status => {
           const items = getByStatus(status.key);
+          const visibleItems = items.slice(0, getVisibleCount(status.key));
+          const hasMore = items.length > visibleItems.length;
           return (
             <div key={status.key}>
               {items.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Nenhuma renovação nesta coluna</p>}
-              {items.map(r => <div key={r.id} className="mb-2">{renderCard(r)}</div>)}
+              {visibleItems.map(r => <div key={r.id} className="mb-2">{renderCard(r)}</div>)}
+              {hasMore && (
+                <button
+                  onClick={() => loadMore(status.key)}
+                  className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-dashed border-primary/40 transition-colors mb-2"
+                >
+                  Carregar mais ({items.length - visibleItems.length} restantes)
+                </button>
+              )}
               <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
                 + Adicionar renovação
               </button>
