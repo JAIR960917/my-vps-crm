@@ -549,6 +549,18 @@ export default function ActiveClientsPage() {
               </SelectContent>
             </Select>
           )}
+          {(isAdmin || isGerente) && unassignedCount > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAutoAssignConfirm(true)}
+              disabled={autoAssigning}
+              className="border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+            >
+              {autoAssigning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shuffle className="mr-2 h-4 w-4" />}
+              Distribuir {unassignedCount} sem responsável
+            </Button>
+          )}
           <div className="relative flex-1 sm:flex-initial">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-8 h-9 w-full sm:w-48" />
