@@ -109,6 +109,55 @@ export default function SSoticaIntegrationsPage() {
   const [syncHour, setSyncHour] = useState<string>("6");
   const [savingHour, setSavingHour] = useState(false);
   const [mappingFor, setMappingFor] = useState<Company | null>(null);
+  const [stoppingAll, setStoppingAll] = useState(false);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
+
+  async function handleStopAllBackfills() {
+    if (!confirm("Parar TODOS os backfills em andamento?\n\nIsso vai interromper todas as importações que estão rodando no momento. Você poderá retomar manualmente, uma loja por vez, depois.")) return;
+    setStoppingAll(true);
+    try {
+      const { error, count } = await supabase
+        .from("ssotica_integrations")
+        .update({
+          backfill_status: "idle",
+          backfill_next_run_at: null,
+          sync_status: "idle",
+        }, { count: "exact" })
+        .in("backfill_status", ["running", "scheduled"]);
+      if (error) throw error;
+      toast({
+        title: "Backfills interrompidos",
+        description: `${count ?? 0} loja(s) tiveram o backfill parado. Agora dispare manualmente uma de cada vez.`,
+      });
+      await fetchAll();
+    } catch (e: any) {
+      toast({ title: "Erro ao parar backfills", description: e.message, variant: "destructive" });
+    } finally {
+      setStoppingAll(false);
+    }
+  }
+
+  async function handleStopBackfill(integ: Integration) {
+    if (!confirm("Parar o backfill desta loja?")) return;
+    setStoppingId(integ.id);
+    try {
+      const { error } = await supabase
+        .from("ssotica_integrations")
+        .update({
+          backfill_status: "idle",
+          backfill_next_run_at: null,
+          sync_status: "idle",
+        })
+        .eq("id", integ.id);
+      if (error) throw error;
+      toast({ title: "Backfill interrompido" });
+      await fetchAll();
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setStoppingId(null);
+    }
+  }
 
   async function fetchAll() {
     setLoading(true);
