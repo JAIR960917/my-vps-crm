@@ -413,29 +413,28 @@ async function syncContasReceber(
   }
 
   // ===== Pós-processamento: remover cards de clientes que não têm mais nenhuma parcela em atraso =====
-  // Como agora há apenas 1 card por cliente, basta remover cards cuja parcela atual não esteja mais ativa
-  // E que não tenham sido atualizados nesta sync (cliente sem nenhuma parcela ativa).
-  const { data: cobrancasNoBanco } = await supabase
-    .from("crm_cobrancas")
-    .select("id, ssotica_parcela_id, ssotica_cliente_id")
-    .eq("ssotica_company_id", integ.company_id)
-    .not("ssotica_cliente_id", "is", null);
-  const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
-
-  // Clientes que tinham cobrança no banco mas não têm mais parcela ativa = QUITARAM
+  // ATENÇÃO: pulamos este passo em modo backfill (chunk antigo) porque vimos só 12 meses
+  // específicos da API — não dá pra concluir que uma parcela "sumiu" baseado numa janela parcial.
+  // O delete só roda no sync incremental (que cobre 12 meses recentes + 60 dias futuros).
   const clientesQuitadosSet = new Set<number>();
+  if (!isBackfillChunk) {
+    const { data: cobrancasNoBanco } = await supabase
+      .from("crm_cobrancas")
+      .select("id, ssotica_parcela_id, ssotica_cliente_id")
+      .eq("ssotica_company_id", integ.company_id)
+      .not("ssotica_cliente_id", "is", null);
+    const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
 
-  if (storedCobrancas.length > 0) {
-    for (const cob of storedCobrancas) {
-      const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
-      const clienteId = Number(cob.ssotica_cliente_id);
-      // Se a parcela atual ainda está ativa OU o cliente foi atualizado nesta sync, mantém
-      if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
-      if (clientesAfetados.has(clienteId) && parcelasPorCliente.has(clienteId)) continue;
-      // Cliente sumiu da API ou todas as parcelas viraram inativas → remove o card e marca como quitado
-      await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
-      removed++;
-      clientesQuitadosSet.add(clienteId);
+    if (storedCobrancas.length > 0) {
+      for (const cob of storedCobrancas) {
+        const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
+        const clienteId = Number(cob.ssotica_cliente_id);
+        if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
+        if (clientesAfetados.has(clienteId) && parcelasPorCliente.has(clienteId)) continue;
+        await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
+        removed++;
+        clientesQuitadosSet.add(clienteId);
+      }
     }
   }
 
