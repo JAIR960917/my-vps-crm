@@ -449,24 +449,36 @@ export default function SSoticaIntegrationsPage() {
               {editing?.integration ? "Editar integração" : "Conectar loja"}: {editing?.company.name}
             </DialogTitle>
             <DialogDescription>
-              Cole o CNPJ (apenas números) ou o Código de Licença (alfanumérico) e o Bearer Token fornecido pelo SSótica.
+              CNPJ é usado para puxar Vendas. Código de Licença é usado para puxar Contas a Receber. Os dois são fornecidos pelo SSótica.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="cnpj">CNPJ ou Código de Licença</Label>
+              <Label htmlFor="cnpj">CNPJ da loja <span className="text-destructive">*</span></Label>
               <Input
                 id="cnpj"
                 value={form.cnpj}
                 onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                placeholder="CNPJ (00000000000000) ou código alfanumérico"
+                placeholder="00000000000000"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                O SSótica aceita ambos. Se o CNPJ não funcionar, tente o código de licença da loja.
+                CNPJ puro (14 dígitos). Usado no endpoint de <strong>Vendas</strong>.
               </p>
             </div>
             <div>
-              <Label htmlFor="token">Bearer Token</Label>
+              <Label htmlFor="license_code">Código de Licença SSótica</Label>
+              <Input
+                id="license_code"
+                value={form.license_code}
+                onChange={(e) => setForm({ ...form, license_code: e.target.value })}
+                placeholder="Ex: SXGP-CQM3"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Código alfanumérico fornecido pelo SSótica. Usado no endpoint de <strong>Contas a Receber</strong>. Se vazio, usa o CNPJ.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="token">Bearer Token <span className="text-destructive">*</span></Label>
               <Input
                 id="token"
                 type="password"
