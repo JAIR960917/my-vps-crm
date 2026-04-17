@@ -110,14 +110,42 @@ export default function CobrancaEditSheet(props: Props) {
     setNotes((ns || []) as Note[]);
   };
 
+  const fetchParcelas = async () => {
+    if (!ssoticaClienteId || !ssoticaCompanyId) {
+      setParcelas([]);
+      return;
+    }
+    setLoadingParcelas(true);
+    const { data, error } = await supabase
+      .from("crm_cobrancas")
+      .select("id, valor, vencimento, dias_atraso, status, data")
+      .eq("ssotica_cliente_id", ssoticaClienteId)
+      .eq("ssotica_company_id", ssoticaCompanyId)
+      .order("vencimento", { ascending: true });
+    if (!error && data) {
+      const list: ParcelaInfo[] = data.map((p: any) => ({
+        id: p.id,
+        numero_parcela: p.data?.numero_parcela ? Number(p.data.numero_parcela) : null,
+        vencimento: p.vencimento,
+        valor: Number(p.valor || 0),
+        dias_atraso: p.dias_atraso ?? null,
+        status: p.status,
+        is_current: p.id === cobrancaId,
+      }));
+      setParcelas(list);
+    }
+    setLoadingParcelas(false);
+  };
+
   useEffect(() => {
     if (open && cobrancaId) {
       fetchTimeline();
+      fetchParcelas();
       setTab("atividade");
       setNewComment("");
       setTaskOpen(false);
     }
-  }, [open, cobrancaId]);
+  }, [open, cobrancaId, ssoticaClienteId, ssoticaCompanyId]);
 
   const timeline = useMemo(() => {
     const items = [
