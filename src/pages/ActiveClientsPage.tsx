@@ -385,53 +385,25 @@ export default function ActiveClientsPage() {
         </div>
       </DragDropContext>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md p-0 max-h-[90vh] flex flex-col">
-          <DialogHeader className="px-6 pt-6">
-            <DialogTitle>{editingItem ? "Editar Renovação" : "Nova Renovação"}</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="flex-1 px-6">
-            <form id="renovacao-form" onSubmit={handleSave} className="space-y-4 py-4">
-              {fields.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Nenhuma pergunta configurada. Configure em <strong>Formulário Renovação</strong>.
-                </p>
-              )}
-              {rootFields.flatMap(f => renderFieldTree(f))}
-
-              <div className="space-y-2">
-                <Label>Valor (R$)</Label>
-                <Input type="number" step="0.01" value={formValor} onChange={e => setFormValor(e.target.value)} placeholder="0,00" />
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={formStatus} onValueChange={setFormStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {statuses.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              {(isAdmin || isGerente) && (
-                <div className="space-y-2">
-                  <Label>Responsável</Label>
-                  <Select value={formAssigned} onValueChange={setFormAssigned}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                    <SelectContent>
-                      {profiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </form>
-          </ScrollArea>
-          <div className="px-6 pb-6 pt-2 border-t">
-            <Button type="submit" form="renovacao-form" className="w-full" disabled={saving}>
-              {saving ? "Salvando..." : editingItem ? "Atualizar" : "Criar"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <RenovacaoEditSheet
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        renovacaoId={editingItem?.id || null}
+        formData={formData}
+        setFormData={setFormData}
+        formStatus={formStatus}
+        setFormStatus={setFormStatus}
+        formAssigned={formAssigned}
+        setFormAssigned={setFormAssigned}
+        formValor={formValor}
+        setFormValor={setFormValor}
+        statuses={statuses}
+        profiles={profiles}
+        fields={fields}
+        saving={saving}
+        onSave={handleSave}
+        canReassign={isAdmin || isGerente}
+      />
 
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
