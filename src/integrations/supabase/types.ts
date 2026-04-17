@@ -521,6 +521,38 @@ export type Database = {
           },
         ]
       }
+      crm_renovacao_notes: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          renovacao_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          renovacao_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          renovacao_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_renovacao_notes_renovacao_id_fkey"
+            columns: ["renovacao_id"]
+            isOneToOne: false
+            referencedRelation: "crm_renovacoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_renovacao_statuses: {
         Row: {
           color: string
@@ -815,6 +847,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      renovacao_activities: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          renovacao_id: string
+          scheduled_date: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          renovacao_id: string
+          scheduled_date: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          renovacao_id?: string
+          scheduled_date?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renovacao_activities_renovacao_id_fkey"
+            columns: ["renovacao_id"]
+            isOneToOne: false
+            referencedRelation: "crm_renovacoes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       scheduled_whatsapp_messages: {
         Row: {
@@ -1335,6 +1411,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_renovacao: {
+        Args: { _renovacao_id: string }
+        Returns: boolean
+      }
       get_company_user_ids: { Args: never; Returns: string[] }
       get_my_company_id: { Args: never; Returns: string }
       get_profile_names: {
