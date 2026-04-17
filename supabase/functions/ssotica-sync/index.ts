@@ -431,9 +431,10 @@ async function syncContasReceber(
 async function syncVendas(
   supabase: any,
   integ: Integration,
+  forceFull = false,
 ): Promise<{ processed: number; created: number; updated: number }> {
   const today = new Date();
-  const startDate = integ.initial_sync_done && integ.last_sync_vendas_at
+  const startDate = !forceFull && integ.initial_sync_done && integ.last_sync_vendas_at
     ? addDays(new Date(integ.last_sync_vendas_at), -1)
     : addDays(today, -INITIAL_LOOKBACK_DAYS);
   const endDate = today;
