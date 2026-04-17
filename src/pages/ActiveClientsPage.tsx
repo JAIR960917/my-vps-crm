@@ -705,6 +705,25 @@ export default function ActiveClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={autoAssignConfirm} onOpenChange={open => !autoAssigning && setAutoAssignConfirm(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Distribuir {unassignedCount} lead{unassignedCount !== 1 ? "s" : ""} sem responsável?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Os leads serão divididos em partes iguais (round-robin) entre os vendedores ativos de cada loja.
+              {filterCompanyId !== "all" ? " Apenas a loja filtrada será afetada." : " Todas as lojas serão processadas."}
+              {" "}Daqui pra frente, novos leads vindos do SSótica também recebem vendedor automaticamente quando não houver mapeamento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={autoAssigning}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={runAutoAssign} disabled={autoAssigning}>
+              {autoAssigning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Distribuindo...</> : "Distribuir agora"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
