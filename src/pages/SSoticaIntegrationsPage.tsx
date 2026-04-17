@@ -43,6 +43,7 @@ import {
   Clock,
   Plug2,
   Users,
+  StopCircle,
 } from "lucide-react";
 import { UserMappingDialog } from "@/components/ssotica/UserMappingDialog";
 import {
