@@ -314,6 +314,46 @@ export default function ActiveClientsPage() {
             </div>
           );
         })()}
+        {/* Activity status badges */}
+        <div className="pt-2 border-t">
+          {hasOverdue && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full uppercase">
+              <AlertTriangle className="h-3 w-3" />
+              Atrasada
+            </span>
+          )}
+          {hasToday && !hasOverdue && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <CalendarClock className="h-3 w-3" />
+              Hoje
+            </span>
+          )}
+          {hasPending && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
+              <Clock className="h-3 w-3" />
+              Pendente
+            </span>
+          )}
+          {!hasOverdue && !hasToday && !hasPending && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-500 px-2 py-0.5 rounded-full uppercase">
+              <CheckCircle2 className="h-3 w-3" />
+              Em dia
+            </span>
+          )}
+
+          {nextActivity && (
+            <div className={`text-xs mt-1.5 ${hasOverdue ? "text-red-600" : hasToday ? "text-amber-600" : "text-muted-foreground"}`}>
+              <p className="font-medium truncate">{nextActivity.title}</p>
+              <p className="text-[10px]">
+                {(() => {
+                  try { return format(new Date(nextActivity.scheduled_date), "dd/MM 'às' HH:mm", { locale: ptBR }); }
+                  catch { return ""; }
+                })()}
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-1 justify-end pt-1">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(item)}>
             <Pencil className="h-3 w-3" />
