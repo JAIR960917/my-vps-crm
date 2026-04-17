@@ -41,6 +41,7 @@ import {
   Power,
   Building2,
   Clock,
+  Plug2,
 } from "lucide-react";
 import {
   Select,
@@ -97,6 +98,8 @@ export default function SSoticaIntegrationsPage() {
   const [form, setForm] = useState({ cnpj: "", bearer_token: "", is_active: true });
   const [saving, setSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<any | null>(null);
   const [logsFor, setLogsFor] = useState<Integration | null>(null);
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [syncHour, setSyncHour] = useState<string>("6");
@@ -229,6 +232,22 @@ export default function SSoticaIntegrationsPage() {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     } finally {
       setSyncingId(null);
+    }
+  }
+
+  async function handleTestConnection(integ: Integration) {
+    setTestingId(integ.id);
+    setTestResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("ssotica-test-connection", {
+        body: { integration_id: integ.id },
+      });
+      if (error) throw error;
+      setTestResult({ ...data, _company: companies.find((c) => c.id === integ.company_id)?.name });
+    } catch (e: any) {
+      setTestResult({ ok: false, error: e.message, _company: companies.find((c) => c.id === integ.company_id)?.name });
+    } finally {
+      setTestingId(null);
     }
   }
 
@@ -387,6 +406,19 @@ export default function SSoticaIntegrationsPage() {
                               <RefreshCw className="h-3 w-3 mr-1" />
                             )}
                             Sincronizar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleTestConnection(integ)}
+                            disabled={testingId === integ.id}
+                          >
+                            {testingId === integ.id ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Plug2 className="h-3 w-3 mr-1" />
+                            )}
+                            Testar conexão
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => openLogs(integ)}>
                             <History className="h-3 w-3 mr-1" />
