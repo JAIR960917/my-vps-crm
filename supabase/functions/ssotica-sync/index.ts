@@ -284,7 +284,10 @@ async function syncVendas(
   const windows = buildWindows(startDate, endDate);
 
   let processed = 0, created = 0, updated = 0;
-  const cnpjClean = integ.cnpj.replace(/\D/g, "");
+  const raw = (integ.cnpj ?? "").trim();
+  const onlyDigits = raw.replace(/\D/g, "");
+  const isCnpj = !/[a-zA-Z]/.test(raw) && onlyDigits.length === 14;
+  const cnpjClean = isCnpj ? onlyDigits : raw;
 
   // Mapa cliente_id -> última venda (data + venda_id + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; cliente: any }>();
