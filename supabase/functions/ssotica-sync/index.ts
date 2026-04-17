@@ -659,6 +659,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const onlyIntegrationId: string | undefined = body.integration_id;
+    const forceFull: boolean = body.force_full === true;
 
     const query = supabase
       .from("ssotica_integrations")
@@ -682,15 +683,15 @@ Deno.serve(async (req) => {
         await supabase.from("ssotica_integrations").update({ sync_status: "running", last_error: null }).eq("id", integ.id);
         const { data: log } = await supabase.from("ssotica_sync_logs").insert({
           integration_id: integ.id,
-          sync_type: "full",
+          sync_type: forceFull ? "full_force" : "full",
           status: "running",
         }).select("id").single();
         logId = log?.id ?? null;
 
         // 1. Contas a Receber primeiro (para que Renovações saibam quem tem dívida)
         const cr = await syncContasReceber(supabase, integ);
-        // 2. Vendas
-        const v = await syncVendas(supabase, integ);
+        // 2. Vendas (forceFull rebusca os últimos 6 meses, ignorando last_sync_vendas_at)
+        const v = await syncVendas(supabase, integ, forceFull);
 
         const finishedAt = new Date().toISOString();
         await supabase.from("ssotica_integrations").update({
