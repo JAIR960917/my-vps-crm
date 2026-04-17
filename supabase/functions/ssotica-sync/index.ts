@@ -472,7 +472,7 @@ async function syncVendas(
   const useFullWindow = forceFull || clientesQuitados.length > 0 || !integ.initial_sync_done;
   const overallStart = !useFullWindow && integ.last_sync_vendas_at
     ? addDays(new Date(integ.last_sync_vendas_at), -1)
-    : addDays(today, -VENDAS_MAX_HISTORY_DAYS);
+    : addDays(today, -MAX_HISTORY_DAYS);
   const overallEnd = today;
 
   let processed = 0, created = 0, updated = 0;
