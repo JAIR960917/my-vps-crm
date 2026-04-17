@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarHeart } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -265,11 +266,24 @@ export default function ActiveClientsPage() {
           );
         })}
 
-        {item.assigned_to && (
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <User className="h-3 w-3" />{getProfileName(item.assigned_to)}
-          </p>
-        )}
+        {item.assigned_to && (() => {
+          const ap = profiles.find(p => p.user_id === item.assigned_to);
+          if (!ap) return null;
+          return (
+            <div className="pt-1">
+              <p className="text-[11px] text-muted-foreground leading-tight">Pessoa responsável</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <Avatar className="h-5 w-5 text-[9px]">
+                  <AvatarImage src={ap.avatar_url ?? undefined} />
+                  <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
+                    {(ap.full_name || "?").slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs font-medium text-foreground truncate">{ap.full_name}</span>
+              </div>
+            </div>
+          );
+        })()}
         <div className="flex gap-1 justify-end pt-1">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(item)}>
             <Pencil className="h-3 w-3" />
