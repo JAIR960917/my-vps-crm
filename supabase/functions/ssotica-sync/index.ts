@@ -172,19 +172,9 @@ async function syncContasReceber(
           !isAtiva || foiBaixada || foiCancelada || foiEstornada;
 
         if (isInativa) {
-          // Se já existe na cobrança → remove do kanban (foi paga/cancelada/estornada)
-          if (parcela.id) {
-            const { data: existingPaid } = await supabase
-              .from("crm_cobrancas")
-              .select("id, ssotica_cliente_id")
-              .eq("ssotica_parcela_id", parcela.id)
-              .maybeSingle();
-            if (existingPaid) {
-              if (existingPaid.ssotica_cliente_id) clientesAfetados.add(Number(existingPaid.ssotica_cliente_id));
-              await supabase.from("crm_cobrancas").delete().eq("id", existingPaid.id);
-              removed++;
-            }
-          }
+          // Marca cliente para reclassificação (a parcela em si é tratada no pós-processamento)
+          const cliInativa = parcela.titulo?.cliente ?? parcela.cliente ?? {};
+          if (cliInativa?.id) clientesAfetados.add(Number(cliInativa.id));
           continue;
         }
 
