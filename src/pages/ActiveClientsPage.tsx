@@ -112,9 +112,38 @@ export default function ActiveClientsPage() {
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Lazy rendering: 20 cards por coluna, "carrega mais" ao rolar
+  const ITEMS_PER_PAGE = 20;
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || ITEMS_PER_PAGE;
+  const loadMore = (statusKey: string) =>
+    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE }));
+  const handleColumnScroll = (e: React.UIEvent<HTMLDivElement>, statusKey: string) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) loadMore(statusKey);
+  };
+
+  const fetchAllRenovacoes = async () => {
+    const PAGE_SIZE = 1000;
+    let all: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("crm_renovacoes")
+        .select("*")
+        .order("updated_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error || !data) break;
+      all = all.concat(data);
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+    return all;
+  };
+
   const fetchAll = useCallback(async () => {
-    const [{ data: items }, { data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
-      supabase.from("crm_renovacoes").select("*").order("updated_at", { ascending: false }),
+    const [items, { data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
+      fetchAllRenovacoes(),
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("user_roles").select("user_id, role"),
@@ -133,6 +162,9 @@ export default function ActiveClientsPage() {
 
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Reseta a paginação quando filtros/busca mudam
+  useEffect(() => { setVisibleCounts({}); }, [filterCompanyId, searchQuery]);
 
   useEffect(() => {
     if (statuses.length > 0 && !mobileTab) setMobileTab(statuses[0].key);
