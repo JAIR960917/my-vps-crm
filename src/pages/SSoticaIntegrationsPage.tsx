@@ -42,7 +42,9 @@ import {
   Building2,
   Clock,
   Plug2,
+  Users,
 } from "lucide-react";
+import { UserMappingDialog } from "@/components/ssotica/UserMappingDialog";
 import {
   Select,
   SelectContent,
