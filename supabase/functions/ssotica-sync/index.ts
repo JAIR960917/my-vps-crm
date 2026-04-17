@@ -197,6 +197,9 @@ async function syncContasReceber(
         if (diasAtraso < -1) continue;
 
         if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
+        if (cliente?.id ?? parcela.titulo?.cliente?.id) {
+          clientesAfetados.add(Number(parcela.titulo?.cliente?.id ?? parcela.cliente?.id));
+        }
 
         const colunaKey = statusKeyForDiasAtraso(diasAtraso);
 
@@ -226,7 +229,7 @@ async function syncContasReceber(
           .maybeSingle();
 
         if (existing) {
-          // Re-classifica SEMPRE: o card muda de coluna conforme o tempo passa
+          // status será reclassificado depois com base na parcela MAIS antiga do cliente
           await supabase
             .from("crm_cobrancas")
             .update({
