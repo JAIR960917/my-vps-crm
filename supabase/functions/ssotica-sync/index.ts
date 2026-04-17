@@ -413,16 +413,20 @@ async function syncContasReceber(
     .not("ssotica_cliente_id", "is", null);
   const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
 
+  // Clientes que tinham cobrança no banco mas não têm mais parcela ativa = QUITARAM
+  const clientesQuitadosSet = new Set<number>();
+
   if (storedCobrancas.length > 0) {
     for (const cob of storedCobrancas) {
       const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
       const clienteId = Number(cob.ssotica_cliente_id);
       // Se a parcela atual ainda está ativa OU o cliente foi atualizado nesta sync, mantém
       if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
-      if (clientesAfetados.has(clienteId)) continue;
-      // Cliente sumiu da API → remove o card
+      if (clientesAfetados.has(clienteId) && parcelasPorCliente.has(clienteId)) continue;
+      // Cliente sumiu da API ou todas as parcelas viraram inativas → remove o card e marca como quitado
       await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
       removed++;
+      clientesQuitadosSet.add(clienteId);
     }
   }
 
@@ -430,9 +434,9 @@ async function syncContasReceber(
   const topSituacoes = Array.from(situacoesVistas.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
-  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} processed=${processed} created=${created} updated=${updated} removed=${removed} skipped=${JSON.stringify(skipped)} top_situacoes=${JSON.stringify(topSituacoes)}`);
+  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} processed=${processed} created=${created} updated=${updated} removed=${removed} quitados=${clientesQuitadosSet.size} skipped=${JSON.stringify(skipped)} top_situacoes=${JSON.stringify(topSituacoes)}`);
 
-  return { processed, created, updated, removed };
+  return { processed, created, updated, removed, clientesQuitados: Array.from(clientesQuitadosSet) };
 }
 
 async function syncVendas(
