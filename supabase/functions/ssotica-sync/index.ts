@@ -220,12 +220,19 @@ async function syncContasReceber(
         situacoesVistas.set(situacao, (situacoesVistas.get(situacao) ?? 0) + 1);
 
         // Situações ATIVAS (parcela ainda devida e SEM renegociação) = mantemos no kanban de cobranças
-        // "Renegociado" significa que a dívida virou um novo título — não é mais cobrança em atraso,
-        // o cliente deve ser tratado pela tela de Renovação.
+        // O SSótica retorna nomes variados conforme configuração da loja:
+        //   "em aberto", "vencido"/"vencida", "em atraso", "negativado serasa", "a vencer", etc.
+        // "Renegociado" é tratado separadamente abaixo.
         const isAtiva =
           situacao === "em aberto" ||
           situacao === "vencido" ||
-          situacao === "vencida";
+          situacao === "vencida" ||
+          situacao === "em atraso" ||
+          situacao === "atrasado" ||
+          situacao === "atrasada" ||
+          situacao.startsWith("negativado") ||
+          situacao === "a vencer" ||
+          situacao === "vencer";
 
         // Detecta renegociação por DOIS sinais (qualquer um basta):
         //  1) campo `situacao` começa com "renegoc" (Renegociado, Renegociada, etc.)
