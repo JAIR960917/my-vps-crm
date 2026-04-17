@@ -452,16 +452,24 @@ async function syncVendas(
   integ: Integration,
   forceFull = false,
   clientesQuitados: number[] = [],
+  windowOverride?: { start: Date; end: Date },
 ): Promise<{ processed: number; created: number; updated: number; chunks: number }> {
   const today = new Date();
-  // Se há clientes que acabaram de quitar OU é a primeira sync OU resync forçado,
-  // varre todo o histórico de 96 meses (em chunks). Caso contrário, sync incremental
-  // a partir do último sync.
-  const useFullWindow = forceFull || clientesQuitados.length > 0 || !integ.initial_sync_done;
-  const overallStart = !useFullWindow && integ.last_sync_vendas_at
-    ? addDays(new Date(integ.last_sync_vendas_at), -1)
-    : addDays(today, -MAX_HISTORY_DAYS);
-  const overallEnd = today;
+  const isBackfillChunk = !!windowOverride;
+  // Janela:
+  //  - windowOverride (modo backfill): processa só o chunk indicado.
+  //  - sync incremental: a partir do último sync (ou últimos 12 meses se primeira vez).
+  let overallStart: Date;
+  let overallEnd: Date;
+  if (windowOverride) {
+    overallStart = windowOverride.start;
+    overallEnd = windowOverride.end;
+  } else {
+    overallEnd = today;
+    overallStart = integ.last_sync_vendas_at && !forceFull && clientesQuitados.length === 0 && integ.initial_sync_done
+      ? addDays(new Date(integ.last_sync_vendas_at), -1)
+      : addDays(today, -CHUNK_DAYS); // 12 meses na primeira sync
+  }
 
   let processed = 0, created = 0, updated = 0;
   // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
