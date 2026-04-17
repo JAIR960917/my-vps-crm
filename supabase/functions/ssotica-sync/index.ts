@@ -8,8 +8,12 @@ const corsHeaders = {
 };
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
-const MAX_WINDOW_DAYS = 30; // limite da API
-const INITIAL_LOOKBACK_DAYS = 420; // 14 meses na carga inicial / resync
+const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
+const COBRANCAS_LOOKBACK_DAYS = 420; // 14 meses para boletos em atraso (não faz sentido buscar mais)
+// Vendas / Renovações: buscar até 96 meses, processado em chunks de 12 meses
+// para evitar timeout da edge function em lojas com histórico longo.
+const VENDAS_MAX_HISTORY_DAYS = 2880; // 96 meses
+const VENDAS_CHUNK_DAYS = 365;        // ~12 meses por chunk
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
@@ -159,7 +163,7 @@ async function syncContasReceber(
   // SEMPRE buscar 180 dias para trás para garantir que parcelas em atraso antigas sejam pegas.
   // Não usar last_sync_receber_at aqui porque parcelas vencidas há muito tempo continuam ativas
   // até serem pagas, e podem não aparecer em janelas curtas se o sync rodar todos os dias.
-  const startDate = addDays(today, -INITIAL_LOOKBACK_DAYS);
+  const startDate = addDays(today, -COBRANCAS_LOOKBACK_DAYS);
   // janela termina 60 dias à frente para pegar parcelas que vencem em breve
   const endDate = addDays(today, 60);
   const windows = buildWindows(startDate, endDate);
@@ -444,16 +448,16 @@ async function syncVendas(
   integ: Integration,
   forceFull = false,
   clientesQuitados: number[] = [],
-): Promise<{ processed: number; created: number; updated: number }> {
+): Promise<{ processed: number; created: number; updated: number; chunks: number }> {
   const today = new Date();
-  // Se há clientes que acabaram de quitar, força janela completa para garantir
-  // que peguemos a última venda deles e criemos/atualizemos o card de Renovação.
-  const useFullWindow = forceFull || clientesQuitados.length > 0;
-  const startDate = !useFullWindow && integ.initial_sync_done && integ.last_sync_vendas_at
+  // Se há clientes que acabaram de quitar OU é a primeira sync OU resync forçado,
+  // varre todo o histórico de 96 meses (em chunks). Caso contrário, sync incremental
+  // a partir do último sync.
+  const useFullWindow = forceFull || clientesQuitados.length > 0 || !integ.initial_sync_done;
+  const overallStart = !useFullWindow && integ.last_sync_vendas_at
     ? addDays(new Date(integ.last_sync_vendas_at), -1)
-    : addDays(today, -INITIAL_LOOKBACK_DAYS);
-  const endDate = today;
-  const windows = buildWindows(startDate, endDate);
+    : addDays(today, -VENDAS_MAX_HISTORY_DAYS);
+  const overallEnd = today;
 
   let processed = 0, created = 0, updated = 0;
   // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
@@ -507,46 +511,67 @@ async function syncVendas(
   // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any; funcionario: any }>();
 
-  for (const w of windows) {
-    const url =
-      `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
-    const vendas = await fetchSSotica(url, integ.bearer_token) as any[];
-    if (!Array.isArray(vendas)) continue;
+  // Quebra o intervalo total em chunks de ~12 meses, do mais recente ao mais antigo.
+  // Isso evita timeout (cada chunk processa ~12 janelas de 30 dias) e permite logar
+  // progresso por chunk. Como agregamos apenas a ÚLTIMA compra por cliente, processar
+  // do mais recente para o mais antigo já popula corretamente o mapa.
+  const chunks: Array<{ start: Date; end: Date }> = [];
+  let chunkEnd = new Date(overallEnd);
+  while (chunkEnd >= overallStart) {
+    const chunkStart = addDays(chunkEnd, -(VENDAS_CHUNK_DAYS - 1));
+    const realStart = chunkStart < overallStart ? overallStart : chunkStart;
+    chunks.push({ start: realStart, end: chunkEnd });
+    chunkEnd = addDays(realStart, -1);
+  }
 
-    for (const venda of vendas) {
-      processed++;
-      // Cacheia funcionário visto ANTES de qualquer filtro (pra alimentar a tela de mapeamento)
-      const func = venda.funcionario;
-      if (func) {
-        const nome = String(func.nome ?? "").trim();
-        const funcao = String(func.funcao ?? "").trim();
-        // Se não tiver id, usa hash negativo do nome para ter chave estável
-        let funcKey: number | null = null;
-        if (func.id != null && !Number.isNaN(Number(func.id))) {
-          funcKey = Number(func.id);
-        } else if (nome) {
-          // Hash simples do nome → número negativo (não colide com IDs reais positivos)
-          let h = 0;
-          for (let i = 0; i < nome.length; i++) h = ((h << 5) - h + nome.charCodeAt(i)) | 0;
-          funcKey = -Math.abs(h) || -1;
-        }
-        if (funcKey !== null && (nome || funcao)) {
-          funcionariosVistos.set(funcKey, { nome: nome || "(sem nome)", funcao });
-        }
-      }
+  let chunksProcessed = 0;
+  for (const chunk of chunks) {
+    const windows = buildWindows(chunk.start, chunk.end);
+    let chunkVendas = 0;
+    for (const w of windows) {
+      const url =
+        `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+      const vendas = await fetchSSotica(url, integ.bearer_token) as any[];
+      if (!Array.isArray(vendas)) continue;
 
-      const statusVenda = String(venda.status ?? "").toUpperCase();
-      // Aceita ATIVA ou status ausente/vazio (algumas lojas omitem o campo)
-      if (statusVenda && statusVenda !== "ATIVA") continue;
-      const cliente = venda.cliente;
-      if (!cliente?.id) continue;
-      const data = venda.data as string;
-      const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
-      const prev = ultimaCompraPorCliente.get(cliente.id);
-      if (!prev || prev.data < data) {
-        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
+      for (const venda of vendas) {
+        processed++;
+        chunkVendas++;
+        // Cacheia funcionário visto ANTES de qualquer filtro (pra alimentar a tela de mapeamento)
+        const func = venda.funcionario;
+        if (func) {
+          const nome = String(func.nome ?? "").trim();
+          const funcao = String(func.funcao ?? "").trim();
+          // Se não tiver id, usa hash negativo do nome para ter chave estável
+          let funcKey: number | null = null;
+          if (func.id != null && !Number.isNaN(Number(func.id))) {
+            funcKey = Number(func.id);
+          } else if (nome) {
+            // Hash simples do nome → número negativo (não colide com IDs reais positivos)
+            let h = 0;
+            for (let i = 0; i < nome.length; i++) h = ((h << 5) - h + nome.charCodeAt(i)) | 0;
+            funcKey = -Math.abs(h) || -1;
+          }
+          if (funcKey !== null && (nome || funcao)) {
+            funcionariosVistos.set(funcKey, { nome: nome || "(sem nome)", funcao });
+          }
+        }
+
+        const statusVenda = String(venda.status ?? "").toUpperCase();
+        // Aceita ATIVA ou status ausente/vazio (algumas lojas omitem o campo)
+        if (statusVenda && statusVenda !== "ATIVA") continue;
+        const cliente = venda.cliente;
+        if (!cliente?.id) continue;
+        const data = venda.data as string;
+        const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
+        const prev = ultimaCompraPorCliente.get(cliente.id);
+        if (!prev || prev.data < data) {
+          ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
+        }
       }
     }
+    chunksProcessed++;
+    console.log(`[ssotica-sync][vendas] empresa=${integ.company_id} chunk=${chunksProcessed}/${chunks.length} (${ymd(chunk.start)}→${ymd(chunk.end)}) vendas=${chunkVendas} clientes_unicos_acumulado=${ultimaCompraPorCliente.size}`);
   }
 
   // Persiste cache de funcionários SSótica vistos (upsert)
@@ -675,7 +700,7 @@ async function syncVendas(
     }
   }
 
-  return { processed, created, updated };
+  return { processed, created, updated, chunks: chunksProcessed };
 }
 
 Deno.serve(async (req) => {
