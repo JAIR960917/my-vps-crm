@@ -109,6 +109,7 @@ export default function ActiveClientsPage() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCompanyId, setFilterCompanyId] = useState("all");
+  const [filterAssignedTo, setFilterAssignedTo] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -164,7 +165,7 @@ export default function ActiveClientsPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // Reseta a paginação quando filtros/busca mudam
-  useEffect(() => { setVisibleCounts({}); }, [filterCompanyId, searchQuery]);
+  useEffect(() => { setVisibleCounts({}); }, [filterCompanyId, filterAssignedTo, searchQuery]);
 
   useEffect(() => {
     if (statuses.length > 0 && !mobileTab) setMobileTab(statuses[0].key);
@@ -495,6 +496,23 @@ export default function ActiveClientsPage() {
                 {companies.map(c => (
                   <SelectItem key={c.id} value={c.id}>{c.name.trim()}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          )}
+          {(isAdmin || isGerente) && profiles.length > 0 && (
+            <Select value={filterAssignedTo} onValueChange={setFilterAssignedTo}>
+              <SelectTrigger className="h-9 w-full sm:w-56">
+                <SelectValue placeholder="Filtrar por responsável" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os responsáveis</SelectItem>
+                <SelectItem value="__unassigned__">— Sem responsável —</SelectItem>
+                {[...profiles]
+                  .filter(p => p.full_name?.trim())
+                  .sort((a, b) => a.full_name.localeCompare(b.full_name))
+                  .map(p => (
+                    <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           )}
