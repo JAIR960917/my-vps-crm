@@ -390,6 +390,7 @@ async function syncVendas(
             data: renovacaoData,
             data_ultima_compra: info.data,
             ssotica_venda_id: info.vendaId,
+            valor: info.valor,
             scheduled_date: info.data,
             status: newStatus,
           })
@@ -403,6 +404,7 @@ async function syncVendas(
         ssotica_company_id: integ.company_id,
         data: renovacaoData,
         data_ultima_compra: info.data,
+        valor: info.valor,
         status: renovacaoStatusKey,
         scheduled_date: info.data,
       });
