@@ -83,4 +83,51 @@
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'DM Sans', sans-serif;
   }
+
+  /* Scrollbar harmonizada com o tema */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.25);
+    border-radius: 8px;
+    border: 2px solid hsl(var(--background));
+    transition: background 0.2s ease;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.45);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Sidebar com fundo escuro próprio — contraste sutil */
+  [data-sidebar]::-webkit-scrollbar-track,
+  .bg-sidebar::-webkit-scrollbar-track {
+    background: hsl(var(--sidebar-background));
+  }
+
+  [data-sidebar]::-webkit-scrollbar-thumb,
+  .bg-sidebar::-webkit-scrollbar-thumb {
+    background: hsl(var(--sidebar-foreground) / 0.2);
+    border: 2px solid hsl(var(--sidebar-background));
+  }
+
+  [data-sidebar]::-webkit-scrollbar-thumb:hover,
+  .bg-sidebar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--sidebar-foreground) / 0.4);
+  }
 }
