@@ -165,6 +165,19 @@ async function syncContasReceber(
   const windows = buildWindows(startDate, endDate);
 
   let processed = 0, created = 0, updated = 0, removed = 0;
+  // Contadores de diagnóstico (logados ao final para depurar filtros)
+  const skipped = {
+    naoAtiva: 0,
+    renegociada: 0,
+    baixada: 0,
+    cancelada: 0,
+    estornada: 0,
+    paga: 0,
+    semVencimento: 0,
+    naoEmAtraso: 0,
+    semCliente: 0,
+  };
+  const situacoesVistas = new Map<string, number>();
   // Contas a Receber: usa o Código de Licença se disponível, senão usa o CNPJ.
   const empresaParam = normalizeIdentifier(integ.license_code || integ.cnpj);
 
