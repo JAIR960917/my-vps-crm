@@ -523,68 +523,48 @@ async function syncVendas(
   // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any; funcionario: any }>();
 
-  // Quebra o intervalo total em chunks de ~12 meses, do mais recente ao mais antigo.
-  // Isso evita timeout (cada chunk processa ~12 janelas de 30 dias) e permite logar
-  // progresso por chunk. Como agregamos apenas a ÚLTIMA compra por cliente, processar
-  // do mais recente para o mais antigo já popula corretamente o mapa.
-  const chunks: Array<{ start: Date; end: Date }> = [];
-  let chunkEnd = new Date(overallEnd);
-  while (chunkEnd >= overallStart) {
-    const chunkStart = addDays(chunkEnd, -(CHUNK_DAYS - 1));
-    const realStart = chunkStart < overallStart ? overallStart : chunkStart;
-    chunks.push({ start: realStart, end: chunkEnd });
-    chunkEnd = addDays(realStart, -1);
-  }
+  // Janela única (definida por overallStart/overallEnd) dividida em sub-janelas de 30 dias.
+  const windows = buildWindows(overallStart, overallEnd);
+  for (const w of windows) {
+    const url =
+      `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+    const vendas = await fetchSSotica(url, integ.bearer_token) as any[];
+    if (!Array.isArray(vendas)) continue;
 
-  let chunksProcessed = 0;
-  for (const chunk of chunks) {
-    const windows = buildWindows(chunk.start, chunk.end);
-    let chunkVendas = 0;
-    for (const w of windows) {
-      const url =
-        `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
-      const vendas = await fetchSSotica(url, integ.bearer_token) as any[];
-      if (!Array.isArray(vendas)) continue;
-
-      for (const venda of vendas) {
-        processed++;
-        chunkVendas++;
-        // Cacheia funcionário visto ANTES de qualquer filtro (pra alimentar a tela de mapeamento)
-        const func = venda.funcionario;
-        if (func) {
-          const nome = String(func.nome ?? "").trim();
-          const funcao = String(func.funcao ?? "").trim();
-          // Se não tiver id, usa hash negativo do nome para ter chave estável
-          let funcKey: number | null = null;
-          if (func.id != null && !Number.isNaN(Number(func.id))) {
-            funcKey = Number(func.id);
-          } else if (nome) {
-            // Hash simples do nome → número negativo (não colide com IDs reais positivos)
-            let h = 0;
-            for (let i = 0; i < nome.length; i++) h = ((h << 5) - h + nome.charCodeAt(i)) | 0;
-            funcKey = -Math.abs(h) || -1;
-          }
-          if (funcKey !== null && (nome || funcao)) {
-            funcionariosVistos.set(funcKey, { nome: nome || "(sem nome)", funcao });
-          }
+    for (const venda of vendas) {
+      processed++;
+      // Cacheia funcionário visto ANTES de qualquer filtro (pra alimentar a tela de mapeamento)
+      const func = venda.funcionario;
+      if (func) {
+        const nome = String(func.nome ?? "").trim();
+        const funcao = String(func.funcao ?? "").trim();
+        let funcKey: number | null = null;
+        if (func.id != null && !Number.isNaN(Number(func.id))) {
+          funcKey = Number(func.id);
+        } else if (nome) {
+          let h = 0;
+          for (let i = 0; i < nome.length; i++) h = ((h << 5) - h + nome.charCodeAt(i)) | 0;
+          funcKey = -Math.abs(h) || -1;
         }
-
-        const statusVenda = String(venda.status ?? "").toUpperCase();
-        // Aceita ATIVA ou status ausente/vazio (algumas lojas omitem o campo)
-        if (statusVenda && statusVenda !== "ATIVA") continue;
-        const cliente = venda.cliente;
-        if (!cliente?.id) continue;
-        const data = venda.data as string;
-        const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
-        const prev = ultimaCompraPorCliente.get(cliente.id);
-        if (!prev || prev.data < data) {
-          ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
+        if (funcKey !== null && (nome || funcao)) {
+          funcionariosVistos.set(funcKey, { nome: nome || "(sem nome)", funcao });
         }
       }
+
+      const statusVenda = String(venda.status ?? "").toUpperCase();
+      if (statusVenda && statusVenda !== "ATIVA") continue;
+      const cliente = venda.cliente;
+      if (!cliente?.id) continue;
+      const data = venda.data as string;
+      const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
+      const prev = ultimaCompraPorCliente.get(cliente.id);
+      if (!prev || prev.data < data) {
+        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
+      }
     }
-    chunksProcessed++;
-    console.log(`[ssotica-sync][vendas] empresa=${integ.company_id} chunk=${chunksProcessed}/${chunks.length} (${ymd(chunk.start)}→${ymd(chunk.end)}) vendas=${chunkVendas} clientes_unicos_acumulado=${ultimaCompraPorCliente.size}`);
   }
+  const chunksProcessed = 1;
+  console.log(`[ssotica-sync][vendas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_unicos=${ultimaCompraPorCliente.size} backfill_chunk=${isBackfillChunk}`);
 
   // Persiste cache de funcionários SSótica vistos (upsert)
   if (funcionariosVistos.size > 0) {
