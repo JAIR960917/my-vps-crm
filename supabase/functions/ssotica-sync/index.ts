@@ -579,9 +579,16 @@ async function syncVendas(
       .maybeSingle();
     const existingRenovacao = existing as ExistingRenovacao | null;
 
-    // Prioridade: mapeamento manual (por ID do funcionário SSótica) > matching por nome > gerente
-    const funcionarioId = info.funcionario?.id ? Number(info.funcionario.id) : null;
-    const manualUserId = funcionarioId ? userIdByFuncionarioId.get(funcionarioId) ?? null : null;
+    // Prioridade: mapeamento manual (por ID do funcionário SSótica, ou hash do nome se sem ID) > matching por nome > gerente
+    let funcionarioKey: number | null = null;
+    if (info.funcionario?.id != null && !Number.isNaN(Number(info.funcionario.id))) {
+      funcionarioKey = Number(info.funcionario.id);
+    } else if (responsavelNome) {
+      let h = 0;
+      for (let i = 0; i < responsavelNome.length; i++) h = ((h << 5) - h + responsavelNome.charCodeAt(i)) | 0;
+      funcionarioKey = -Math.abs(h) || -1;
+    }
+    const manualUserId = funcionarioKey !== null ? userIdByFuncionarioId.get(funcionarioKey) ?? null : null;
     const matchedProfile = manualUserId ? null : findResponsibleProfile(responsavelNome);
     const existingAssignedRole = existingRenovacao?.assigned_to ? roleByUserId.get(existingRenovacao.assigned_to) : null;
     const preserveExistingVendedor = existingAssignedRole === "vendedor" && !manualUserId;
