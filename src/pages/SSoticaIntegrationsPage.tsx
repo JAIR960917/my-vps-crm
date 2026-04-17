@@ -209,11 +209,11 @@ export default function SSoticaIntegrationsPage() {
     }
   }
 
-  async function handleSyncNow(integ: Integration) {
+  async function handleSyncNow(integ: Integration, forceFull = false) {
     setSyncingId(integ.id);
     try {
       const { data, error } = await supabase.functions.invoke("ssotica-sync", {
-        body: { integration_id: integ.id },
+        body: { integration_id: integ.id, force_full: forceFull },
       });
       if (error) throw error;
       const result = data?.results?.[0];
@@ -222,7 +222,7 @@ export default function SSoticaIntegrationsPage() {
         const v = result.vendas;
         const removidas = cr.removed ?? 0;
         toast({
-          title: "Sincronização concluída",
+          title: forceFull ? "Resincronização completa concluída" : "Sincronização concluída",
           description: `Cobranças: +${cr.created} novas, ${cr.updated} atualizadas, ${removidas} quitadas/removidas. Renovações: +${v.created} novas, ${v.updated} atualizadas.`,
         });
       } else {
