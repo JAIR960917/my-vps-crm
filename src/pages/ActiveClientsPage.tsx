@@ -112,6 +112,32 @@ export default function ActiveClientsPage() {
   const [filterAssignedTo, setFilterAssignedTo] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [autoAssigning, setAutoAssigning] = useState(false);
+  const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
+
+  const unassignedCount = useMemo(() => {
+    let items = renovacoes.filter(r => !r.assigned_to && (r as any).ssotica_company_id);
+    if (filterCompanyId !== "all") items = items.filter(r => (r as any).ssotica_company_id === filterCompanyId);
+    return items.length;
+  }, [renovacoes, filterCompanyId]);
+
+  const runAutoAssign = async () => {
+    setAutoAssigning(true);
+    try {
+      const body: any = {};
+      if (filterCompanyId !== "all") body.company_id = filterCompanyId;
+      const { data, error } = await supabase.functions.invoke("auto-assign-renovacoes", { body });
+      if (error) throw error;
+      const total = (data as any)?.total_assigned ?? 0;
+      toast.success(`${total} lead${total !== 1 ? "s" : ""} distribuído${total !== 1 ? "s" : ""} entre os vendedores`);
+      await fetchAll();
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao distribuir leads");
+    } finally {
+      setAutoAssigning(false);
+      setAutoAssignConfirm(false);
+    }
+  };
 
   // Lazy rendering: 20 cards por coluna, "carrega mais" ao rolar
   const ITEMS_PER_PAGE = 20;
