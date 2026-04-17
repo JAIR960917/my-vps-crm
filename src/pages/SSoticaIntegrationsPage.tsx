@@ -42,7 +42,9 @@ import {
   Building2,
   Clock,
   Plug2,
+  Users,
 } from "lucide-react";
+import { UserMappingDialog } from "@/components/ssotica/UserMappingDialog";
 import {
   Select,
   SelectContent,
@@ -105,6 +107,7 @@ export default function SSoticaIntegrationsPage() {
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [syncHour, setSyncHour] = useState<string>("6");
   const [savingHour, setSavingHour] = useState(false);
+  const [mappingFor, setMappingFor] = useState<Company | null>(null);
 
   async function fetchAll() {
     setLoading(true);
@@ -427,6 +430,10 @@ export default function SSoticaIntegrationsPage() {
                             <History className="h-3 w-3 mr-1" />
                             Logs
                           </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setMappingFor(company)}>
+                            <Users className="h-3 w-3 mr-1" />
+                            Vendedores
+                          </Button>
                           <Button size="sm" variant="ghost" onClick={() => handleToggleActive(integ)}>
                             <Power className="h-3 w-3 mr-1" />
                             {integ.is_active ? "Desativar" : "Ativar"}
@@ -627,6 +634,14 @@ export default function SSoticaIntegrationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {mappingFor && (
+        <UserMappingDialog
+          open={!!mappingFor}
+          onOpenChange={(o) => !o && setMappingFor(null)}
+          companyId={mappingFor.id}
+          companyName={mappingFor.name}
+        />
+      )}
     </AppLayout>
   );
 }

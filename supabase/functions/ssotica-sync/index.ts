@@ -459,6 +459,16 @@ async function syncVendas(
     typedCompanyRoles.map((entry) => [entry.user_id, entry.role]),
   );
   const managerUserId = typedCompanyProfiles.find((profile) => roleByUserId.get(profile.user_id) === "gerente")?.user_id ?? null;
+
+  // Carrega mapeamento manual SSótica → CRM (vendedor por funcionário SSótica)
+  const { data: mappings } = await supabase
+    .from("ssotica_user_mappings")
+    .select("ssotica_funcionario_id, user_id")
+    .eq("company_id", integ.company_id);
+  const userIdByFuncionarioId = new Map<number, string>(
+    (mappings ?? []).map((m: any) => [Number(m.ssotica_funcionario_id), m.user_id as string]),
+  );
+
   const findResponsibleProfile = (responsavelNome: string | null | undefined) => {
     if (!responsavelNome) return null;
 
@@ -466,6 +476,9 @@ async function syncVendas(
       (profile) => roleByUserId.get(profile.user_id) === "vendedor" && isSamePerson(profile.full_name, responsavelNome),
     ) ?? typedCompanyProfiles.find((profile) => isSamePerson(profile.full_name, responsavelNome)) ?? null;
   };
+
+  // Cache de funcionários SSótica vistos nesta sync (alimenta a tela de mapeamento)
+  const funcionariosVistos = new Map<number, { nome: string; funcao: string }>();
 
   // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any; funcionario: any }>();
@@ -483,11 +496,33 @@ async function syncVendas(
       if (!cliente?.id) continue;
       const data = venda.data as string;
       const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
+      // Cacheia funcionário visto pra alimentar a tela de mapeamento
+      const func = venda.funcionario;
+      if (func?.id) {
+        funcionariosVistos.set(Number(func.id), {
+          nome: String(func.nome ?? "").trim(),
+          funcao: String(func.funcao ?? "").trim(),
+        });
+      }
       const prev = ultimaCompraPorCliente.get(cliente.id);
       if (!prev || prev.data < data) {
         ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
       }
     }
+  }
+
+  // Persiste cache de funcionários SSótica vistos (upsert)
+  if (funcionariosVistos.size > 0) {
+    const rows = Array.from(funcionariosVistos.entries()).map(([id, f]) => ({
+      company_id: integ.company_id,
+      ssotica_funcionario_id: id,
+      nome: f.nome || "(sem nome)",
+      funcao: f.funcao || null,
+      last_seen_at: new Date().toISOString(),
+    }));
+    await supabase
+      .from("ssotica_funcionarios")
+      .upsert(rows, { onConflict: "company_id,ssotica_funcionario_id" });
   }
 
   // Para cada cliente que comprou: se NÃO tem cobrança em aberto/vencida, vai para Renovações
@@ -530,14 +565,19 @@ async function syncVendas(
       .maybeSingle();
     const existingRenovacao = existing as ExistingRenovacao | null;
 
-    const matchedProfile = findResponsibleProfile(responsavelNome);
+    // Prioridade: mapeamento manual (por ID do funcionário SSótica) > matching por nome > gerente
+    const funcionarioId = info.funcionario?.id ? Number(info.funcionario.id) : null;
+    const manualUserId = funcionarioId ? userIdByFuncionarioId.get(funcionarioId) ?? null : null;
+    const matchedProfile = manualUserId ? null : findResponsibleProfile(responsavelNome);
     const existingAssignedRole = existingRenovacao?.assigned_to ? roleByUserId.get(existingRenovacao.assigned_to) : null;
-    const preserveExistingVendedor = existingAssignedRole === "vendedor";
-    const resolvedAssignedTo = preserveExistingVendedor
-      ? existingRenovacao?.assigned_to ?? null
-      : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null;
+    const preserveExistingVendedor = existingAssignedRole === "vendedor" && !manualUserId;
+    const resolvedAssignedTo = manualUserId
+      ?? (preserveExistingVendedor
+        ? existingRenovacao?.assigned_to ?? null
+        : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null);
     const resolvedAssignedRole = resolvedAssignedTo ? roleByUserId.get(resolvedAssignedTo) : null;
-    const hasAssignedVendedor = resolvedAssignedRole === "vendedor";
+    // Mapeamento manual conta como vendedor designado mesmo se a role for diferente
+    const hasAssignedVendedor = !!manualUserId || resolvedAssignedRole === "vendedor";
     const flowStatus = statusKeyForRenovacao(diasDesdeUltimaCompra);
 
     if (existingRenovacao) {

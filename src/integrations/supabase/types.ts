@@ -945,6 +945,44 @@ export type Database = {
           },
         ]
       }
+      ssotica_funcionarios: {
+        Row: {
+          company_id: string
+          created_at: string
+          funcao: string | null
+          id: string
+          last_seen_at: string
+          nome: string
+          ssotica_funcionario_id: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          funcao?: string | null
+          id?: string
+          last_seen_at?: string
+          nome: string
+          ssotica_funcionario_id: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          funcao?: string | null
+          id?: string
+          last_seen_at?: string
+          nome?: string
+          ssotica_funcionario_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ssotica_funcionarios_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ssotica_integrations: {
         Row: {
           bearer_token: string
@@ -1047,6 +1085,44 @@ export type Database = {
             columns: ["integration_id"]
             isOneToOne: false
             referencedRelation: "ssotica_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ssotica_user_mappings: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          ssotica_funcionario_id: number
+          ssotica_funcionario_nome: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          ssotica_funcionario_id: number
+          ssotica_funcionario_nome: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          ssotica_funcionario_id?: number
+          ssotica_funcionario_nome?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ssotica_user_mappings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
