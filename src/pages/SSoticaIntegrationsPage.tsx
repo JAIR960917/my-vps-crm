@@ -415,18 +415,21 @@ export default function SSoticaIntegrationsPage() {
               {editing?.integration ? "Editar integração" : "Conectar loja"}: {editing?.company.name}
             </DialogTitle>
             <DialogDescription>
-              Cole o CNPJ (apenas números) e o Bearer Token fornecido pelo SSótica.
+              Cole o CNPJ (apenas números) ou o Código de Licença (alfanumérico) e o Bearer Token fornecido pelo SSótica.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="cnpj">CNPJ (Código da Licença)</Label>
+              <Label htmlFor="cnpj">CNPJ ou Código de Licença</Label>
               <Input
                 id="cnpj"
                 value={form.cnpj}
                 onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                placeholder="00000000000000"
+                placeholder="CNPJ (00000000000000) ou código alfanumérico"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                O SSótica aceita ambos. Se o CNPJ não funcionar, tente o código de licença da loja.
+              </p>
             </div>
             <div>
               <Label htmlFor="token">Bearer Token</Label>
