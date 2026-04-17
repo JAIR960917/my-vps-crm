@@ -76,7 +76,7 @@ export default function AppSidebar({ onNavigate }: Props) {
 
   return (
     <aside className="flex h-screen w-60 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex items-center gap-2 px-5 py-5">
+      <div className="flex items-center gap-2 px-5 py-5 flex-shrink-0">
         {settings.logo_url ? (
           <img src={settings.logo_url} alt="Logo" className="h-8 w-8 rounded-lg object-contain" />
         ) : (
@@ -87,7 +87,7 @@ export default function AppSidebar({ onNavigate }: Props) {
         <span className="text-lg font-bold text-sidebar-primary-foreground truncate">{settings.system_name}</span>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-2">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2 min-h-0">
         {navItems
           .filter(canSee)
           .map((item) => (
@@ -107,7 +107,7 @@ export default function AppSidebar({ onNavigate }: Props) {
           ))}
       </nav>
 
-      <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
+      <div className="space-y-2 border-t border-sidebar-border px-3 py-4 flex-shrink-0">
         <button
           onClick={() => handleNav("/instalar")}
           className={cn(
