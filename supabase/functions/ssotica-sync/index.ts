@@ -616,10 +616,18 @@ async function syncVendas(
     const matchedProfile = manualUserId ? null : findResponsibleProfile(responsavelNome);
     const existingAssignedRole = existingRenovacao?.assigned_to ? roleByUserId.get(existingRenovacao.assigned_to) : null;
     const preserveExistingVendedor = existingAssignedRole === "vendedor" && !manualUserId;
+
+    // Round-robin estável por clienteId quando não há mapeamento, match por nome
+    // nem vendedor existente. Garante que cada cliente sem responsável recebe
+    // um vendedor da loja (distribuição equilibrada).
+    const fallbackVendedor = vendedoresPool.length > 0
+      ? vendedoresPool[Math.abs(clienteId) % vendedoresPool.length]
+      : null;
+
     const resolvedAssignedTo = manualUserId
       ?? (preserveExistingVendedor
         ? existingRenovacao?.assigned_to ?? null
-        : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null);
+        : matchedProfile?.user_id ?? existingRenovacao?.assigned_to ?? fallbackVendedor ?? managerUserId ?? null);
     // Qualquer usuário atribuído (vendedor, gerente, admin, financeiro) conta como responsável
     const hasAssignedVendedor = !!resolvedAssignedTo;
     const flowStatus = statusKeyForRenovacao(diasDesdeUltimaCompra);
