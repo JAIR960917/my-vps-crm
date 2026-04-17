@@ -245,11 +245,12 @@ export default function ActiveClientsPage() {
     if (phoneField) dataToSave.telefone = formData[`field_${phoneField.id}`] || "";
     const lastVisitValue = lastVisitField ? formData[`field_${lastVisitField.id}`] : null;
     const assignedTo = formAssigned || null;
-    const isAssignedToVendedor = assignedTo ? vendedorIds.has(assignedTo) : false;
+    // Qualquer usuário atribuído (vendedor, gerente, admin, financeiro) é considerado responsável
+    const hasAssignedUser = !!assignedTo;
     const flowStatus = getRenovacaoFlowStatus(lastVisitValue || editingItem?.data_ultima_compra || null);
 
     let resolvedStatus = formStatus;
-    if (!isAssignedToVendedor) {
+    if (!hasAssignedUser) {
       resolvedStatus = DIRECIONAMENTO_STATUS;
     } else if (formStatus === DIRECIONAMENTO_STATUS || editingItem?.status === DIRECIONAMENTO_STATUS) {
       resolvedStatus = flowStatus;
@@ -290,13 +291,13 @@ export default function ActiveClientsPage() {
     const currentItem = renovacoes.find((item) => item.id === itemId);
     if (!currentItem) return;
 
-    const isAssignedToVendedor = currentItem.assigned_to ? vendedorIds.has(currentItem.assigned_to) : false;
+    const hasAssignedUser = !!currentItem.assigned_to;
     let resolvedStatus = newStatus;
 
-    if (!isAssignedToVendedor) {
+    if (!hasAssignedUser) {
       resolvedStatus = DIRECIONAMENTO_STATUS;
       if (newStatus !== DIRECIONAMENTO_STATUS) {
-        toast.info("Cards sem vendedor ficam em 'Fazer direcionamento para o vendedor'.");
+        toast.info("Cards sem responsável ficam em 'Fazer direcionamento para o vendedor'.");
       }
     } else if (newStatus === DIRECIONAMENTO_STATUS) {
       resolvedStatus = getRenovacaoFlowStatus(currentItem.data_ultima_compra);
