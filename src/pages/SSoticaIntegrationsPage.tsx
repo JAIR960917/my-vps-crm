@@ -427,15 +427,15 @@ export default function SSoticaIntegrationsPage() {
                             size="sm"
                             variant="secondary"
                             onClick={() => {
-                              if (confirm("Resincronizar os últimos 6 meses de vendas? Use isso para corrigir cards antigos sem vendedor vinculado. Pode demorar alguns minutos.")) {
+                              if (confirm("Iniciar backfill de 96 meses (8 anos)?\n\nO 1º chunk de 12 meses roda agora; os próximos 7 rodam automaticamente, 1 a cada 3 minutos.\nTotal estimado: ~25 minutos por loja.\n\nFaça uma loja por vez para evitar sobrecarga.")) {
                                 handleSyncNow(integ, true);
                               }
                             }}
                             disabled={syncingId === integ.id || !integ.is_active}
-                            title="Reprocessa os últimos 6 meses para reaplicar vínculos de vendedor"
+                            title="Backfill completo de 96 meses em chunks de 12 meses, com 3 min entre cada"
                           >
                             <RefreshCw className="h-3 w-3 mr-1" />
-                            Resync 6m
+                            Backfill 96m
                           </Button>
                           <Button
                             size="sm"
