@@ -550,7 +550,7 @@ export default function SSoticaIntegrationsPage() {
             <DialogTitle className="flex items-center gap-2">
               {testResult?.ok ? (
                 <>
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <CheckCircle2 className="h-5 w-5 text-success" />
                   Conexão OK
                 </>
               ) : (
