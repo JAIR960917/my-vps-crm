@@ -491,19 +491,33 @@ async function syncVendas(
 
     for (const venda of vendas) {
       processed++;
-      if (String(venda.status ?? "").toUpperCase() !== "ATIVA") continue;
+      // Cacheia funcionário visto ANTES de qualquer filtro (pra alimentar a tela de mapeamento)
+      const func = venda.funcionario;
+      if (func) {
+        const nome = String(func.nome ?? "").trim();
+        const funcao = String(func.funcao ?? "").trim();
+        // Se não tiver id, usa hash negativo do nome para ter chave estável
+        let funcKey: number | null = null;
+        if (func.id != null && !Number.isNaN(Number(func.id))) {
+          funcKey = Number(func.id);
+        } else if (nome) {
+          // Hash simples do nome → número negativo (não colide com IDs reais positivos)
+          let h = 0;
+          for (let i = 0; i < nome.length; i++) h = ((h << 5) - h + nome.charCodeAt(i)) | 0;
+          funcKey = -Math.abs(h) || -1;
+        }
+        if (funcKey !== null && (nome || funcao)) {
+          funcionariosVistos.set(funcKey, { nome: nome || "(sem nome)", funcao });
+        }
+      }
+
+      const statusVenda = String(venda.status ?? "").toUpperCase();
+      // Aceita ATIVA ou status ausente/vazio (algumas lojas omitem o campo)
+      if (statusVenda && statusVenda !== "ATIVA") continue;
       const cliente = venda.cliente;
       if (!cliente?.id) continue;
       const data = venda.data as string;
       const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
-      // Cacheia funcionário visto pra alimentar a tela de mapeamento
-      const func = venda.funcionario;
-      if (func?.id) {
-        funcionariosVistos.set(Number(func.id), {
-          nome: String(func.nome ?? "").trim(),
-          funcao: String(func.funcao ?? "").trim(),
-        });
-      }
       const prev = ultimaCompraPorCliente.get(cliente.id);
       if (!prev || prev.data < data) {
         ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
