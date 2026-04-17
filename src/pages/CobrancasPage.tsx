@@ -74,17 +74,40 @@ export default function CobrancasPage() {
   const [filterCompanyId, setFilterCompanyId] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  // Paginação visual: mostra 20 cards por coluna inicialmente, com botão "Carregar mais" (+20)
+  const PAGE_INCREMENT = 20;
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const showMore = (statusKey: string) => {
+    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] ?? PAGE_INCREMENT) + PAGE_INCREMENT }));
+  };
 
   const fetchAll = useCallback(async () => {
-    const [{ data: cobs }, { data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
-      supabase.from("crm_cobrancas").select("*").order("updated_at", { ascending: false }),
+    // Busca TODAS as cobranças em batches de 1000 (limite padrão do PostgREST)
+    // para empresas com mais de 1000 registros, como Parelhas.
+    const PAGE_SIZE = 1000;
+    let allCobs: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("crm_cobrancas")
+        .select("*")
+        .order("updated_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) break;
+      const batch = data || [];
+      allCobs = allCobs.concat(batch);
+      if (batch.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    const [{ data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
       supabase.from("cobranca_activities").select("id, cobranca_id, title, scheduled_date, completed_at"),
     ]);
-    setCobrancas((cobs || []) as Cobranca[]);
+    setCobrancas(allCobs as Cobranca[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
@@ -192,7 +215,15 @@ export default function CobrancasPage() {
     });
   }, [cobrancas, searchQuery, filterCompanyId]);
 
+  // Reseta a paginação visual quando filtros/busca mudam
+  useEffect(() => { setVisibleCounts({}); }, [searchQuery, filterCompanyId]);
+
   const getByStatus = (key: string) => filteredCobrancas.filter(c => c.status === key);
+  const getVisibleByStatus = (key: string) => {
+    const all = getByStatus(key);
+    const limit = visibleCounts[key] ?? PAGE_INCREMENT;
+    return { all, visible: all.slice(0, limit), hasMore: all.length > limit };
+  };
 
   const renderCard = (cobranca: Cobranca) => {
     const d = cobranca.data as Record<string, any>;
@@ -394,13 +425,21 @@ export default function CobrancasPage() {
       {/* Mobile: Active column */}
       <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
         {statuses.filter(s => s.key === mobileTab).map(status => {
-          const items = getByStatus(status.key);
+          const { all, visible, hasMore } = getVisibleByStatus(status.key);
           return (
             <div key={status.key}>
-              {items.length === 0 && (
+              {all.length === 0 && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhuma cobrança nesta coluna</p>
               )}
-              {items.map(c => <div key={c.id} className="mb-2">{renderCard(c)}</div>)}
+              {visible.map(c => <div key={c.id} className="mb-2">{renderCard(c)}</div>)}
+              {hasMore && (
+                <button
+                  onClick={() => showMore(status.key)}
+                  className="w-full py-2.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-primary/30 mb-2 transition-colors"
+                >
+                  Carregar mais ({all.length - visible.length} restantes)
+                </button>
+              )}
               {canCreate && (
                 <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
                   + Adicionar cobrança
@@ -415,7 +454,7 @@ export default function CobrancasPage() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map(status => {
-            const items = getByStatus(status.key);
+            const { all, visible, hasMore } = getVisibleByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
@@ -423,7 +462,7 @@ export default function CobrancasPage() {
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
-                    {items.length}
+                    {all.length}
                   </span>
                 </div>
                 <Droppable droppableId={status.key}>
@@ -435,7 +474,7 @@ export default function CobrancasPage() {
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
                       }`}
                     >
-                      {items.map((c, index) => (
+                      {visible.map((c, index) => (
                         <Draggable key={c.id} draggableId={c.id} index={index}>
                           {(provided, snapshot) => (
                             <div
@@ -450,6 +489,14 @@ export default function CobrancasPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
+                      {hasMore && (
+                        <button
+                          onClick={() => showMore(status.key)}
+                          className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-primary/30 transition-colors"
+                        >
+                          Carregar mais ({all.length - visible.length} restantes)
+                        </button>
+                      )}
                       {canCreate && (
                         <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
                           + Adicionar cobrança
