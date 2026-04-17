@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -29,6 +30,7 @@ type Renovacao = {
 
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
+type Company = { id: string; name: string };
 type RenovacaoActivity = { id: string; renovacao_id: string; title: string; scheduled_date: string; completed_at: string | null };
 
 type FormField = {
@@ -76,6 +78,7 @@ export default function ActiveClientsPage() {
   const [renovacoes, setRenovacoes] = useState<Renovacao[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
   const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -86,23 +89,27 @@ export default function ActiveClientsPage() {
   const [formValor, setFormValor] = useState("");
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterCompanyId, setFilterCompanyId] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: items }, { data: sts }, { data: profs }, { data: ff }, { data: acts }] = await Promise.all([
+    const [{ data: items }, { data: sts }, { data: profs }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
       supabase.from("crm_renovacoes").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
+      supabase.from("companies").select("id, name").order("name"),
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
       supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
     ]);
     setRenovacoes((items || []) as Renovacao[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
+    setCompanies((comps || []) as Company[]);
     setFields((ff || []) as unknown as FormField[]);
     setActivities((acts || []) as RenovacaoActivity[]);
   }, []);
+
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -220,15 +227,19 @@ export default function ActiveClientsPage() {
   const getProfileName = (uid: string | null) => uid ? (profiles.find(p => p.user_id === uid)?.full_name || "") : "";
 
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return renovacoes;
+    let items = renovacoes;
+    if (filterCompanyId !== "all") {
+      items = items.filter(r => (r as any).ssotica_company_id === filterCompanyId);
+    }
+    if (!searchQuery.trim()) return items;
     const q = searchQuery.toLowerCase();
-    return renovacoes.filter(r => {
+    return items.filter(r => {
       const d = r.data as Record<string, any>;
       return (d.nome || "").toLowerCase().includes(q)
         || (d.telefone || "").includes(q)
         || String(r.valor).includes(q);
     });
-  }, [renovacoes, searchQuery]);
+  }, [renovacoes, searchQuery, filterCompanyId]);
 
   const getByStatus = (key: string) => filteredItems.filter(r => r.status === key);
 
@@ -390,7 +401,20 @@ export default function ActiveClientsPage() {
             {filteredItems.length} registro{filteredItems.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {(isAdmin || isGerente) && companies.length > 0 && (
+            <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+              <SelectTrigger className="h-9 w-full sm:w-56">
+                <SelectValue placeholder="Filtrar por empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as empresas</SelectItem>
+                {companies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name.trim()}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <div className="relative flex-1 sm:flex-initial">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-8 h-9 w-full sm:w-48" />

@@ -107,9 +107,10 @@ async function syncContasReceber(
   integ: Integration,
 ): Promise<{ processed: number; created: number; updated: number; removed: number }> {
   const today = new Date();
-  const startDate = integ.initial_sync_done && integ.last_sync_receber_at
-    ? addDays(new Date(integ.last_sync_receber_at), -1)
-    : addDays(today, -INITIAL_LOOKBACK_DAYS);
+  // SEMPRE buscar 180 dias para trás para garantir que parcelas em atraso antigas sejam pegas.
+  // Não usar last_sync_receber_at aqui porque parcelas vencidas há muito tempo continuam ativas
+  // até serem pagas, e podem não aparecer em janelas curtas se o sync rodar todos os dias.
+  const startDate = addDays(today, -INITIAL_LOOKBACK_DAYS);
   // janela termina 60 dias à frente para pegar parcelas que vencem em breve
   const endDate = addDays(today, 60);
   const windows = buildWindows(startDate, endDate);
