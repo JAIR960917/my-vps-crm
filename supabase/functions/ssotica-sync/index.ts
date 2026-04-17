@@ -213,6 +213,17 @@ async function syncContasReceber(
           situacao === "vencido" ||
           situacao === "vencida";
 
+        // Detecta renegociação por DOIS sinais (qualquer um basta):
+        //  1) campo `situacao` começa com "renegoc" (Renegociado, Renegociada, etc.)
+        //  2) objeto `renegociacao` preenchido na parcela (id != null)
+        const renegociacaoObj = parcela.renegociacao ?? parcela.renegociacao_info ?? null;
+        const temObjetoRenegociacao =
+          !!renegociacaoObj &&
+          typeof renegociacaoObj === "object" &&
+          !Array.isArray(renegociacaoObj) &&
+          (renegociacaoObj.id != null || renegociacaoObj.valor_renegociacao != null);
+        const foiRenegociada = situacao.startsWith("renegoc") || temObjetoRenegociacao;
+
         // Sinais de que a parcela JÁ FOI QUITADA (não é mais dívida)
         const foiBaixada = !!parcela.baixado_em;
         const foiCancelada = !!parcela.cancelado_em;
