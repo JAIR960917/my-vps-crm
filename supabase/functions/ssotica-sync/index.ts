@@ -138,11 +138,34 @@ async function syncContasReceber(
 
       for (const parcela of items) {
         processed++;
-        const situacao = String(parcela.situacao ?? parcela["situação"] ?? "").toLowerCase();
-        // Só processamos parcelas em aberto / vencidas
-        if (situacao !== "em aberto" && situacao !== "em_aberto" && situacao !== "vencido" && situacao !== "vencida") {
-          // Se já existe na cobrança e foi paga/cancelada → remove do kanban
-          if (parcela.id && (situacao === "pago" || situacao === "pago_parcial" || situacao === "cancelado")) {
+        // Normaliza situação: remove acentos, lowercase, troca espaço/underscore
+        const situacaoRaw = String(parcela.situacao ?? parcela["situação"] ?? "");
+        const situacao = situacaoRaw
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[\s_-]+/g, " ")
+          .trim();
+
+        // Situações ATIVAS (parcela ainda devida) = mantemos no kanban
+        const isAtiva =
+          situacao === "em aberto" ||
+          situacao === "vencido" ||
+          situacao === "vencida" ||
+          situacao === "renegociado" ||
+          situacao === "renegociada";
+
+        // Situações INATIVAS (já não é mais dívida) = removemos do kanban
+        // Inclui também: parcela com baixado_em ou cancelado_em ou estornado_em preenchido
+        const foiBaixada = !!parcela.baixado_em;
+        const foiCancelada = !!parcela.cancelado_em;
+        const foiEstornada = !!parcela.estornado_em;
+        const isInativa =
+          !isAtiva || foiBaixada || foiCancelada || foiEstornada;
+
+        if (isInativa) {
+          // Se já existe na cobrança → remove do kanban (foi paga/cancelada/estornada)
+          if (parcela.id) {
             const { data: existingPaid } = await supabase
               .from("crm_cobrancas")
               .select("id, ssotica_cliente_id")
