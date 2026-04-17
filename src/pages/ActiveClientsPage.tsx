@@ -28,9 +28,11 @@ type Renovacao = {
   updated_at: string;
 };
 
+type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type Company = { id: string; name: string };
+type UserRole = { user_id: string; role: AppRole };
 type RenovacaoActivity = { id: string; renovacao_id: string; title: string; scheduled_date: string; completed_at: string | null };
 
 type FormField = {
@@ -72,12 +74,29 @@ const parseStoredDate = (value: unknown): Date | undefined => {
 };
 
 const normalizePhoneDigits = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(0, 11);
+const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
+
+const statusKeyForRenovacao = (diasDesdeUltimaCompra: number | null): string => {
+  if (diasDesdeUltimaCompra === null) return "novo";
+  if (diasDesdeUltimaCompra < 365) return "em_contato";
+  if (diasDesdeUltimaCompra < 730) return "agendado";
+  if (diasDesdeUltimaCompra < 1095) return "renovado";
+  return "mais_de_3_anos";
+};
+
+const getRenovacaoFlowStatus = (lastPurchaseDate: unknown): string => {
+  const parsedDate = parseStoredDate(lastPurchaseDate);
+  if (!parsedDate) return "novo";
+  const diasDesdeUltimaCompra = Math.floor((Date.now() - parsedDate.getTime()) / 86400000);
+  return statusKeyForRenovacao(diasDesdeUltimaCompra);
+};
 
 export default function ActiveClientsPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const [renovacoes, setRenovacoes] = useState<Renovacao[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
   const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
@@ -94,10 +113,11 @@ export default function ActiveClientsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: items }, { data: sts }, { data: profs }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
+    const [{ data: items }, { data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
       supabase.from("crm_renovacoes").select("*").order("updated_at", { ascending: false }),
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
+      supabase.from("user_roles").select("user_id, role"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
       supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
@@ -105,6 +125,7 @@ export default function ActiveClientsPage() {
     setRenovacoes((items || []) as Renovacao[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
+    setUserRoles((roles || []) as UserRole[]);
     setCompanies((comps || []) as Company[]);
     setFields((ff || []) as unknown as FormField[]);
     setActivities((acts || []) as RenovacaoActivity[]);
@@ -118,6 +139,10 @@ export default function ActiveClientsPage() {
   }, [statuses]);
 
   const statusOptions = statuses.map(s => s.key);
+  const vendedorIds = useMemo(
+    () => new Set(userRoles.filter((entry) => entry.role === "vendedor").map((entry) => entry.user_id)),
+    [userRoles],
+  );
   const nameField = useMemo(() => fields.find(f => f.is_name_field), [fields]);
   const phoneField = useMemo(() => fields.find(f => f.is_phone_field), [fields]);
   const lastVisitField = useMemo(() => fields.find(f => f.is_last_visit_field), [fields]);
@@ -187,11 +212,21 @@ export default function ActiveClientsPage() {
     if (nameField) dataToSave.nome = formData[`field_${nameField.id}`] || "";
     if (phoneField) dataToSave.telefone = formData[`field_${phoneField.id}`] || "";
     const lastVisitValue = lastVisitField ? formData[`field_${lastVisitField.id}`] : null;
+    const assignedTo = formAssigned || null;
+    const isAssignedToVendedor = assignedTo ? vendedorIds.has(assignedTo) : false;
+    const flowStatus = getRenovacaoFlowStatus(lastVisitValue || editingItem?.data_ultima_compra || null);
+
+    let resolvedStatus = formStatus;
+    if (!isAssignedToVendedor) {
+      resolvedStatus = DIRECIONAMENTO_STATUS;
+    } else if (formStatus === DIRECIONAMENTO_STATUS || editingItem?.status === DIRECIONAMENTO_STATUS) {
+      resolvedStatus = flowStatus;
+    }
 
     const payload: any = {
       data: dataToSave,
-      status: formStatus,
-      assigned_to: formAssigned || null,
+      status: resolvedStatus,
+      assigned_to: assignedTo,
       valor,
       data_ultima_compra: lastVisitValue || null,
     };
@@ -220,8 +255,23 @@ export default function ActiveClientsPage() {
     if (!result.destination) return;
     const newStatus = result.destination.droppableId;
     const itemId = result.draggableId;
-    setRenovacoes(prev => prev.map(r => r.id === itemId ? { ...r, status: newStatus } : r));
-    await supabase.from("crm_renovacoes").update({ status: newStatus }).eq("id", itemId);
+    const currentItem = renovacoes.find((item) => item.id === itemId);
+    if (!currentItem) return;
+
+    const isAssignedToVendedor = currentItem.assigned_to ? vendedorIds.has(currentItem.assigned_to) : false;
+    let resolvedStatus = newStatus;
+
+    if (!isAssignedToVendedor) {
+      resolvedStatus = DIRECIONAMENTO_STATUS;
+      if (newStatus !== DIRECIONAMENTO_STATUS) {
+        toast.info("Cards sem vendedor ficam em 'Fazer direcionamento para o vendedor'.");
+      }
+    } else if (newStatus === DIRECIONAMENTO_STATUS) {
+      resolvedStatus = getRenovacaoFlowStatus(currentItem.data_ultima_compra);
+    }
+
+    setRenovacoes(prev => prev.map(r => r.id === itemId ? { ...r, status: resolvedStatus } : r));
+    await supabase.from("crm_renovacoes").update({ status: resolvedStatus }).eq("id", itemId);
   };
 
   const getProfileName = (uid: string | null) => uid ? (profiles.find(p => p.user_id === uid)?.full_name || "") : "";

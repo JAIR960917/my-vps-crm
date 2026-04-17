@@ -10,6 +10,9 @@ const corsHeaders = {
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
 const MAX_WINDOW_DAYS = 30; // limite da API
 const INITIAL_LOOKBACK_DAYS = 180; // 6 meses na carga inicial
+const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
+
+type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
 
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -93,6 +96,35 @@ interface Integration {
   last_sync_receber_at: string | null;
 }
 
+type CompanyProfile = {
+  user_id: string;
+  full_name: string;
+};
+
+type CompanyRole = {
+  user_id: string;
+  role: AppRole;
+};
+
+type ExistingCobranca = {
+  id: string;
+  vencimento: string | null;
+  ssotica_parcela_id: number | null;
+};
+
+type ExistingRenovacao = {
+  id: string;
+  data_ultima_compra: string | null;
+  status: string;
+  assigned_to: string | null;
+};
+
+type StoredCobranca = {
+  id: string;
+  ssotica_parcela_id: number | null;
+  ssotica_cliente_id: number | null;
+};
+
 // Normaliza um valor para usar nas APIs do SSótica.
 // Para CNPJ: remove pontuação. Para código de licença: mantém como está.
 function normalizeIdentifier(value: string): string {
@@ -102,8 +134,25 @@ function normalizeIdentifier(value: string): string {
   return isCnpj ? onlyDigits : raw;
 }
 
+function normalizeName(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isSamePerson(nameA: unknown, nameB: unknown): boolean {
+  const a = normalizeName(nameA);
+  const b = normalizeName(nameB);
+  if (!a || !b) return false;
+  return a === b || a.startsWith(`${b} `) || b.startsWith(`${a} `);
+}
+
 async function syncContasReceber(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   integ: Integration,
 ): Promise<{ processed: number; created: number; updated: number; removed: number }> {
   const today = new Date();
@@ -220,11 +269,12 @@ async function syncContasReceber(
           .eq("ssotica_company_id", integ.company_id)
           .eq("ssotica_cliente_id", cliente.id)
           .maybeSingle();
+        const existingCobranca = existing as ExistingCobranca | null;
 
-        if (existing) {
+        if (existingCobranca) {
           // Só atualiza para essa parcela se ela for mais antiga (ou igual) à atualmente armazenada
-          const existingVencDate = existing.vencimento
-            ? new Date(existing.vencimento + "T00:00:00Z").getTime()
+          const existingVencDate = existingCobranca.vencimento
+            ? new Date(existingCobranca.vencimento + "T00:00:00Z").getTime()
             : Number.POSITIVE_INFINITY;
           const novaVencTime = vencDate.getTime();
 
@@ -241,7 +291,7 @@ async function syncContasReceber(
                 status: colunaKey,
                 scheduled_date: vencimento,
               })
-              .eq("id", existing.id);
+              .eq("id", existingCobranca.id);
             updated++;
           }
         } else {
@@ -277,9 +327,10 @@ async function syncContasReceber(
     .select("id, ssotica_parcela_id, ssotica_cliente_id")
     .eq("ssotica_company_id", integ.company_id)
     .not("ssotica_cliente_id", "is", null);
+  const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
 
-  if (cobrancasNoBanco) {
-    for (const cob of cobrancasNoBanco) {
+  if (storedCobrancas.length > 0) {
+    for (const cob of storedCobrancas) {
       const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
       const clienteId = Number(cob.ssotica_cliente_id);
       // Se a parcela atual ainda está ativa OU o cliente foi atualizado nesta sync, mantém
@@ -295,7 +346,7 @@ async function syncContasReceber(
 }
 
 async function syncVendas(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   integ: Integration,
 ): Promise<{ processed: number; created: number; updated: number }> {
   const today = new Date();
@@ -309,8 +360,32 @@ async function syncVendas(
   // Vendas: SEMPRE usa o CNPJ puro (não aceita código de licença).
   const cnpjVendas = normalizeIdentifier(integ.cnpj);
 
+  const { data: companyProfiles } = await supabase
+    .from("profiles")
+    .select("user_id, full_name")
+    .eq("company_id", integ.company_id);
+  const typedCompanyProfiles = (companyProfiles ?? []) as CompanyProfile[];
+
+  const companyUserIds = typedCompanyProfiles.map((profile) => profile.user_id);
+  const { data: companyRoles } = companyUserIds.length > 0
+    ? await supabase.from("user_roles").select("user_id, role").in("user_id", companyUserIds)
+    : { data: [] as Array<{ user_id: string; role: AppRole }> };
+  const typedCompanyRoles = (companyRoles ?? []) as CompanyRole[];
+
+  const roleByUserId = new Map<string, AppRole>(
+    typedCompanyRoles.map((entry) => [entry.user_id, entry.role]),
+  );
+  const managerUserId = typedCompanyProfiles.find((profile) => roleByUserId.get(profile.user_id) === "gerente")?.user_id ?? null;
+  const findResponsibleProfile = (responsavelNome: string | null | undefined) => {
+    if (!responsavelNome) return null;
+
+    return typedCompanyProfiles.find(
+      (profile) => roleByUserId.get(profile.user_id) === "vendedor" && isSamePerson(profile.full_name, responsavelNome),
+    ) ?? typedCompanyProfiles.find((profile) => isSamePerson(profile.full_name, responsavelNome)) ?? null;
+  };
+
   // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
-  const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any }>();
+  const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any; funcionario: any }>();
 
   for (const w of windows) {
     const url =
@@ -327,7 +402,7 @@ async function syncVendas(
       const valor = Number(venda.valor_liquido ?? venda.valor_bruto ?? 0);
       const prev = ultimaCompraPorCliente.get(cliente.id);
       if (!prev || prev.data < data) {
-        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente });
+        ultimaCompraPorCliente.set(cliente.id, { data, vendaId: venda.id, valor, cliente, funcionario: venda.funcionario ?? null });
       }
     }
   }
@@ -348,46 +423,65 @@ async function syncVendas(
 
     const cliente = info.cliente;
     const telefone = cliente.telefones?.[0]?.numero ?? "";
+    const responsavelNome = info.funcionario?.nome ?? "";
+    const responsavelFuncao = info.funcionario?.funcao ?? "";
     const renovacaoData = {
       nome: cliente.nome,
       telefone,
       documento: cliente.cpf_cnpj ?? "",
       email: cliente.emails?.[0]?.email ?? "",
       data_ultima_compra: info.data,
+      responsavel_ssotica_nome: responsavelNome,
+      responsavel_ssotica_funcao: responsavelFuncao,
       ssotica_raw: cliente,
     };
 
     // Calcula dias desde a última compra para escolher a coluna
     const ultimaCompraDate = new Date(info.data + "T00:00:00Z");
     const diasDesdeUltimaCompra = daysBetween(ultimaCompraDate, today);
-    const renovacaoStatusKey = statusKeyForRenovacao(diasDesdeUltimaCompra);
-
     const { data: existing } = await supabase
       .from("crm_renovacoes")
-      .select("id, data_ultima_compra, status")
+      .select("id, data_ultima_compra, status, assigned_to")
       .eq("ssotica_cliente_id", clienteId)
       .eq("ssotica_company_id", integ.company_id)
       .maybeSingle();
+    const existingRenovacao = existing as ExistingRenovacao | null;
 
-    if (existing) {
+    const matchedProfile = findResponsibleProfile(responsavelNome);
+    const existingAssignedRole = existingRenovacao?.assigned_to ? roleByUserId.get(existingRenovacao.assigned_to) : null;
+    const preserveExistingVendedor = existingAssignedRole === "vendedor";
+    const resolvedAssignedTo = preserveExistingVendedor
+      ? existingRenovacao?.assigned_to ?? null
+      : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null;
+    const resolvedAssignedRole = resolvedAssignedTo ? roleByUserId.get(resolvedAssignedTo) : null;
+    const hasAssignedVendedor = resolvedAssignedRole === "vendedor";
+    const flowStatus = statusKeyForRenovacao(diasDesdeUltimaCompra);
+
+    if (existingRenovacao) {
       // Não mexe se vendedor já está atendendo manualmente
-      const isManualStatus = existing.status === "em_atendimento" || existing.status === "nunca_fez_exame";
-      const newStatus = isManualStatus ? existing.status : renovacaoStatusKey;
+      const isManualStatus = existingRenovacao.status === "em_atendimento" || existingRenovacao.status === "nunca_fez_exame";
+      const newStatus = !hasAssignedVendedor
+        ? DIRECIONAMENTO_STATUS
+        : isManualStatus
+          ? existingRenovacao.status
+          : flowStatus;
       // Atualiza se a venda é mais recente OU se o status precisa mudar de coluna pelo tempo
-      const vendaMaisRecente = !existing.data_ultima_compra || existing.data_ultima_compra < info.data;
-      const statusMudou = !isManualStatus && existing.status !== renovacaoStatusKey;
-      if (vendaMaisRecente || statusMudou) {
+      const vendaMaisRecente = !existingRenovacao.data_ultima_compra || existingRenovacao.data_ultima_compra < info.data;
+      const statusMudou = existingRenovacao.status !== newStatus;
+      const assignedMudou = (existingRenovacao.assigned_to ?? null) !== resolvedAssignedTo;
+      if (vendaMaisRecente || statusMudou || assignedMudou) {
         await supabase
           .from("crm_renovacoes")
           .update({
             data: renovacaoData,
             data_ultima_compra: info.data,
             ssotica_venda_id: info.vendaId,
+            assigned_to: resolvedAssignedTo,
             valor: info.valor,
             scheduled_date: info.data,
             status: newStatus,
           })
-          .eq("id", existing.id);
+          .eq("id", existingRenovacao.id);
         updated++;
       }
     } else {
@@ -395,10 +489,11 @@ async function syncVendas(
         ssotica_cliente_id: clienteId,
         ssotica_venda_id: info.vendaId,
         ssotica_company_id: integ.company_id,
+        assigned_to: resolvedAssignedTo,
         data: renovacaoData,
         data_ultima_compra: info.data,
         valor: info.valor,
-        status: renovacaoStatusKey,
+        status: hasAssignedVendedor ? flowStatus : DIRECIONAMENTO_STATUS,
         scheduled_date: info.data,
       });
       created++;
