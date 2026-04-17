@@ -400,7 +400,20 @@ export default function ActiveClientsPage() {
             {filteredItems.length} registro{filteredItems.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {(isAdmin || isGerente) && companies.length > 0 && (
+            <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
+              <SelectTrigger className="h-9 w-full sm:w-56">
+                <SelectValue placeholder="Filtrar por empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as empresas</SelectItem>
+                {companies.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name.trim()}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <div className="relative flex-1 sm:flex-initial">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-8 h-9 w-full sm:w-48" />
