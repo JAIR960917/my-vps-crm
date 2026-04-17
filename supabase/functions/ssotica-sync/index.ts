@@ -565,12 +565,16 @@ async function syncVendas(
       .maybeSingle();
     const existingRenovacao = existing as ExistingRenovacao | null;
 
-    const matchedProfile = findResponsibleProfile(responsavelNome);
+    // Prioridade: mapeamento manual (por ID do funcionário SSótica) > matching por nome > gerente
+    const funcionarioId = info.funcionario?.id ? Number(info.funcionario.id) : null;
+    const manualUserId = funcionarioId ? userIdByFuncionarioId.get(funcionarioId) ?? null : null;
+    const matchedProfile = manualUserId ? null : findResponsibleProfile(responsavelNome);
     const existingAssignedRole = existingRenovacao?.assigned_to ? roleByUserId.get(existingRenovacao.assigned_to) : null;
-    const preserveExistingVendedor = existingAssignedRole === "vendedor";
-    const resolvedAssignedTo = preserveExistingVendedor
-      ? existingRenovacao?.assigned_to ?? null
-      : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null;
+    const preserveExistingVendedor = existingAssignedRole === "vendedor" && !manualUserId;
+    const resolvedAssignedTo = manualUserId
+      ?? (preserveExistingVendedor
+        ? existingRenovacao?.assigned_to ?? null
+        : matchedProfile?.user_id ?? managerUserId ?? existingRenovacao?.assigned_to ?? null);
     const resolvedAssignedRole = resolvedAssignedTo ? roleByUserId.get(resolvedAssignedTo) : null;
     const hasAssignedVendedor = resolvedAssignedRole === "vendedor";
     const flowStatus = statusKeyForRenovacao(diasDesdeUltimaCompra);
