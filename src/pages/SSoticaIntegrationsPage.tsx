@@ -169,9 +169,15 @@ export default function SSoticaIntegrationsPage() {
     }
     setSaving(true);
     try {
+      // Aceita CNPJ ou Código de Licença alfanumérico do SSótica.
+      // Só remove pontuação se for um CNPJ puramente numérico de 14 dígitos.
+      const rawCnpj = form.cnpj.trim();
+      const onlyDigits = rawCnpj.replace(/\D/g, "");
+      const isCnpj = !/[a-zA-Z]/.test(rawCnpj) && onlyDigits.length === 14;
+      const cnpjToSave = isCnpj ? onlyDigits : rawCnpj;
       const payload = {
         company_id: editing.company.id,
-        cnpj: form.cnpj.replace(/\D/g, ""),
+        cnpj: cnpjToSave,
         bearer_token: form.bearer_token.trim(),
         is_active: form.is_active,
       };
