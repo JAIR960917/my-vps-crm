@@ -101,6 +101,7 @@ export default function ActiveClientsPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
   const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
+  const [noteIds, setNoteIds] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Renovacao | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -158,13 +159,14 @@ export default function ActiveClientsPage() {
 
   // Load static data once (statuses, profiles, fields, etc.)
   const loadMeta = useCallback(async () => {
-    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
+    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }, { data: notes }] = await Promise.all([
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("user_roles").select("user_id, role"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
       supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
+      supabase.from("crm_renovacao_notes").select("renovacao_id"),
     ]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
@@ -172,6 +174,7 @@ export default function ActiveClientsPage() {
     setCompanies((comps || []) as Company[]);
     setFields((ff || []) as unknown as FormField[]);
     setActivities((acts || []) as RenovacaoActivity[]);
+    setNoteIds(new Set((notes || []).map((n: any) => n.renovacao_id)));
   }, []);
 
   // Count unassigned (server-side)
@@ -346,13 +349,26 @@ export default function ActiveClientsPage() {
     return map;
   }, [activities]);
 
+  // Renovacoes with recent interaction (completed task or notes) — go to the END when no pending task
+  const renovacoesWithRecentActivity = useMemo(() => {
+    const ids = new Set<string>();
+    activities.filter(a => a.completed_at).forEach(a => ids.add(a.renovacao_id));
+    noteIds.forEach(id => ids.add(id));
+    return ids;
+  }, [activities, noteIds]);
+
   const sortByTaskPriority = useCallback((items: Renovacao[]) => {
     return [...items].sort((a, b) => {
+      // 1) Pending task always dominates: cards with pending tasks go to the TOP
       const aPrio = renovacaoTaskPriority.get(a.id) || 0;
       const bPrio = renovacaoTaskPriority.get(b.id) || 0;
-      return bPrio - aPrio;
+      if (aPrio !== bPrio) return bPrio - aPrio;
+      // 2) When no pending task, cards with recent interaction go to the END
+      const aHasRecent = renovacoesWithRecentActivity.has(a.id) ? 1 : 0;
+      const bHasRecent = renovacoesWithRecentActivity.has(b.id) ? 1 : 0;
+      return aHasRecent - bHasRecent;
     });
-  }, [renovacaoTaskPriority]);
+  }, [renovacaoTaskPriority, renovacoesWithRecentActivity]);
 
   // Build per-status item list (paginated or filtered from search)
   const getByStatus = useCallback((key: string): { items: Renovacao[]; total: number; hasMore: boolean; loading: boolean } => {
@@ -689,7 +705,7 @@ export default function ActiveClientsPage() {
 
       <RenovacaoEditSheet
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => { setDialogOpen(open); if (!open) loadMeta(); }}
         renovacaoId={editingItem?.id || null}
         formData={formData}
         setFormData={setFormData}

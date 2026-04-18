@@ -61,6 +61,7 @@ export default function CobrancasPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [activities, setActivities] = useState<CobrancaActivity[]>([]);
+  const [noteIds, setNoteIds] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCobranca, setEditingCobranca] = useState<Cobranca | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({ nome: "", telefone: "", descricao: "" });
@@ -108,18 +109,20 @@ export default function CobrancasPage() {
   });
 
   const loadMeta = useCallback(async () => {
-    const [{ data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
+    const [{ data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }, { data: notes }] = await Promise.all([
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
       supabase.from("cobranca_activities").select("id, cobranca_id, title, scheduled_date, completed_at"),
+      supabase.from("crm_cobranca_notes").select("cobranca_id"),
     ]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
     setFinanceiroIds(new Set((roles || []).map((r: any) => r.user_id)));
     setActivities((acts || []) as CobrancaActivity[]);
+    setNoteIds(new Set((notes || []).map((n: any) => n.cobranca_id)));
   }, []);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
@@ -227,13 +230,26 @@ export default function CobrancasPage() {
     return map;
   }, [activities]);
 
+  // Cobrancas with recent interaction (completed task or notes) — go to the END when no pending task
+  const cobrancasWithRecentActivity = useMemo(() => {
+    const ids = new Set<string>();
+    activities.filter(a => a.completed_at).forEach(a => ids.add(a.cobranca_id));
+    noteIds.forEach(id => ids.add(id));
+    return ids;
+  }, [activities, noteIds]);
+
   const sortByTaskPriority = useCallback(<T extends { id: string }>(items: T[]) => {
     return [...items].sort((a, b) => {
+      // 1) Pending task always dominates: cards with pending tasks go to the TOP
       const aPrio = cobrancaTaskPriority.get(a.id) || 0;
       const bPrio = cobrancaTaskPriority.get(b.id) || 0;
-      return bPrio - aPrio;
+      if (aPrio !== bPrio) return bPrio - aPrio;
+      // 2) When no pending task, cards with recent interaction go to the END
+      const aHasRecent = cobrancasWithRecentActivity.has(a.id) ? 1 : 0;
+      const bHasRecent = cobrancasWithRecentActivity.has(b.id) ? 1 : 0;
+      return aHasRecent - bHasRecent;
     });
-  }, [cobrancaTaskPriority]);
+  }, [cobrancaTaskPriority, cobrancasWithRecentActivity]);
 
   const getByStatus = useCallback((key: string) => {
     if (isSearching) {
@@ -543,7 +559,7 @@ export default function CobrancasPage() {
 
       <CobrancaEditSheet
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => { setDialogOpen(open); if (!open) loadMeta(); }}
         cobrancaId={editingCobranca?.id || null}
         ssoticaClienteId={(editingCobranca as any)?.ssotica_cliente_id ?? null}
         ssoticaCompanyId={(editingCobranca as any)?.ssotica_company_id ?? null}

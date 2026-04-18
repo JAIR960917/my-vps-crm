@@ -579,14 +579,14 @@ export default function LeadsPage() {
   const getLeadsByStatus = (status: string) => {
     const statusLeads = filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
     return statusLeads.sort((a, b) => {
-      // Leads with recent activity (completed task or notes) go to the END
-      const aHasRecent = leadsWithRecentActivity.has(a.id) ? 1 : 0;
-      const bHasRecent = leadsWithRecentActivity.has(b.id) ? 1 : 0;
-      if (aHasRecent !== bHasRecent) return aHasRecent - bHasRecent;
-      // Then: leads with pending tasks (overdue/today/future) go to the TOP
+      // 1) Pending task ALWAYS dominates: cards with pending tasks go to the TOP
       const aPrio = leadTaskPriority.get(a.id) || 0;
       const bPrio = leadTaskPriority.get(b.id) || 0;
-      return bPrio - aPrio;
+      if (aPrio !== bPrio) return bPrio - aPrio;
+      // 2) When no pending task, cards with recent interaction (completed task or notes) go to the END
+      const aHasRecent = leadsWithRecentActivity.has(a.id) ? 1 : 0;
+      const bHasRecent = leadsWithRecentActivity.has(b.id) ? 1 : 0;
+      return aHasRecent - bHasRecent;
     });
   };
 
