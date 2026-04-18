@@ -201,7 +201,7 @@ export default function RenovacaoFormBuilderPage() {
               <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{typeLabel(field.field_type)}</span>
               {field.is_name_field && <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">📛 Nome</span>}
               {field.is_phone_field && <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">📞 Telefone</span>}
-              {field.is_last_visit_field && <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">📅 Última consulta</span>}
+              {field.is_last_visit_field && <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">📅 Última receita</span>}
               {field.show_on_card && !field.is_last_visit_field && !field.is_name_field && !field.is_phone_field && (
                 <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600">No card</span>
               )}
@@ -303,7 +303,7 @@ export default function RenovacaoFormBuilderPage() {
                   {FIELD_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {isLastVisitField && <p className="text-xs text-muted-foreground">Tipo fixo em "Data" para campo de última consulta.</p>}
+              {isLastVisitField && <p className="text-xs text-muted-foreground">Tipo fixo em "Data" para o campo de última receita.</p>}
             </div>
 
             {["select", "checkbox_group"].includes(fieldType) && !isLastVisitField && (
@@ -318,7 +318,7 @@ export default function RenovacaoFormBuilderPage() {
             <div className="flex items-center gap-2"><Switch checked={isPhoneField} onCheckedChange={(v) => { setIsPhoneField(v); if (v) { setIsNameField(false); setIsLastVisitField(false); } }} /><Label>Este campo é o telefone</Label></div>
             <div className="flex items-center gap-2">
               <Switch checked={isLastVisitField} onCheckedChange={(v) => { setIsLastVisitField(v); if (v) { setIsNameField(false); setIsPhoneField(false); setFieldType("date"); } }} />
-              <Label>Este é o campo principal: <strong>Data da última consulta</strong></Label>
+              <Label>Este é o campo principal: <strong>Data da última receita</strong></Label>
             </div>
             <div className="flex items-center gap-2"><Switch checked={showOnCard} onCheckedChange={setShowOnCard} /><Label>Mostrar resposta no card</Label></div>
 
