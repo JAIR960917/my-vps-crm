@@ -401,8 +401,8 @@ export default function CobrancaEditSheet(props: Props) {
             </div>
           ) : (
             <>
-              {/* Comment / Task input bar - hidden on Parcelas tab */}
-              {tab !== "parcelas" && (
+              {/* Comment / Task input bar - hidden on Parcelas / Produtos tabs */}
+              {tab !== "parcelas" && tab !== "produtos" && (
                 <div className="px-5 py-3 border-b flex items-center gap-2">
                   <Input
                     placeholder="Adicionar comentário..."
@@ -574,8 +574,16 @@ export default function CobrancaEditSheet(props: Props) {
                 </ScrollArea>
               )}
 
+              {/* Produtos content */}
+              {tab === "produtos" && (
+                <ClientProductsTab
+                  ssoticaClienteId={ssoticaClienteId ?? null}
+                  ssoticaCompanyId={ssoticaCompanyId ?? null}
+                />
+              )}
+
               {/* Timeline */}
-              {tab !== "parcelas" && (
+              {tab !== "parcelas" && tab !== "produtos" && (
               <ScrollArea className="flex-1">
                 <div className="p-5 space-y-3">
                   {tab === "atividade" && timeline.length === 0 && (
