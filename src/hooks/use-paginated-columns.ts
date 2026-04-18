@@ -83,7 +83,7 @@ export function usePaginatedColumns<T extends { id: string; status: string }>(
       try {
         const { data, error, count } = await queryFor(statusKey).range(offset, offset + PAGE_SIZE - 1);
         if (error) throw error;
-        const newItems = (data || []) as T[];
+        const newItems = (data || []) as unknown as T[];
         setColumns((prev) => {
           const existing = prev[statusKey]?.items || [];
           const merged = offset === 0
@@ -150,7 +150,7 @@ export function usePaginatedColumns<T extends { id: string; status: string }>(
       query = query.order(orderColumn, { ascending: orderAscending });
       const { data } = await query;
       if (!cancelled) {
-        setSearchResults((data || []) as T[]);
+        setSearchResults((data || []) as unknown as T[]);
         setSearching(false);
       }
     })();
