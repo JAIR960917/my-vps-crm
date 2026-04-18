@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2, CalendarPlus } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,6 +15,7 @@ import { formatPhoneBR } from "@/lib/phoneFormat";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import RenovacaoEditSheet from "@/components/renovacoes/RenovacaoEditSheet";
+import ScheduleLeadDialog from "@/components/leads/ScheduleLeadDialog";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 
 type Renovacao = {
@@ -118,6 +119,11 @@ export default function ActiveClientsPage() {
   const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Schedule dialog
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [schedulingItem, setSchedulingItem] = useState<Renovacao | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
 
   const statusKeys = useMemo(() => statuses.map((s) => s.key), [statuses]);
 
