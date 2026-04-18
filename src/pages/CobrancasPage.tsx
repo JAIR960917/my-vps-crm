@@ -210,19 +210,44 @@ export default function CobrancasPage() {
     return companies.find(c => c.id === companyId)?.name || "";
   };
 
+  // Compute task priority per cobranca: 3=overdue, 2=today, 1=future pending, 0=none
+  const cobrancaTaskPriority = useMemo(() => {
+    const map = new Map<string, number>();
+    const now = new Date();
+    const todayStr = now.toDateString();
+    activities.forEach((a) => {
+      if (a.completed_at) return;
+      const dt = new Date(a.scheduled_date);
+      let prio = 1;
+      if (dt < now) prio = 3;
+      else if (dt.toDateString() === todayStr) prio = 2;
+      const current = map.get(a.cobranca_id) || 0;
+      if (prio > current) map.set(a.cobranca_id, prio);
+    });
+    return map;
+  }, [activities]);
+
+  const sortByTaskPriority = useCallback(<T extends { id: string }>(items: T[]) => {
+    return [...items].sort((a, b) => {
+      const aPrio = cobrancaTaskPriority.get(a.id) || 0;
+      const bPrio = cobrancaTaskPriority.get(b.id) || 0;
+      return bPrio - aPrio;
+    });
+  }, [cobrancaTaskPriority]);
+
   const getByStatus = useCallback((key: string) => {
     if (isSearching) {
       const filtered = (searchResults || []).filter((c) => c.status === key);
-      return { items: filtered, total: filtered.length, hasMore: false, loading: searching };
+      return { items: sortByTaskPriority(filtered), total: filtered.length, hasMore: false, loading: searching };
     }
     const col = paginatedColumns[key];
     return {
-      items: col?.items || [],
+      items: sortByTaskPriority(col?.items || []),
       total: col?.total || 0,
       hasMore: col?.hasMore || false,
       loading: col?.loading || false,
     };
-  }, [paginatedColumns, isSearching, searchResults, searching]);
+  }, [paginatedColumns, isSearching, searchResults, searching, sortByTaskPriority]);
 
   const totalDisplayed = useMemo(() => {
     if (isSearching) return searchResults?.length || 0;

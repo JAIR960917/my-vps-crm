@@ -559,13 +559,34 @@ export default function LeadsPage() {
     return ids;
   }, [leadActivities, leadNoteIds]);
 
+  // Compute task priority per lead: 3=overdue, 2=today, 1=future pending, 0=none
+  const leadTaskPriority = useMemo(() => {
+    const map = new Map<string, number>();
+    const now = new Date();
+    const todayStr = now.toDateString();
+    leadActivities.forEach((a) => {
+      if (a.completed_at) return;
+      const dt = new Date(a.scheduled_date);
+      let prio = 1; // future pending
+      if (dt < now) prio = 3; // overdue
+      else if (dt.toDateString() === todayStr) prio = 2; // today
+      const current = map.get(a.lead_id) || 0;
+      if (prio > current) map.set(a.lead_id, prio);
+    });
+    return map;
+  }, [leadActivities]);
+
   const getLeadsByStatus = (status: string) => {
     const statusLeads = filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
-    // Sort: leads WITH recent activity go to the end
     return statusLeads.sort((a, b) => {
-      const aHasActivity = leadsWithRecentActivity.has(a.id) ? 1 : 0;
-      const bHasActivity = leadsWithRecentActivity.has(b.id) ? 1 : 0;
-      return aHasActivity - bHasActivity;
+      // Leads with recent activity (completed task or notes) go to the END
+      const aHasRecent = leadsWithRecentActivity.has(a.id) ? 1 : 0;
+      const bHasRecent = leadsWithRecentActivity.has(b.id) ? 1 : 0;
+      if (aHasRecent !== bHasRecent) return aHasRecent - bHasRecent;
+      // Then: leads with pending tasks (overdue/today/future) go to the TOP
+      const aPrio = leadTaskPriority.get(a.id) || 0;
+      const bPrio = leadTaskPriority.get(b.id) || 0;
+      return bPrio - aPrio;
     });
   };
 

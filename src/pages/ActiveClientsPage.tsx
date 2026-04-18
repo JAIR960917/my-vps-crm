@@ -329,20 +329,45 @@ export default function ActiveClientsPage() {
 
   const getProfileName = (uid: string | null) => uid ? (profiles.find(p => p.user_id === uid)?.full_name || "") : "";
 
+  // Compute task priority per renovacao: 3=overdue, 2=today, 1=future pending, 0=none
+  const renovacaoTaskPriority = useMemo(() => {
+    const map = new Map<string, number>();
+    const now = new Date();
+    const todayStr = now.toDateString();
+    activities.forEach((a) => {
+      if (a.completed_at) return;
+      const dt = new Date(a.scheduled_date);
+      let prio = 1;
+      if (dt < now) prio = 3;
+      else if (dt.toDateString() === todayStr) prio = 2;
+      const current = map.get(a.renovacao_id) || 0;
+      if (prio > current) map.set(a.renovacao_id, prio);
+    });
+    return map;
+  }, [activities]);
+
+  const sortByTaskPriority = useCallback((items: Renovacao[]) => {
+    return [...items].sort((a, b) => {
+      const aPrio = renovacaoTaskPriority.get(a.id) || 0;
+      const bPrio = renovacaoTaskPriority.get(b.id) || 0;
+      return bPrio - aPrio;
+    });
+  }, [renovacaoTaskPriority]);
+
   // Build per-status item list (paginated or filtered from search)
   const getByStatus = useCallback((key: string): { items: Renovacao[]; total: number; hasMore: boolean; loading: boolean } => {
     if (isSearching) {
       const filtered = (searchResults || []).filter((r) => r.status === key);
-      return { items: filtered, total: filtered.length, hasMore: false, loading: searching };
+      return { items: sortByTaskPriority(filtered), total: filtered.length, hasMore: false, loading: searching };
     }
     const col = paginatedColumns[key];
     return {
-      items: col?.items || [],
+      items: sortByTaskPriority(col?.items || []),
       total: col?.total || 0,
       hasMore: col?.hasMore || false,
       loading: col?.loading || false,
     };
-  }, [paginatedColumns, isSearching, searchResults, searching]);
+  }, [paginatedColumns, isSearching, searchResults, searching, sortByTaskPriority]);
 
   const totalDisplayed = useMemo(() => {
     if (isSearching) return searchResults?.length || 0;
