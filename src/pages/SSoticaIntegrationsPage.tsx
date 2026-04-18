@@ -111,6 +111,57 @@ export default function SSoticaIntegrationsPage() {
   const [mappingFor, setMappingFor] = useState<Company | null>(null);
   const [stoppingAll, setStoppingAll] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [resyncingAll, setResyncingAll] = useState(false);
+
+  async function handleResyncAll() {
+    const active = integrations.filter((i) => i.is_active);
+    if (active.length === 0) {
+      toast({ title: "Nenhuma loja ativa", description: "Ative ao menos uma integração antes de ressincronizar.", variant: "destructive" });
+      return;
+    }
+    if (!confirm(
+      `Ressincronizar TUDO em ${active.length} loja(s)?\n\n` +
+      `• A 1ª loja inicia o Backfill 96m agora (8 chunks de 12 meses, ~25 min).\n` +
+      `• As demais serão agendadas em sequência, espaçadas 30 min entre cada.\n` +
+      `• Tempo total estimado: ~${Math.round((active.length * 30))} min.\n\n` +
+      `Continuar?`
+    )) return;
+
+    setResyncingAll(true);
+    try {
+      // Agenda as lojas 2..N escalonadas (30min entre cada início)
+      const SPACING_MIN = 30;
+      for (let i = 1; i < active.length; i++) {
+        const runAt = new Date(Date.now() + i * SPACING_MIN * 60 * 1000).toISOString();
+        await supabase
+          .from("ssotica_integrations")
+          .update({
+            backfill_status: "scheduled",
+            backfill_next_run_at: runAt,
+            backfill_chunk_index: 0,
+            backfill_started_at: new Date().toISOString(),
+          })
+          .eq("id", active[i].id);
+      }
+
+      // Dispara a 1ª loja imediatamente
+      const first = active[0];
+      const { error } = await supabase.functions.invoke("ssotica-sync", {
+        body: { mode: "start_backfill", integration_id: first.id },
+      });
+      if (error) throw error;
+
+      toast({
+        title: "Ressincronização iniciada",
+        description: `${active.length} loja(s) na fila. A 1ª está rodando agora; as demais começam a cada ${SPACING_MIN} min.`,
+      });
+      await fetchAll();
+    } catch (e: any) {
+      toast({ title: "Erro ao ressincronizar tudo", description: e.message, variant: "destructive" });
+    } finally {
+      setResyncingAll(false);
+    }
+  }
 
   async function handleStopAllBackfills() {
     if (!confirm("Parar TODOS os backfills em andamento?\n\nIsso vai interromper todas as importações que estão rodando no momento. Você poderá retomar manualmente, uma loja por vez, depois.")) return;
@@ -362,19 +413,34 @@ export default function SSoticaIntegrationsPage() {
               Configure o token de acesso de cada loja. A sincronização roda automaticamente todos os dias.
             </p>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleStopAllBackfills}
-            disabled={stoppingAll}
-          >
-            {stoppingAll ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <StopCircle className="h-4 w-4 mr-2" />
-            )}
-            Parar todos os backfills
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleResyncAll}
+              disabled={resyncingAll || stoppingAll}
+            >
+              {resyncingAll ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Ressincronizar tudo
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleStopAllBackfills}
+              disabled={stoppingAll}
+            >
+              {stoppingAll ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <StopCircle className="h-4 w-4 mr-2" />
+              )}
+              Parar todos os backfills
+            </Button>
+          </div>
         </div>
 
         {/* Card de configuração do cron diário */}
