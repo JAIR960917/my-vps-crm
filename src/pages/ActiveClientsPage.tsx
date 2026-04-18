@@ -26,6 +26,8 @@ type Renovacao = {
   data_ultima_compra: string | null;
   created_at: string;
   updated_at: string;
+  ssotica_cliente_id?: number | null;
+  ssotica_company_id?: string | null;
 };
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
@@ -691,6 +693,8 @@ export default function ActiveClientsPage() {
         saving={saving}
         onSave={handleSave}
         canReassign={isAdmin || isGerente}
+        ssoticaClienteId={editingItem?.ssotica_cliente_id ?? null}
+        ssoticaCompanyId={editingItem?.ssotica_company_id ?? null}
       />
 
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => !open && setDeleteConfirmId(null)}>
