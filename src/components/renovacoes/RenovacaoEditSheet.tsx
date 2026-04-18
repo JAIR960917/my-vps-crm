@@ -389,6 +389,11 @@ export default function RenovacaoEditSheet(props: Props) {
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-8 text-center">
               Salve a renovação primeiro para adicionar comentários e tarefas.
             </div>
+          ) : tab === "produtos" ? (
+            <ClientProductsTab
+              ssoticaClienteId={ssoticaClienteId ?? null}
+              ssoticaCompanyId={ssoticaCompanyId ?? null}
+            />
           ) : (
             <>
               <div className="px-5 py-3 border-b flex items-center gap-2">
