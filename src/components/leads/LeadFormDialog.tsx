@@ -656,6 +656,7 @@ export default function LeadFormDialog({
       toast.success("Comentário adicionado!");
       setNewNote("");
       fetchNotes();
+      onActivityChange?.();
     }
     setNoteSending(false);
   };
@@ -663,7 +664,7 @@ export default function LeadFormDialog({
   const handleDeleteNote = async (id: string) => {
     const { error } = await supabase.from("crm_lead_notes").delete().eq("id", id);
     if (error) toast.error("Erro ao remover");
-    else fetchNotes();
+    else { fetchNotes(); onActivityChange?.(); }
   };
 
   const getActivityStatus = (act: Activity) => {
