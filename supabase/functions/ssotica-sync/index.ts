@@ -669,20 +669,32 @@ async function syncVendas(
     const telefone = cliente.telefones?.[0]?.numero ?? "";
     const responsavelNome = info.funcionario?.nome ?? "";
     const responsavelFuncao = info.funcionario?.funcao ?? "";
+
+    // Data de referência: usa data da última receita (O.S.) se houver,
+    // senão cai na data da última venda. É essa data que vai para
+    // data_ultima_compra/scheduled_date e classifica a coluna do Kanban.
+    const receitaInfo = ultimaReceitaPorCliente.get(clienteId) ?? null;
+    const dataReferencia = receitaInfo?.data ?? info.data;
+
     const renovacaoData = {
       nome: cliente.nome,
       telefone,
       documento: cliente.cpf_cnpj ?? "",
       email: cliente.emails?.[0]?.email ?? "",
-      data_ultima_compra: info.data,
+      data_ultima_compra: dataReferencia, // mantém o nome do campo p/ retro-compat
+      data_ultima_receita: receitaInfo?.data ?? null,
+      data_ultima_venda: info.data,
+      receita_optometrista: receitaInfo?.optometrista ?? null,
+      receita_validade: receitaInfo?.validade ?? null,
+      tem_receita: !!receitaInfo,
       responsavel_ssotica_nome: responsavelNome,
       responsavel_ssotica_funcao: responsavelFuncao,
       ssotica_raw: cliente,
     };
 
-    // Calcula dias desde a última compra para escolher a coluna
-    const ultimaCompraDate = new Date(info.data + "T00:00:00Z");
-    const diasDesdeUltimaCompra = daysBetween(ultimaCompraDate, today);
+    // Calcula dias desde a data de referência (receita > venda) para escolher a coluna
+    const referenciaDate = new Date(dataReferencia + "T00:00:00Z");
+    const diasDesdeUltimaCompra = daysBetween(referenciaDate, today);
     const { data: existing } = await supabase
       .from("crm_renovacoes")
       .select("id, data_ultima_compra, status, assigned_to")
@@ -728,20 +740,20 @@ async function syncVendas(
         : isManualStatus
           ? existingRenovacao.status
           : flowStatus;
-      // Atualiza se a venda é mais recente OU se o status precisa mudar de coluna pelo tempo
-      const vendaMaisRecente = !existingRenovacao.data_ultima_compra || existingRenovacao.data_ultima_compra < info.data;
+      // Atualiza se a data de referência é mais recente OU se o status precisa mudar de coluna pelo tempo
+      const dataMaisRecente = !existingRenovacao.data_ultima_compra || existingRenovacao.data_ultima_compra < dataReferencia;
       const statusMudou = existingRenovacao.status !== newStatus;
       const assignedMudou = (existingRenovacao.assigned_to ?? null) !== resolvedAssignedTo;
-      if (vendaMaisRecente || statusMudou || assignedMudou) {
+      if (dataMaisRecente || statusMudou || assignedMudou) {
         await supabase
           .from("crm_renovacoes")
           .update({
             data: renovacaoData,
-            data_ultima_compra: info.data,
+            data_ultima_compra: dataReferencia,
             ssotica_venda_id: info.vendaId,
             assigned_to: resolvedAssignedTo,
             valor: info.valor,
-            scheduled_date: info.data,
+            scheduled_date: dataReferencia,
             status: newStatus,
           })
           .eq("id", existingRenovacao.id);
@@ -754,10 +766,10 @@ async function syncVendas(
         ssotica_company_id: integ.company_id,
         assigned_to: resolvedAssignedTo,
         data: renovacaoData,
-        data_ultima_compra: info.data,
+        data_ultima_compra: dataReferencia,
         valor: info.valor,
         status: hasAssignedVendedor ? flowStatus : DIRECIONAMENTO_STATUS,
-        scheduled_date: info.data,
+        scheduled_date: dataReferencia,
       });
       created++;
     }
