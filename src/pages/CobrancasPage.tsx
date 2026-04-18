@@ -5,10 +5,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, User, Building2, AlertTriangle, CalendarClock, CheckCircle2, Clock } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, Building2, AlertTriangle, CalendarClock, CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,6 +15,7 @@ import { formatPhoneBR } from "@/lib/phoneFormat";
 import CobrancaEditSheet from "@/components/cobrancas/CobrancaEditSheet";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 
 type CobrancaActivity = {
   id: string;
@@ -57,7 +57,6 @@ export default function CobrancasPage() {
   const { user, isAdmin, isGerente, isFinanceiro } = useAuth();
   const canCreate = isAdmin || isFinanceiro;
   const [financeiroIds, setFinanceiroIds] = useState<Set<string>>(new Set());
-  const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -74,32 +73,41 @@ export default function CobrancasPage() {
   const [filterCompanyId, setFilterCompanyId] = useState("all");
   const [mobileTab, setMobileTab] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  // Paginação visual: mostra 20 cards por coluna inicialmente, com botão "Carregar mais" (+20)
-  const PAGE_INCREMENT = 20;
-  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
-  const showMore = (statusKey: string) => {
-    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] ?? PAGE_INCREMENT) + PAGE_INCREMENT }));
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchAll = useCallback(async () => {
-    // Busca TODAS as cobranças em batches de 1000 (limite padrão do PostgREST)
-    // para empresas com mais de 1000 registros, como Parelhas.
-    const PAGE_SIZE = 1000;
-    let allCobs: any[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from("crm_cobrancas")
-        .select("*")
-        .order("updated_at", { ascending: false })
-        .range(from, from + PAGE_SIZE - 1);
-      if (error) break;
-      const batch = data || [];
-      allCobs = allCobs.concat(batch);
-      if (batch.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
+  const statusKeys = useMemo(() => statuses.map((s) => s.key), [statuses]);
 
+  const columnFilter = useMemo(() => ({
+    apply: (q: any) => {
+      if (filterCompanyId !== "all") return q.eq("company_id", filterCompanyId);
+      return q;
+    },
+  }), [filterCompanyId]);
+
+  const buildSearchOr = useCallback((q: string) => {
+    const safe = q.replace(/[%,()]/g, "");
+    if (!safe) return null;
+    return `data->>nome.ilike.%${safe}%,data->>telefone.ilike.%${safe}%,data->>descricao.ilike.%${safe}%`;
+  }, []);
+
+  const {
+    columns: paginatedColumns,
+    loadMore,
+    updateItemStatus,
+    removeItem,
+    searchResults,
+    searching,
+    isSearching,
+  } = usePaginatedColumns<Cobranca>({
+    table: "crm_cobrancas",
+    statusKeys,
+    filter: columnFilter,
+    searchQuery,
+    buildSearchOr,
+    refreshKey,
+  });
+
+  const loadMeta = useCallback(async () => {
     const [{ data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
@@ -107,7 +115,6 @@ export default function CobrancasPage() {
       supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
       supabase.from("cobranca_activities").select("id, cobranca_id, title, scheduled_date, completed_at"),
     ]);
-    setCobrancas(allCobs as Cobranca[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
@@ -115,11 +122,11 @@ export default function CobrancasPage() {
     setActivities((acts || []) as CobrancaActivity[]);
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { loadMeta(); }, [loadMeta]);
 
   useEffect(() => {
     if (statuses.length > 0 && !mobileTab) setMobileTab(statuses[0].key);
-  }, [statuses]);
+  }, [statuses, mobileTab]);
 
   const statusOptions = statuses.map(s => s.key);
 
@@ -167,7 +174,7 @@ export default function CobrancasPage() {
       }
     }
     setSaving(false);
-    fetchAll();
+    setRefreshKey((k) => k + 1);
   };
 
   const handleDelete = (id: string) => setDeleteConfirmId(id);
@@ -177,15 +184,19 @@ export default function CobrancasPage() {
     const { error } = await supabase.from("crm_cobrancas").delete().eq("id", deleteConfirmId);
     if (error) toast.error("Erro ao excluir");
     else toast.success("Cobrança excluída");
+    removeItem(deleteConfirmId);
     setDeleteConfirmId(null);
-    fetchAll();
   };
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const newStatus = result.destination.droppableId;
+    const fromStatus = result.source.droppableId;
     const cobrancaId = result.draggableId;
-    setCobrancas(prev => prev.map(c => c.id === cobrancaId ? { ...c, status: newStatus } : c));
+    if (newStatus === fromStatus) return;
+    const item = paginatedColumns[fromStatus]?.items.find((it) => it.id === cobrancaId)
+      || (searchResults || []).find((it) => it.id === cobrancaId);
+    updateItemStatus(cobrancaId, fromStatus, newStatus, item);
     await supabase.from("crm_cobrancas").update({ status: newStatus }).eq("id", cobrancaId);
   };
 
@@ -199,36 +210,32 @@ export default function CobrancasPage() {
     return companies.find(c => c.id === companyId)?.name || "";
   };
 
-  const filteredCobrancas = useMemo(() => {
-    let list = cobrancas;
-    if (filterCompanyId && filterCompanyId !== "all") {
-      list = list.filter(c => c.company_id === filterCompanyId);
+  const getByStatus = useCallback((key: string) => {
+    if (isSearching) {
+      const filtered = (searchResults || []).filter((c) => c.status === key);
+      return { items: filtered, total: filtered.length, hasMore: false, loading: searching };
     }
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(c => {
-      const d = c.data as Record<string, any>;
-      return (d.nome || "").toLowerCase().includes(q)
-        || (d.telefone || "").includes(q)
-        || (d.descricao || "").toLowerCase().includes(q)
-        || String(c.valor).includes(q);
-    });
-  }, [cobrancas, searchQuery, filterCompanyId]);
+    const col = paginatedColumns[key];
+    return {
+      items: col?.items || [],
+      total: col?.total || 0,
+      hasMore: col?.hasMore || false,
+      loading: col?.loading || false,
+    };
+  }, [paginatedColumns, isSearching, searchResults, searching]);
 
-  // Reseta a paginação visual quando filtros/busca mudam
-  useEffect(() => { setVisibleCounts({}); }, [searchQuery, filterCompanyId]);
+  const totalDisplayed = useMemo(() => {
+    if (isSearching) return searchResults?.length || 0;
+    return Object.values(paginatedColumns).reduce((acc, col) => acc + col.total, 0);
+  }, [paginatedColumns, isSearching, searchResults]);
 
-  const getByStatus = (key: string) => filteredCobrancas.filter(c => c.status === key);
-  const getVisibleByStatus = (key: string) => {
-    const all = getByStatus(key);
-    const limit = visibleCounts[key] ?? PAGE_INCREMENT;
-    return { all, visible: all.slice(0, limit), hasMore: all.length > limit };
+  const handleColumnScroll = (e: React.UIEvent<HTMLDivElement>, statusKey: string) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) loadMore(statusKey);
   };
 
   const renderCard = (cobranca: Cobranca) => {
     const d = cobranca.data as Record<string, any>;
-
-    // Activity status (em dia / hoje / atrasada)
     const cobActivities = activities.filter(a => a.cobranca_id === cobranca.id);
     const pending = cobActivities.filter(a => !a.completed_at);
     const overdue = pending.filter(a => new Date(a.scheduled_date) < new Date());
@@ -242,13 +249,9 @@ export default function CobrancasPage() {
     const hasPending = pending.length > 0 && !hasOverdue && !hasToday;
 
     let cardBorderClass = "";
-    if (hasOverdue) {
-      cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
-    } else if (hasToday) {
-      cardBorderClass = "border-amber-400 bg-amber-500/5";
-    } else if (hasPending) {
-      cardBorderClass = "border-blue-400/50 bg-blue-500/5";
-    }
+    if (hasOverdue) cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
+    else if (hasToday) cardBorderClass = "border-amber-400 bg-amber-500/5";
+    else if (hasPending) cardBorderClass = "border-blue-400/50 bg-blue-500/5";
 
     const nextActivity = [...pending].sort(
       (a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
@@ -304,30 +307,25 @@ export default function CobrancasPage() {
           );
         })()}
 
-        {/* Activity status badges */}
         <div className="pt-2 border-t">
           {hasOverdue && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full uppercase">
-              <AlertTriangle className="h-3 w-3" />
-              Atrasada
+              <AlertTriangle className="h-3 w-3" />Atrasada
             </span>
           )}
           {hasToday && !hasOverdue && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
-              <CalendarClock className="h-3 w-3" />
-              Hoje
+              <CalendarClock className="h-3 w-3" />Hoje
             </span>
           )}
           {hasPending && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
-              <Clock className="h-3 w-3" />
-              Pendente
+              <Clock className="h-3 w-3" />Pendente
             </span>
           )}
           {!hasOverdue && !hasToday && !hasPending && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-500 px-2 py-0.5 rounded-full uppercase">
-              <CheckCircle2 className="h-3 w-3" />
-              Em dia
+              <CheckCircle2 className="h-3 w-3" />Em dia
             </span>
           )}
 
@@ -364,7 +362,7 @@ export default function CobrancasPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold">Cobranças</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Gerencie as cobranças do sistema — {filteredCobrancas.length} registro{filteredCobrancas.length !== 1 ? "s" : ""}
+            Gerencie as cobranças do sistema — {totalDisplayed} registro{totalDisplayed !== 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -401,7 +399,7 @@ export default function CobrancasPage() {
       <div className="lg:hidden mb-3">
         <div className="flex gap-1 overflow-x-auto pb-1">
           {statuses.map(status => {
-            const count = getByStatus(status.key).length;
+            const { total } = getByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <button
@@ -415,29 +413,30 @@ export default function CobrancasPage() {
                 {status.label}
                 <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
                   mobileTab === status.key ? "bg-primary-foreground/20 text-primary-foreground" : colors.badge
-                }`}>{count}</span>
+                }`}>{total}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Mobile: Active column */}
-      <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
+      <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}
+           onScroll={(e) => mobileTab && handleColumnScroll(e, mobileTab)}>
         {statuses.filter(s => s.key === mobileTab).map(status => {
-          const { all, visible, hasMore } = getVisibleByStatus(status.key);
+          const { items, total, hasMore, loading } = getByStatus(status.key);
           return (
             <div key={status.key}>
-              {all.length === 0 && (
+              {items.length === 0 && !loading && (
                 <p className="text-center text-sm text-muted-foreground py-8">Nenhuma cobrança nesta coluna</p>
               )}
-              {visible.map(c => <div key={c.id} className="mb-2">{renderCard(c)}</div>)}
+              {items.map(c => <div key={c.id} className="mb-2">{renderCard(c)}</div>)}
               {hasMore && (
                 <button
-                  onClick={() => showMore(status.key)}
+                  onClick={() => loadMore(status.key)}
+                  disabled={loading}
                   className="w-full py-2.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-primary/30 mb-2 transition-colors"
                 >
-                  Carregar mais ({all.length - visible.length} restantes)
+                  {loading ? "Carregando..." : `Carregar mais (${total - items.length} restantes)`}
                 </button>
               )}
               {canCreate && (
@@ -450,11 +449,10 @@ export default function CobrancasPage() {
         })}
       </div>
 
-      {/* Desktop: Kanban */}
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map(status => {
-            const { all, visible, hasMore } = getVisibleByStatus(status.key);
+            const { items, total, hasMore, loading } = getByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
@@ -462,7 +460,7 @@ export default function CobrancasPage() {
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
                   <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>
-                    {all.length}
+                    {total}
                   </span>
                 </div>
                 <Droppable droppableId={status.key}>
@@ -470,11 +468,12 @@ export default function CobrancasPage() {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
+                      onScroll={(e) => handleColumnScroll(e, status.key)}
                       className={`flex-1 rounded-xl p-2 space-y-2 transition-colors overflow-y-auto min-h-0 ${
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
                       }`}
                     >
-                      {visible.map((c, index) => (
+                      {items.map((c, index) => (
                         <Draggable key={c.id} draggableId={c.id} index={index}>
                           {(provided, snapshot) => (
                             <div
@@ -489,12 +488,18 @@ export default function CobrancasPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
+                      {loading && items.length === 0 && (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
                       {hasMore && (
                         <button
-                          onClick={() => showMore(status.key)}
+                          onClick={() => loadMore(status.key)}
+                          disabled={loading}
                           className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-primary/30 transition-colors"
                         >
-                          Carregar mais ({all.length - visible.length} restantes)
+                          {loading ? "Carregando..." : `Carregar mais (${total - items.length} restantes)`}
                         </button>
                       )}
                       {canCreate && (
@@ -511,7 +516,6 @@ export default function CobrancasPage() {
         </div>
       </DragDropContext>
 
-      {/* Edit/Create Sheet with Activity/Comment/Task tabs */}
       <CobrancaEditSheet
         open={dialogOpen}
         onOpenChange={setDialogOpen}
