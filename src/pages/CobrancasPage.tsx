@@ -559,7 +559,7 @@ export default function CobrancasPage() {
 
       <CobrancaEditSheet
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => { setDialogOpen(open); if (!open) loadMeta(); }}
         cobrancaId={editingCobranca?.id || null}
         ssoticaClienteId={(editingCobranca as any)?.ssotica_cliente_id ?? null}
         ssoticaCompanyId={(editingCobranca as any)?.ssotica_company_id ?? null}
