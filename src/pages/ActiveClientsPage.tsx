@@ -567,6 +567,17 @@ export default function ActiveClientsPage() {
         </div>
 
         <div className="flex gap-1 justify-end pt-1">
+          {item.status !== "agendado" && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+              title="Agendar"
+              onClick={() => openScheduleDialog(item)}
+            >
+              <CalendarPlus className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(item)}>
             <Pencil className="h-3 w-3" />
           </Button>
