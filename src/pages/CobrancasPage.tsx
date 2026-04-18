@@ -61,6 +61,7 @@ export default function CobrancasPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [activities, setActivities] = useState<CobrancaActivity[]>([]);
+  const [noteIds, setNoteIds] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCobranca, setEditingCobranca] = useState<Cobranca | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({ nome: "", telefone: "", descricao: "" });
@@ -108,18 +109,20 @@ export default function CobrancasPage() {
   });
 
   const loadMeta = useCallback(async () => {
-    const [{ data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }] = await Promise.all([
+    const [{ data: sts }, { data: profs }, { data: comps }, { data: roles }, { data: acts }, { data: notes }] = await Promise.all([
       supabase.from("crm_cobranca_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("companies").select("id, name").order("name"),
       supabase.from("user_roles").select("user_id, role").eq("role", "financeiro"),
       supabase.from("cobranca_activities").select("id, cobranca_id, title, scheduled_date, completed_at"),
+      supabase.from("crm_cobranca_notes").select("cobranca_id"),
     ]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setCompanies((comps || []) as Company[]);
     setFinanceiroIds(new Set((roles || []).map((r: any) => r.user_id)));
     setActivities((acts || []) as CobrancaActivity[]);
+    setNoteIds(new Set((notes || []).map((n: any) => n.cobranca_id)));
   }, []);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
