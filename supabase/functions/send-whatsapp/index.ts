@@ -64,6 +64,10 @@ async function sendMessage(session: string, apiKey: string, phone: string, text:
   return resolveSendResult(response.ok, result);
 }
 
+// Delay between WhatsApp sends to avoid being banned (30 seconds)
+const SEND_DELAY_MS = 30_000;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function cleanPhone(phone: string) {
   let clean = phone.replace(/\D/g, "");
   if (clean.startsWith("0")) clean = clean.substring(1);
