@@ -16,9 +16,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil, CalendarHeart } from "lucide-react";
+import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil, CalendarHeart, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPhoneBR } from "@/lib/phoneFormat";
+import ClientProductsTab from "@/components/ClientProductsTab";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type CrmStatus = { id: string; key: string; label: string };
@@ -53,6 +54,8 @@ type Props = {
   saving: boolean;
   onSave: (e: React.FormEvent) => void;
   canReassign: boolean;
+  ssoticaClienteId?: number | null;
+  ssoticaCompanyId?: string | null;
 };
 
 const parseStoredDate = (value: unknown): Date | undefined => {
@@ -74,6 +77,7 @@ export default function RenovacaoEditSheet(props: Props) {
     open, onOpenChange, renovacaoId, formData, setFormData,
     formStatus, setFormStatus, formAssigned, setFormAssigned,
     formValor, setFormValor, statuses, profiles, fields, saving, onSave, canReassign,
+    ssoticaClienteId, ssoticaCompanyId,
   } = props;
   const { user, isAdmin } = useAuth();
 
@@ -370,6 +374,10 @@ export default function RenovacaoEditSheet(props: Props) {
                 <TabsTrigger value="atividade" className="data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">Atividade</TabsTrigger>
                 <TabsTrigger value="comentario">Comentário</TabsTrigger>
                 <TabsTrigger value="tarefa">Tarefa</TabsTrigger>
+                <TabsTrigger value="produtos" className="data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">
+                  <ShoppingBag className="h-3.5 w-3.5 mr-1" />
+                  Produtos
+                </TabsTrigger>
               </TabsList>
             </Tabs>
             <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
@@ -381,6 +389,11 @@ export default function RenovacaoEditSheet(props: Props) {
             <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-8 text-center">
               Salve a renovação primeiro para adicionar comentários e tarefas.
             </div>
+          ) : tab === "produtos" ? (
+            <ClientProductsTab
+              ssoticaClienteId={ssoticaClienteId ?? null}
+              ssoticaCompanyId={ssoticaCompanyId ?? null}
+            />
           ) : (
             <>
               <div className="px-5 py-3 border-b flex items-center gap-2">

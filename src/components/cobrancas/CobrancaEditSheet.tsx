@@ -15,8 +15,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil, Receipt } from "lucide-react";
+import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil, Receipt, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ClientProductsTab from "@/components/ClientProductsTab";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type Company = { id: string; name: string };
@@ -383,6 +384,10 @@ export default function CobrancaEditSheet(props: Props) {
                     </span>
                   )}
                 </TabsTrigger>
+                <TabsTrigger value="produtos" className="data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">
+                  <ShoppingBag className="h-3.5 w-3.5 mr-1" />
+                  Produtos
+                </TabsTrigger>
               </TabsList>
             </Tabs>
             <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
@@ -396,8 +401,8 @@ export default function CobrancaEditSheet(props: Props) {
             </div>
           ) : (
             <>
-              {/* Comment / Task input bar - hidden on Parcelas tab */}
-              {tab !== "parcelas" && (
+              {/* Comment / Task input bar - hidden on Parcelas / Produtos tabs */}
+              {tab !== "parcelas" && tab !== "produtos" && (
                 <div className="px-5 py-3 border-b flex items-center gap-2">
                   <Input
                     placeholder="Adicionar comentário..."
@@ -569,8 +574,16 @@ export default function CobrancaEditSheet(props: Props) {
                 </ScrollArea>
               )}
 
+              {/* Produtos content */}
+              {tab === "produtos" && (
+                <ClientProductsTab
+                  ssoticaClienteId={ssoticaClienteId ?? null}
+                  ssoticaCompanyId={ssoticaCompanyId ?? null}
+                />
+              )}
+
               {/* Timeline */}
-              {tab !== "parcelas" && (
+              {tab !== "parcelas" && tab !== "produtos" && (
               <ScrollArea className="flex-1">
                 <div className="p-5 space-y-3">
                   {tab === "atividade" && timeline.length === 0 && (
