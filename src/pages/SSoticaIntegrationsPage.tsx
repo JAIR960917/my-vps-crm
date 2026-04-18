@@ -413,19 +413,34 @@ export default function SSoticaIntegrationsPage() {
               Configure o token de acesso de cada loja. A sincronização roda automaticamente todos os dias.
             </p>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleStopAllBackfills}
-            disabled={stoppingAll}
-          >
-            {stoppingAll ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <StopCircle className="h-4 w-4 mr-2" />
-            )}
-            Parar todos os backfills
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleResyncAll}
+              disabled={resyncingAll || stoppingAll}
+            >
+              {resyncingAll ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Ressincronizar tudo
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleStopAllBackfills}
+              disabled={stoppingAll}
+            >
+              {stoppingAll ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <StopCircle className="h-4 w-4 mr-2" />
+              )}
+              Parar todos os backfills
+            </Button>
+          </div>
         </div>
 
         {/* Card de configuração do cron diário */}
