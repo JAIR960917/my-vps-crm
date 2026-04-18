@@ -181,6 +181,7 @@ serve(async (req) => {
     let totalSent = 0;
     let totalErrors = 0;
     let skippedNoCompany = 0;
+    let isFirstSend = true;
     const today = new Date().toISOString().split("T")[0];
 
     const companyUsersCache = new Map<string, Set<string>>();
@@ -243,6 +244,8 @@ serve(async (req) => {
           const cp = cleanPhone(phone);
 
           try {
+            if (!isFirstSend) await sleep(SEND_DELAY_MS);
+            isFirstSend = false;
             const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, campaign.image_url);
             if (result.ok) {
               await supabase.from("whatsapp_campaign_sends").insert({ campaign_id: campaign.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
@@ -331,6 +334,8 @@ serve(async (req) => {
             const cp = cleanPhone(phone);
 
             try {
+              if (!isFirstSend) await sleep(SEND_DELAY_MS);
+              isFirstSend = false;
               const result = await sendMessage(session, APIFULL_API_KEY, cp, messageBody, step.image_url);
               if (result.ok) {
                 await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
