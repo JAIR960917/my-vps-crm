@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, User, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,6 +15,7 @@ import { formatPhoneBR } from "@/lib/phoneFormat";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import RenovacaoEditSheet from "@/components/renovacoes/RenovacaoEditSheet";
+import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 
 type Renovacao = {
   id: string;
@@ -75,7 +76,6 @@ const parseStoredDate = (value: unknown): Date | undefined => {
   return Number.isNaN(p.getTime()) ? undefined : p;
 };
 
-const normalizePhoneDigits = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(0, 11);
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 const statusKeyForRenovacao = (diasDesdeUltimaCompra: number | null): string => {
@@ -95,7 +95,6 @@ const getRenovacaoFlowStatus = (lastPurchaseDate: unknown): string => {
 
 export default function ActiveClientsPage() {
   const { user, isAdmin, isGerente } = useAuth();
-  const [renovacoes, setRenovacoes] = useState<Renovacao[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
@@ -116,63 +115,50 @@ export default function ActiveClientsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
+  const [unassignedCount, setUnassignedCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const unassignedCount = useMemo(() => {
-    let items = renovacoes.filter(r => !r.assigned_to && (r as any).ssotica_company_id);
-    if (filterCompanyId !== "all") items = items.filter(r => (r as any).ssotica_company_id === filterCompanyId);
-    return items.length;
-  }, [renovacoes, filterCompanyId]);
+  const statusKeys = useMemo(() => statuses.map((s) => s.key), [statuses]);
 
-  const runAutoAssign = async () => {
-    setAutoAssigning(true);
-    try {
-      const body: any = {};
-      if (filterCompanyId !== "all") body.company_id = filterCompanyId;
-      const { data, error } = await supabase.functions.invoke("auto-assign-renovacoes", { body });
-      if (error) throw error;
-      const total = (data as any)?.total_assigned ?? 0;
-      toast.success(`${total} lead${total !== 1 ? "s" : ""} distribuído${total !== 1 ? "s" : ""} entre os vendedores`);
-      await fetchAll();
-    } catch (e: any) {
-      toast.error(e?.message || "Erro ao distribuir leads");
-    } finally {
-      setAutoAssigning(false);
-      setAutoAssignConfirm(false);
-    }
-  };
+  // Filter applied to every column query (server-side)
+  const columnFilter = useMemo(() => ({
+    apply: (q: any) => {
+      let res = q;
+      if (filterCompanyId !== "all") res = res.eq("ssotica_company_id", filterCompanyId);
+      if (filterAssignedTo === "__unassigned__") res = res.is("assigned_to", null);
+      else if (filterAssignedTo !== "all") res = res.eq("assigned_to", filterAssignedTo);
+      return res;
+    },
+  }), [filterCompanyId, filterAssignedTo]);
 
-  // Lazy rendering: 20 cards por coluna, "carrega mais" ao rolar
-  const ITEMS_PER_PAGE = 20;
-  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
-  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || ITEMS_PER_PAGE;
-  const loadMore = (statusKey: string) =>
-    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE }));
-  const handleColumnScroll = (e: React.UIEvent<HTMLDivElement>, statusKey: string) => {
-    const el = e.currentTarget;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) loadMore(statusKey);
-  };
+  // ilike search across name/phone in jsonb
+  const buildSearchOr = useCallback((q: string) => {
+    const safe = q.replace(/[%,()]/g, "");
+    if (!safe) return null;
+    return `data->>nome.ilike.%${safe}%,data->>telefone.ilike.%${safe}%`;
+  }, []);
 
-  const fetchAllRenovacoes = async () => {
-    const PAGE_SIZE = 1000;
-    let all: any[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from("crm_renovacoes")
-        .select("*")
-        .order("updated_at", { ascending: false })
-        .range(from, from + PAGE_SIZE - 1);
-      if (error || !data) break;
-      all = all.concat(data);
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-    return all;
-  };
+  const {
+    columns: paginatedColumns,
+    loadMore,
+    refetch,
+    updateItemStatus,
+    removeItem,
+    searchResults,
+    searching,
+    isSearching,
+  } = usePaginatedColumns<Renovacao>({
+    table: "crm_renovacoes",
+    statusKeys,
+    filter: columnFilter,
+    searchQuery,
+    buildSearchOr,
+    refreshKey,
+  });
 
-  const fetchAll = useCallback(async () => {
-    const [items, { data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
-      fetchAllRenovacoes(),
+  // Load static data once (statuses, profiles, fields, etc.)
+  const loadMeta = useCallback(async () => {
+    const [{ data: sts }, { data: profs }, { data: roles }, { data: comps }, { data: ff }, { data: acts }] = await Promise.all([
       supabase.from("crm_renovacao_statuses").select("*").order("position"),
       supabase.rpc("get_profile_names"),
       supabase.from("user_roles").select("user_id, role"),
@@ -180,7 +166,6 @@ export default function ActiveClientsPage() {
       supabase.from("crm_renovacao_form_fields").select("*").order("position"),
       supabase.from("renovacao_activities").select("id,renovacao_id,title,scheduled_date,completed_at"),
     ]);
-    setRenovacoes((items || []) as Renovacao[]);
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setUserRoles((roles || []) as UserRole[]);
@@ -189,15 +174,24 @@ export default function ActiveClientsPage() {
     setActivities((acts || []) as RenovacaoActivity[]);
   }, []);
 
+  // Count unassigned (server-side)
+  const refreshUnassignedCount = useCallback(async () => {
+    let q = supabase
+      .from("crm_renovacoes")
+      .select("id", { count: "exact", head: true })
+      .is("assigned_to", null)
+      .not("ssotica_company_id", "is", null);
+    if (filterCompanyId !== "all") q = q.eq("ssotica_company_id", filterCompanyId);
+    const { count } = await q;
+    setUnassignedCount(count || 0);
+  }, [filterCompanyId]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  // Reseta a paginação quando filtros/busca mudam
-  useEffect(() => { setVisibleCounts({}); }, [filterCompanyId, filterAssignedTo, searchQuery]);
+  useEffect(() => { loadMeta(); }, [loadMeta]);
+  useEffect(() => { refreshUnassignedCount(); }, [refreshUnassignedCount, refreshKey]);
 
   useEffect(() => {
     if (statuses.length > 0 && !mobileTab) setMobileTab(statuses[0].key);
-  }, [statuses]);
+  }, [statuses, mobileTab]);
 
   const statusOptions = statuses.map(s => s.key);
   const vendedorIds = useMemo(
@@ -212,6 +206,24 @@ export default function ActiveClientsPage() {
     [fields],
   );
 
+  const runAutoAssign = async () => {
+    setAutoAssigning(true);
+    try {
+      const body: any = {};
+      if (filterCompanyId !== "all") body.company_id = filterCompanyId;
+      const { data, error } = await supabase.functions.invoke("auto-assign-renovacoes", { body });
+      if (error) throw error;
+      const total = (data as any)?.total_assigned ?? 0;
+      toast.success(`${total} lead${total !== 1 ? "s" : ""} distribuído${total !== 1 ? "s" : ""} entre os vendedores`);
+      setRefreshKey((k) => k + 1);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao distribuir leads");
+    } finally {
+      setAutoAssigning(false);
+      setAutoAssignConfirm(false);
+    }
+  };
+
   const openCreate = (status?: string) => {
     setEditingItem(null);
     setFormData({});
@@ -224,14 +236,11 @@ export default function ActiveClientsPage() {
   const openEdit = (item: Renovacao) => {
     setEditingItem(item);
     const initial: Record<string, any> = typeof item.data === "object" && item.data ? { ...item.data } : {};
-    // Backward-compat: migrar campos fixos (vindos do SSótica ou de cards antigos) para os field_<id>
     if (nameField && !initial[`field_${nameField.id}`] && initial.nome) initial[`field_${nameField.id}`] = initial.nome;
     if (phoneField && !initial[`field_${phoneField.id}`] && initial.telefone) initial[`field_${phoneField.id}`] = initial.telefone;
     if (cpfField && !initial[`field_${cpfField.id}`] && (initial.documento || initial.cpf)) {
       initial[`field_${cpfField.id}`] = initial.documento || initial.cpf;
     }
-    // Data da última visita: SEMPRE usa a coluna data_ultima_compra como fonte da verdade
-    // (o sync do SSótica grava lá; aqui sobrescreve para refletir a data real da última compra)
     if (lastVisitField && item.data_ultima_compra) {
       initial[`field_${lastVisitField.id}`] = item.data_ultima_compra;
     }
@@ -242,39 +251,15 @@ export default function ActiveClientsPage() {
     setDialogOpen(true);
   };
 
-  const set = (key: string, val: any) => setFormData(p => ({ ...p, [key]: val }));
-  const toggleArray = (key: string, item: string) => {
-    const arr: string[] = formData[key] || [];
-    set(key, arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item]);
-  };
-
-  const isFieldVisible = (field: FormField): boolean => {
-    if (!field.parent_field_id) return true;
-    const parent = fields.find(f => f.id === field.parent_field_id);
-    if (!parent || !isFieldVisible(parent)) return false;
-    if (!field.parent_trigger_value) return true;
-    let triggers: string[];
-    try {
-      const p = JSON.parse(field.parent_trigger_value);
-      triggers = Array.isArray(p) ? p : [field.parent_trigger_value];
-    } catch { triggers = [field.parent_trigger_value]; }
-    const pv = formData[`field_${parent.id}`];
-    if (Array.isArray(pv)) return pv.some((v: string) => triggers.includes(v));
-    return triggers.includes(pv);
-  };
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     const valor = parseFloat(formValor) || 0;
-
-    // Mirror name/phone/last-visit into fixed columns for backward-compat & filtering
     const dataToSave: Record<string, any> = { ...formData };
     if (nameField) dataToSave.nome = formData[`field_${nameField.id}`] || "";
     if (phoneField) dataToSave.telefone = formData[`field_${phoneField.id}`] || "";
     const lastVisitValue = lastVisitField ? formData[`field_${lastVisitField.id}`] : null;
     const assignedTo = formAssigned || null;
-    // Qualquer usuário atribuído (vendedor, gerente, admin, financeiro) é considerado responsável
     const hasAssignedUser = !!assignedTo;
     const flowStatus = getRenovacaoFlowStatus(lastVisitValue || editingItem?.data_ultima_compra || null);
 
@@ -302,22 +287,28 @@ export default function ActiveClientsPage() {
     }
     setSaving(false);
     setDialogOpen(false);
-    fetchAll();
+    setRefreshKey((k) => k + 1);
   };
 
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
     const { error } = await supabase.from("crm_renovacoes").delete().eq("id", deleteConfirmId);
     if (error) toast.error("Erro ao excluir"); else toast.success("Renovação excluída");
+    removeItem(deleteConfirmId);
     setDeleteConfirmId(null);
-    fetchAll();
   };
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const newStatus = result.destination.droppableId;
     const itemId = result.draggableId;
-    const currentItem = renovacoes.find((item) => item.id === itemId);
+    const fromStatus = result.source.droppableId;
+    if (newStatus === fromStatus) return;
+
+    // find item in source column or search results
+    const fromCol = paginatedColumns[fromStatus];
+    const currentItem = fromCol?.items.find((it) => it.id === itemId)
+      || (searchResults || []).find((it) => it.id === itemId);
     if (!currentItem) return;
 
     const hasAssignedUser = !!currentItem.assigned_to;
@@ -332,35 +323,36 @@ export default function ActiveClientsPage() {
       resolvedStatus = getRenovacaoFlowStatus(currentItem.data_ultima_compra);
     }
 
-    setRenovacoes(prev => prev.map(r => r.id === itemId ? { ...r, status: resolvedStatus } : r));
+    updateItemStatus(itemId, fromStatus, resolvedStatus, currentItem);
     await supabase.from("crm_renovacoes").update({ status: resolvedStatus }).eq("id", itemId);
   };
 
   const getProfileName = (uid: string | null) => uid ? (profiles.find(p => p.user_id === uid)?.full_name || "") : "";
 
-  const filteredItems = useMemo(() => {
-    let items = renovacoes;
-    if (filterCompanyId !== "all") {
-      items = items.filter(r => (r as any).ssotica_company_id === filterCompanyId);
+  // Build per-status item list (paginated or filtered from search)
+  const getByStatus = useCallback((key: string): { items: Renovacao[]; total: number; hasMore: boolean; loading: boolean } => {
+    if (isSearching) {
+      const filtered = (searchResults || []).filter((r) => r.status === key);
+      return { items: filtered, total: filtered.length, hasMore: false, loading: searching };
     }
-    if (filterAssignedTo !== "all") {
-      if (filterAssignedTo === "__unassigned__") {
-        items = items.filter(r => !r.assigned_to);
-      } else {
-        items = items.filter(r => r.assigned_to === filterAssignedTo);
-      }
-    }
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter(r => {
-      const d = r.data as Record<string, any>;
-      return (d.nome || "").toLowerCase().includes(q)
-        || (d.telefone || "").includes(q)
-        || String(r.valor).includes(q);
-    });
-  }, [renovacoes, searchQuery, filterCompanyId, filterAssignedTo]);
+    const col = paginatedColumns[key];
+    return {
+      items: col?.items || [],
+      total: col?.total || 0,
+      hasMore: col?.hasMore || false,
+      loading: col?.loading || false,
+    };
+  }, [paginatedColumns, isSearching, searchResults, searching]);
 
-  const getByStatus = (key: string) => filteredItems.filter(r => r.status === key);
+  const totalDisplayed = useMemo(() => {
+    if (isSearching) return searchResults?.length || 0;
+    return Object.values(paginatedColumns).reduce((acc, col) => acc + col.total, 0);
+  }, [paginatedColumns, isSearching, searchResults]);
+
+  const handleColumnScroll = (e: React.UIEvent<HTMLDivElement>, statusKey: string) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) loadMore(statusKey);
+  };
 
   const renderCard = (item: Renovacao) => {
     const d = item.data as Record<string, any>;
@@ -370,7 +362,6 @@ export default function ActiveClientsPage() {
 
     const cardFields = fields.filter(f => f.show_on_card && !f.is_name_field && !f.is_phone_field && !f.is_last_visit_field);
 
-    // Activity status (em dia / hoje / atrasada / pendente)
     const itemActivities = activities.filter(a => a.renovacao_id === item.id);
     const pending = itemActivities.filter(a => !a.completed_at);
     const overdue = pending.filter(a => new Date(a.scheduled_date) < new Date());
@@ -384,13 +375,9 @@ export default function ActiveClientsPage() {
     const hasPending = pending.length > 0 && !hasOverdue && !hasToday;
 
     let cardBorderClass = "";
-    if (hasOverdue) {
-      cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
-    } else if (hasToday) {
-      cardBorderClass = "border-amber-400 bg-amber-500/5";
-    } else if (hasPending) {
-      cardBorderClass = "border-blue-400/50 bg-blue-500/5";
-    }
+    if (hasOverdue) cardBorderClass = "border-red-500 bg-red-500/10 shadow-red-500/20 shadow-md";
+    else if (hasToday) cardBorderClass = "border-amber-400 bg-amber-500/5";
+    else if (hasPending) cardBorderClass = "border-blue-400/50 bg-blue-500/5";
 
     const nextActivity = [...pending].sort(
       (a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
@@ -454,30 +441,26 @@ export default function ActiveClientsPage() {
             </div>
           );
         })()}
-        {/* Activity status badges */}
+
         <div className="pt-2 border-t">
           {hasOverdue && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full uppercase">
-              <AlertTriangle className="h-3 w-3" />
-              Atrasada
+              <AlertTriangle className="h-3 w-3" />Atrasada
             </span>
           )}
           {hasToday && !hasOverdue && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
-              <CalendarClock className="h-3 w-3" />
-              Hoje
+              <CalendarClock className="h-3 w-3" />Hoje
             </span>
           )}
           {hasPending && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase">
-              <Clock className="h-3 w-3" />
-              Pendente
+              <Clock className="h-3 w-3" />Pendente
             </span>
           )}
           {!hasOverdue && !hasToday && !hasPending && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-500 px-2 py-0.5 rounded-full uppercase">
-              <CheckCircle2 className="h-3 w-3" />
-              Em dia
+              <CheckCircle2 className="h-3 w-3" />Em dia
             </span>
           )}
 
@@ -517,7 +500,7 @@ export default function ActiveClientsPage() {
             <h1 className="text-xl sm:text-2xl font-bold">Renovação</h1>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            {filteredItems.length} registro{filteredItems.length !== 1 ? "s" : ""}
+            {totalDisplayed} registro{totalDisplayed !== 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -577,7 +560,7 @@ export default function ActiveClientsPage() {
       <div className="lg:hidden mb-3">
         <div className="flex gap-1 overflow-x-auto pb-1">
           {statuses.map(status => {
-            const count = getByStatus(status.key).length;
+            const { total } = getByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <button key={status.key} onClick={() => setMobileTab(status.key)}
@@ -588,28 +571,28 @@ export default function ActiveClientsPage() {
                 {status.label}
                 <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
                   mobileTab === status.key ? "bg-primary-foreground/20 text-primary-foreground" : colors.badge
-                }`}>{count}</span>
+                }`}>{total}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
+      <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}
+           onScroll={(e) => mobileTab && handleColumnScroll(e, mobileTab)}>
         {statuses.filter(s => s.key === mobileTab).map(status => {
-          const items = getByStatus(status.key);
-          const visibleItems = items.slice(0, getVisibleCount(status.key));
-          const hasMore = items.length > visibleItems.length;
+          const { items, total, hasMore, loading } = getByStatus(status.key);
           return (
             <div key={status.key}>
-              {items.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">Nenhuma renovação nesta coluna</p>}
-              {visibleItems.map(r => <div key={r.id} className="mb-2">{renderCard(r)}</div>)}
+              {items.length === 0 && !loading && <p className="text-center text-sm text-muted-foreground py-8">Nenhuma renovação nesta coluna</p>}
+              {items.map(r => <div key={r.id} className="mb-2">{renderCard(r)}</div>)}
               {hasMore && (
                 <button
                   onClick={() => loadMore(status.key)}
+                  disabled={loading}
                   className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-dashed border-primary/40 transition-colors mb-2"
                 >
-                  Carregar mais ({items.length - visibleItems.length} restantes)
+                  {loading ? "Carregando..." : `Carregar mais (${total - items.length} restantes)`}
                 </button>
               )}
               <button onClick={() => openCreate(status.key)} className="w-full py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
@@ -623,16 +606,14 @@ export default function ActiveClientsPage() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map(status => {
-            const items = getByStatus(status.key);
-            const visibleItems = items.slice(0, getVisibleCount(status.key));
-            const hasMore = items.length > visibleItems.length;
+            const { items, total, hasMore, loading } = getByStatus(status.key);
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
                 <div className="flex items-center gap-2 mb-2 px-1 flex-shrink-0">
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.header}`} />
                   <h3 className="font-semibold text-sm text-foreground">{status.label}</h3>
-                  <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>{items.length}</span>
+                  <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${colors.badge}`}>{total}</span>
                 </div>
                 <Droppable droppableId={status.key}>
                   {(provided, snapshot) => (
@@ -644,7 +625,7 @@ export default function ActiveClientsPage() {
                         snapshot.isDraggingOver ? "bg-primary/5 border-2 border-dashed border-primary/30" : "bg-muted/50 border border-transparent"
                       }`}
                     >
-                      {visibleItems.map((r, index) => (
+                      {items.map((r, index) => (
                         <Draggable key={r.id} draggableId={r.id} index={index}>
                           {(provided, snapshot) => (
                             <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}
@@ -655,12 +636,18 @@ export default function ActiveClientsPage() {
                         </Draggable>
                       ))}
                       {provided.placeholder}
+                      {loading && items.length === 0 && (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
                       {hasMore && (
                         <button
                           onClick={() => loadMore(status.key)}
+                          disabled={loading}
                           className="w-full py-2 text-xs font-medium text-primary hover:bg-primary/10 rounded-lg border border-dashed border-primary/40 transition-colors"
                         >
-                          Carregar mais ({items.length - visibleItems.length} restantes)
+                          {loading ? "Carregando..." : `Carregar mais (${total - items.length} restantes)`}
                         </button>
                       )}
                       <button onClick={() => openCreate(status.key)} className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card rounded-lg border border-dashed border-border/50 hover:border-border transition-colors">
