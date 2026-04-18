@@ -784,6 +784,15 @@ export default function ActiveClientsPage() {
         ssoticaCompanyId={editingItem?.ssotica_company_id ?? null}
       />
 
+      <ScheduleLeadDialog
+        open={scheduleOpen}
+        onOpenChange={(open) => { setScheduleOpen(open); if (!open) setSchedulingItem(null); }}
+        leadName={String((schedulingItem?.data as any)?.nome || "")}
+        leadPhone={String((schedulingItem?.data as any)?.telefone || "")}
+        saving={scheduleSaving}
+        onSubmit={handleScheduleSubmit}
+      />
+
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
