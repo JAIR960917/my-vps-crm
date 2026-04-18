@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Phone, UserCheck, CalendarHeart, AlertTriangle, CalendarClock, Clock, CheckCircle2, Shuffle, Loader2, CalendarPlus } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,6 +15,7 @@ import { formatPhoneBR } from "@/lib/phoneFormat";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import RenovacaoEditSheet from "@/components/renovacoes/RenovacaoEditSheet";
+import ScheduleLeadDialog from "@/components/leads/ScheduleLeadDialog";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 
 type Renovacao = {
@@ -118,6 +119,11 @@ export default function ActiveClientsPage() {
   const [autoAssignConfirm, setAutoAssignConfirm] = useState(false);
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Schedule dialog
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [schedulingItem, setSchedulingItem] = useState<Renovacao | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
 
   const statusKeys = useMemo(() => statuses.map((s) => s.key), [statuses]);
 
@@ -300,6 +306,48 @@ export default function ActiveClientsPage() {
     removeItem(deleteConfirmId);
     setDeleteConfirmId(null);
   };
+
+  const openScheduleDialog = (item: Renovacao) => {
+    setSchedulingItem(item);
+    setScheduleOpen(true);
+  };
+
+  const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
+    if (!schedulingItem || !user) return;
+    setScheduleSaving(true);
+    const d = (schedulingItem.data || {}) as Record<string, any>;
+    const nome = String(d.nome || "Cliente");
+    const telefone = String(d.telefone || "");
+    const { error } = await supabase.from("crm_appointments").insert({
+      lead_id: null,
+      renovacao_id: schedulingItem.id,
+      scheduled_by: user.id,
+      scheduled_datetime: schedData.scheduled_datetime,
+      valor: schedData.valor,
+      forma_pagamento: schedData.forma_pagamento,
+      canal_agendamento: schedData.canal_agendamento,
+      previous_status: schedulingItem.status,
+      nome,
+      telefone,
+      idade: "",
+    } as any);
+    if (error) {
+      toast.error("Erro ao agendar");
+      setScheduleSaving(false);
+      return;
+    }
+    const { error: updErr } = await supabase
+      .from("crm_renovacoes")
+      .update({ status: "agendado" } as any)
+      .eq("id", schedulingItem.id);
+    if (updErr) toast.error("Agendamento criado, mas falhou ao mover para Agendados");
+    else toast.success("Renovação agendada com sucesso!");
+    setScheduleSaving(false);
+    setScheduleOpen(false);
+    setSchedulingItem(null);
+    setRefreshKey((k) => k + 1);
+  };
+
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
@@ -519,6 +567,17 @@ export default function ActiveClientsPage() {
         </div>
 
         <div className="flex gap-1 justify-end pt-1">
+          {item.status !== "agendado" && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+              title="Agendar"
+              onClick={() => openScheduleDialog(item)}
+            >
+              <CalendarPlus className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(item)}>
             <Pencil className="h-3 w-3" />
           </Button>
@@ -723,6 +782,15 @@ export default function ActiveClientsPage() {
         canReassign={isAdmin || isGerente}
         ssoticaClienteId={editingItem?.ssotica_cliente_id ?? null}
         ssoticaCompanyId={editingItem?.ssotica_company_id ?? null}
+      />
+
+      <ScheduleLeadDialog
+        open={scheduleOpen}
+        onOpenChange={(open) => { setScheduleOpen(open); if (!open) setSchedulingItem(null); }}
+        leadName={String((schedulingItem?.data as any)?.nome || "")}
+        leadPhone={String((schedulingItem?.data as any)?.telefone || "")}
+        saving={scheduleSaving}
+        onSubmit={handleScheduleSubmit}
       />
 
       <AlertDialog open={!!deleteConfirmId} onOpenChange={open => !open && setDeleteConfirmId(null)}>
