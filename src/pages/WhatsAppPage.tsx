@@ -38,7 +38,8 @@ type Campaign = {
   status_id: string;
   instance_id: string | null;
   company_id: string | null;
-  daily_limit: number;
+  start_time: string;
+  end_time: string;
   start_date: string;
   end_date: string;
   is_active: boolean;
@@ -90,7 +91,8 @@ export default function WhatsAppPage() {
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
   const [companyId, setCompanyId] = useState("");
-  const [dailyLimit, setDailyLimit] = useState("15");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("18:00");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -271,7 +273,7 @@ export default function WhatsAppPage() {
     setName(""); setMessage(""); setImageUrl(null);
     setModuleKey("leads");
     setStatusId(""); setInstanceId(""); setCompanyId("");
-    setDailyLimit("15");
+    setStartTime("08:00"); setEndTime("18:00");
     setStartDate(""); setEndDate(""); setEditingId(null); setShowForm(false);
   };
 
@@ -280,13 +282,18 @@ export default function WhatsAppPage() {
     setModuleKey((c.module || "leads") as ModuleKey);
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || ""); setCompanyId(c.company_id || "");
-    setDailyLimit(String(c.daily_limit));
+    setStartTime((c.start_time || "08:00").slice(0, 5));
+    setEndTime((c.end_time || "18:00").slice(0, 5));
     setStartDate(c.start_date); setEndDate(c.end_date); setEditingId(c.id); setShowForm(true);
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !message.trim() || !moduleKey || !statusId || !companyId || !startDate || !endDate || !dailyLimit) {
-      toast.error("Preencha todos os campos obrigatórios (incluindo Empresa, Módulo e Coluna)");
+    if (!name.trim() || !message.trim() || !moduleKey || !statusId || !companyId || !startDate || !endDate || !startTime || !endTime) {
+      toast.error("Preencha todos os campos obrigatórios (incluindo Empresa, Módulo, Coluna e horários)");
+      return;
+    }
+    if (startTime >= endTime) {
+      toast.error("O horário de início deve ser menor que o horário de fim");
       return;
     }
     if (!user) return;
@@ -296,8 +303,11 @@ export default function WhatsAppPage() {
       name: name.trim(), message: message.trim(),
       module: moduleKey,
       status_id: statusId,
-      daily_limit: parseInt(dailyLimit) || 15, start_date: startDate,
-      end_date: endDate, created_by: user.id,
+      start_date: startDate,
+      end_date: endDate,
+      start_time: startTime,
+      end_time: endTime,
+      created_by: user.id,
       instance_id: instanceId || null,
       company_id: companyId,
       image_url: imageUrl,
@@ -567,17 +577,22 @@ export default function WhatsAppPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Limite diário de envios *</Label>
-                  <Input type="number" min="1" value={dailyLimit} onChange={e => setDailyLimit(e.target.value)} />
-                  <p className="text-[10px] text-muted-foreground">Quantas mensagens por dia para evitar banimento</p>
-                </div>
-                <div className="space-y-2">
                   <Label>Data início *</Label>
                   <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>Data fim *</Label>
                   <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Horário início diário *</Label>
+                  <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                  <p className="text-[10px] text-muted-foreground">Hora do dia em que os envios começam</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Horário fim diário *</Label>
+                  <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
+                  <p className="text-[10px] text-muted-foreground">Hora do dia em que os envios param</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -665,7 +680,7 @@ export default function WhatsAppPage() {
 
                       <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
                         <span className="flex items-center gap-1">
-                          <Hash className="h-3 w-3" /> {c.daily_limit}/dia
+                          <Hash className="h-3 w-3" /> {(c.start_time || "08:00").slice(0, 5)}–{(c.end_time || "18:00").slice(0, 5)}
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />

@@ -68,6 +68,29 @@ async function sendMessage(session: string, apiKey: string, phone: string, text:
 const SEND_DELAY_MS = 30_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Brasília time helpers (UTC-3, no DST)
+const BRT_OFFSET_MINUTES = -180;
+function nowInBrasilia(): Date {
+  const now = new Date();
+  return new Date(now.getTime() + (BRT_OFFSET_MINUTES - now.getTimezoneOffset()) * 60_000);
+}
+function currentMinutesOfDayBRT(): number {
+  const d = nowInBrasilia();
+  return d.getHours() * 60 + d.getMinutes();
+}
+function timeStringToMinutes(t: string | null | undefined): number | null {
+  if (!t) return null;
+  const [hh, mm] = t.split(":").map((x) => parseInt(x, 10));
+  if (isNaN(hh) || isNaN(mm)) return null;
+  return hh * 60 + mm;
+}
+function isWithinDailyWindow(startTime?: string | null, endTime?: string | null): boolean {
+  const start = timeStringToMinutes(startTime) ?? 0;     // default 00:00
+  const end   = timeStringToMinutes(endTime)   ?? 24 * 60; // default 24:00
+  const now = currentMinutesOfDayBRT();
+  return now >= start && now < end;
+}
+
 function cleanPhone(phone: string) {
   let clean = phone.replace(/\D/g, "");
   if (clean.startsWith("0")) clean = clean.substring(1);
@@ -75,9 +98,6 @@ function cleanPhone(phone: string) {
   return clean;
 }
 
-// Resolve phone/name from card data based on module type.
-// - leads: uses form builder mappings (is_phone_field / is_name_field)
-// - cobrancas/renovacoes: uses fixed keys data.telefone / data.nome
 function resolveCardFields(
   module: ModuleKey,
   data: Record<string, any>,
@@ -101,13 +121,11 @@ function resolveCardFields(
 
     return { phone, name };
   }
-  // Fixed-fields modules
   const phone = data.telefone || data.phone || data.celular || "";
   const name = data.nome || data.nome_lead || data.name || "Cliente";
   return { phone, name };
 }
 
-// Resolve session name: from instance_id or fallback to system_settings
 async function resolveSession(supabase: any, instanceId: string | null): Promise<string | null> {
   if (instanceId) {
     const { data } = await supabase
@@ -126,7 +144,6 @@ async function resolveSession(supabase: any, instanceId: string | null): Promise
   return data?.setting_value || null;
 }
 
-// Build the set of user_ids that belong to a given company (via profiles + manager_companies)
 async function getCompanyUserIds(supabase: any, companyId: string): Promise<Set<string>> {
   const ids = new Set<string>();
   const { data: profs } = await supabase
@@ -152,7 +169,6 @@ function filterCardsByCompany(cards: any[], companyUserIds: Set<string>): any[] 
   });
 }
 
-// Resolve the status key from a status_id, given the right status table for the module
 async function resolveStatusKey(supabase: any, statusTable: string, statusId: string): Promise<string> {
   const { data } = await supabase.from(statusTable).select("key").eq("id", statusId).single();
   return data?.key || "";
@@ -171,7 +187,6 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Form builder fields are only needed for the 'leads' module
     const { data: formFields } = await supabase
       .from("crm_form_fields")
       .select("id, label, is_name_field, is_phone_field");
@@ -181,6 +196,7 @@ serve(async (req) => {
     let totalSent = 0;
     let totalErrors = 0;
     let skippedNoCompany = 0;
+    let skippedOutOfWindow = 0;
     let isFirstSend = true;
     const today = new Date().toISOString().split("T")[0];
 
@@ -200,6 +216,12 @@ serve(async (req) => {
       for (const campaign of campaigns) {
         if (!campaign.company_id) {
           skippedNoCompany++;
+          continue;
+        }
+
+        // Daily time window (Brasília)
+        if (!isWithinDailyWindow(campaign.start_time, campaign.end_time)) {
+          skippedOutOfWindow++;
           continue;
         }
 
@@ -226,16 +248,13 @@ serve(async (req) => {
         const sentIds = new Set((existingSends || []).filter((s: any) => s.status === "sent").map((s: any) => s.lead_id));
         const pendingCards = companyCards.filter((l: any) => !sentIds.has(l.id));
 
-        const todayStart = new Date(today + "T00:00:00Z").toISOString();
-        const todayEnd = new Date(today + "T23:59:59Z").toISOString();
-        const { count: sentToday } = await supabase.from("whatsapp_campaign_sends")
-          .select("id", { count: "exact", head: true })
-          .eq("campaign_id", campaign.id).eq("status", "sent").gte("sent_at", todayStart).lte("sent_at", todayEnd);
+        for (const card of pendingCards) {
+          // Re-check window mid-batch (in case we cross end_time)
+          if (!isWithinDailyWindow(campaign.start_time, campaign.end_time)) {
+            skippedOutOfWindow++;
+            break;
+          }
 
-        const remaining = campaign.daily_limit - (sentToday || 0);
-        if (remaining <= 0) continue;
-
-        for (const card of pendingCards.slice(0, remaining)) {
           const data = typeof card.data === "object" ? (card.data as Record<string, any>) : {};
           const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
           if (!phone) continue;
@@ -273,6 +292,11 @@ serve(async (req) => {
           continue;
         }
 
+        if (!isWithinDailyWindow(tc.start_time, tc.end_time)) {
+          skippedOutOfWindow++;
+          continue;
+        }
+
         const moduleKey = (tc.module || "leads") as ModuleKey;
         const cfg = MODULE_CONFIG[moduleKey];
         if (!cfg) continue;
@@ -297,15 +321,6 @@ serve(async (req) => {
         const { data: existingSends } = await supabase.from("whatsapp_trigger_sends")
           .select("lead_id, step_id, status").eq("campaign_id", tc.id);
 
-        const todayStart = new Date(today + "T00:00:00Z").toISOString();
-        const todayEnd = new Date(today + "T23:59:59Z").toISOString();
-        const { count: sentToday } = await supabase.from("whatsapp_trigger_sends")
-          .select("id", { count: "exact", head: true })
-          .eq("campaign_id", tc.id).eq("status", "sent").gte("sent_at", todayStart).lte("sent_at", todayEnd);
-
-        let remaining = tc.daily_limit - (sentToday || 0);
-        if (remaining <= 0) continue;
-
         const sendsByCard = new Map<string, Set<string>>();
         for (const s of (existingSends || []) as any[]) {
           if (s.status === "sent") {
@@ -315,7 +330,10 @@ serve(async (req) => {
         }
 
         for (const card of cards) {
-          if (remaining <= 0) break;
+          if (!isWithinDailyWindow(tc.start_time, tc.end_time)) {
+            skippedOutOfWindow++;
+            break;
+          }
 
           const data = typeof card.data === "object" ? (card.data as Record<string, any>) : {};
           const { phone, name } = resolveCardFields(moduleKey, data, nameFields, phoneFields);
@@ -340,7 +358,6 @@ serve(async (req) => {
               if (result.ok) {
                 await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "sent", sent_at: new Date().toISOString() });
                 totalSent++;
-                remaining--;
               } else {
                 await supabase.from("whatsapp_trigger_sends").insert({ campaign_id: tc.id, step_id: step.id, lead_id: card.id, phone: cp, status: "error", error_message: result.errorMessage || "Erro" });
                 totalErrors++;
@@ -357,7 +374,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ message: "Processamento concluído", sent: totalSent, errors: totalErrors, skipped_no_company: skippedNoCompany }),
+      JSON.stringify({ message: "Processamento concluído", sent: totalSent, errors: totalErrors, skipped_no_company: skippedNoCompany, skipped_out_of_window: skippedOutOfWindow }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
