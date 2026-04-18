@@ -77,6 +77,7 @@ export default function RenovacaoEditSheet(props: Props) {
     open, onOpenChange, renovacaoId, formData, setFormData,
     formStatus, setFormStatus, formAssigned, setFormAssigned,
     formValor, setFormValor, statuses, profiles, fields, saving, onSave, canReassign,
+    ssoticaClienteId, ssoticaCompanyId,
   } = props;
   const { user, isAdmin } = useAuth();
 
@@ -373,6 +374,10 @@ export default function RenovacaoEditSheet(props: Props) {
                 <TabsTrigger value="atividade" className="data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">Atividade</TabsTrigger>
                 <TabsTrigger value="comentario">Comentário</TabsTrigger>
                 <TabsTrigger value="tarefa">Tarefa</TabsTrigger>
+                <TabsTrigger value="produtos" className="data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">
+                  <ShoppingBag className="h-3.5 w-3.5 mr-1" />
+                  Produtos
+                </TabsTrigger>
               </TabsList>
             </Tabs>
             <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
