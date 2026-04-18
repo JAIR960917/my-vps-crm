@@ -1234,8 +1234,8 @@ export type Database = {
           company_id: string | null
           created_at: string
           created_by: string
-          daily_limit: number
           end_date: string
+          end_time: string
           id: string
           image_url: string | null
           instance_id: string | null
@@ -1244,6 +1244,7 @@ export type Database = {
           module: string
           name: string
           start_date: string
+          start_time: string
           status_id: string
           updated_at: string
         }
@@ -1251,8 +1252,8 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           created_by: string
-          daily_limit?: number
           end_date: string
+          end_time?: string
           id?: string
           image_url?: string | null
           instance_id?: string | null
@@ -1261,6 +1262,7 @@ export type Database = {
           module?: string
           name: string
           start_date: string
+          start_time?: string
           status_id: string
           updated_at?: string
         }
@@ -1268,8 +1270,8 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           created_by?: string
-          daily_limit?: number
           end_date?: string
+          end_time?: string
           id?: string
           image_url?: string | null
           instance_id?: string | null
@@ -1278,6 +1280,7 @@ export type Database = {
           module?: string
           name?: string
           start_date?: string
+          start_time?: string
           status_id?: string
           updated_at?: string
         }
@@ -1348,12 +1351,13 @@ export type Database = {
           company_id: string | null
           created_at: string
           created_by: string
-          daily_limit: number
+          end_time: string
           id: string
           instance_id: string | null
           is_active: boolean
           module: string
           name: string
+          start_time: string
           status_id: string
           updated_at: string
         }
@@ -1361,12 +1365,13 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           created_by: string
-          daily_limit?: number
+          end_time?: string
           id?: string
           instance_id?: string | null
           is_active?: boolean
           module?: string
           name: string
+          start_time?: string
           status_id: string
           updated_at?: string
         }
@@ -1374,12 +1379,13 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           created_by?: string
-          daily_limit?: number
+          end_time?: string
           id?: string
           instance_id?: string | null
           is_active?: boolean
           module?: string
           name?: string
+          start_time?: string
           status_id?: string
           updated_at?: string
         }
