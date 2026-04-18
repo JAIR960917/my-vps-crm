@@ -307,6 +307,48 @@ export default function ActiveClientsPage() {
     setDeleteConfirmId(null);
   };
 
+  const openScheduleDialog = (item: Renovacao) => {
+    setSchedulingItem(item);
+    setScheduleOpen(true);
+  };
+
+  const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
+    if (!schedulingItem || !user) return;
+    setScheduleSaving(true);
+    const d = (schedulingItem.data || {}) as Record<string, any>;
+    const nome = String(d.nome || "Cliente");
+    const telefone = String(d.telefone || "");
+    const { error } = await supabase.from("crm_appointments").insert({
+      lead_id: null,
+      renovacao_id: schedulingItem.id,
+      scheduled_by: user.id,
+      scheduled_datetime: schedData.scheduled_datetime,
+      valor: schedData.valor,
+      forma_pagamento: schedData.forma_pagamento,
+      canal_agendamento: schedData.canal_agendamento,
+      previous_status: schedulingItem.status,
+      nome,
+      telefone,
+      idade: "",
+    } as any);
+    if (error) {
+      toast.error("Erro ao agendar");
+      setScheduleSaving(false);
+      return;
+    }
+    const { error: updErr } = await supabase
+      .from("crm_renovacoes")
+      .update({ status: "agendado" } as any)
+      .eq("id", schedulingItem.id);
+    if (updErr) toast.error("Agendamento criado, mas falhou ao mover para Agendados");
+    else toast.success("Renovação agendada com sucesso!");
+    setScheduleSaving(false);
+    setScheduleOpen(false);
+    setSchedulingItem(null);
+    setRefreshKey((k) => k + 1);
+  };
+
+
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const newStatus = result.destination.droppableId;
