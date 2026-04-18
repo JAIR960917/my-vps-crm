@@ -15,8 +15,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil, Receipt } from "lucide-react";
+import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTriangle, CalendarClock, Pencil, Receipt, ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ClientProductsTab from "@/components/ClientProductsTab";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type Company = { id: string; name: string };
@@ -382,6 +383,10 @@ export default function CobrancaEditSheet(props: Props) {
                       {parcelas.filter(p => (p.dias_atraso ?? 0) > 0).length}
                     </span>
                   )}
+                </TabsTrigger>
+                <TabsTrigger value="produtos" className="data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">
+                  <ShoppingBag className="h-3.5 w-3.5 mr-1" />
+                  Produtos
                 </TabsTrigger>
               </TabsList>
             </Tabs>
