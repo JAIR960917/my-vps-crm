@@ -554,8 +554,48 @@ async function syncVendas(
   // Mapa cliente_id -> última venda (data + venda_id + valor + cliente)
   const ultimaCompraPorCliente = new Map<number, { data: string; vendaId: number; valor: number; cliente: any; funcionario: any }>();
 
+  // Mapa cliente_id -> última RECEITA (vinda de Ordens de Serviço).
+  // É a data em que a receita médica foi emitida (campo `data` da O.S.).
+  // Quando disponível, usamos essa data ao invés da data da venda como
+  // "última consulta" do cliente (faz mais sentido para óticas: o que precisa
+  // renovar é a receita, não necessariamente a compra).
+  const ultimaReceitaPorCliente = new Map<number, { data: string; osId: number; optometrista: string; validade: string | null }>();
+
   // Janela única (definida por overallStart/overallEnd) dividida em sub-janelas de 30 dias.
   const windows = buildWindows(overallStart, overallEnd);
+
+  // ===== PASSO 1: Ordens de Serviço (receitas) =====
+  for (const w of windows) {
+    const url =
+      `${SSOTICA_BASE}/ordens-servico/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+    let ordens: any[] = [];
+    try {
+      ordens = await fetchSSotica(url, integ.bearer_token) as any[];
+    } catch (e) {
+      console.warn(`[ssotica-sync][os] janela ${w.start}→${w.end} falhou:`, (e as Error).message);
+      continue;
+    }
+    if (!Array.isArray(ordens)) continue;
+    for (const os of ordens) {
+      // Só interessa quando a O.S. tem receita registrada
+      const receita = os?.receita;
+      if (!receita || !os?.cliente?.id || !os?.data) continue;
+      const clienteId = Number(os.cliente.id);
+      const dataOs = String(os.data); // YYYY-MM-DD — data em que a O.S./receita foi emitida
+      const prev = ultimaReceitaPorCliente.get(clienteId);
+      if (!prev || prev.data < dataOs) {
+        ultimaReceitaPorCliente.set(clienteId, {
+          data: dataOs,
+          osId: Number(os.id ?? 0),
+          optometrista: String(receita.optometrista ?? ""),
+          validade: receita.validade ? String(receita.validade).slice(0, 10) : null,
+        });
+      }
+    }
+  }
+  console.log(`[ssotica-sync][os] empresa=${integ.company_id} clientes_com_receita=${ultimaReceitaPorCliente.size}`);
+
+  // ===== PASSO 2: Vendas =====
   for (const w of windows) {
     const url =
       `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
