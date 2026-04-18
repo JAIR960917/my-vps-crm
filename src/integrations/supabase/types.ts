@@ -101,6 +101,7 @@ export type Database = {
           lead_id: string | null
           nome: string
           previous_status: string
+          renovacao_id: string | null
           resumo: string | null
           scheduled_by: string
           scheduled_datetime: string
@@ -124,6 +125,7 @@ export type Database = {
           lead_id?: string | null
           nome?: string
           previous_status?: string
+          renovacao_id?: string | null
           resumo?: string | null
           scheduled_by: string
           scheduled_datetime: string
@@ -147,6 +149,7 @@ export type Database = {
           lead_id?: string | null
           nome?: string
           previous_status?: string
+          renovacao_id?: string | null
           resumo?: string | null
           scheduled_by?: string
           scheduled_datetime?: string
@@ -164,6 +167,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_appointments_renovacao_id_fkey"
+            columns: ["renovacao_id"]
+            isOneToOne: false
+            referencedRelation: "crm_renovacoes"
             referencedColumns: ["id"]
           },
         ]
