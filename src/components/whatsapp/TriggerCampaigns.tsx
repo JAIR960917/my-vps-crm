@@ -44,7 +44,8 @@ type TriggerCampaign = {
   instance_id: string | null;
   company_id: string | null;
   is_active: boolean;
-  daily_limit: number;
+  start_time: string;
+  end_time: string;
   created_by: string;
   created_at: string;
   whatsapp_trigger_steps?: TriggerStep[];
@@ -90,7 +91,8 @@ export default function TriggerCampaigns({ instances }: Props) {
   const [statusId, setStatusId] = useState("");
   const [instanceId, setInstanceId] = useState("");
   const [companyId, setCompanyId] = useState("");
-  const [dailyLimit, setDailyLimit] = useState("15");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("18:00");
   const [steps, setSteps] = useState<TriggerStep[]>([
     { position: 0, delay_days: 0, message: "" },
   ]);
@@ -142,7 +144,8 @@ export default function TriggerCampaigns({ instances }: Props) {
     setStatusId("");
     setInstanceId("");
     setCompanyId("");
-    setDailyLimit("15");
+    setStartTime("08:00");
+    setEndTime("18:00");
     setSteps([{ position: 0, delay_days: 0, message: "", image_url: null }]);
     setEditingId(null);
     setShowForm(false);
@@ -154,7 +157,8 @@ export default function TriggerCampaigns({ instances }: Props) {
     setStatusId(c.status_id);
     setInstanceId(c.instance_id || "");
     setCompanyId(c.company_id || "");
-    setDailyLimit(String(c.daily_limit));
+    setStartTime((c.start_time || "08:00").slice(0, 5));
+    setEndTime((c.end_time || "18:00").slice(0, 5));
     const sorted = [...(c.whatsapp_trigger_steps || [])].sort((a, b) => a.position - b.position);
     setSteps(
       sorted.length > 0
@@ -191,6 +195,10 @@ export default function TriggerCampaigns({ instances }: Props) {
       toast.error("Preencha a mensagem de todas as etapas");
       return;
     }
+    if (startTime >= endTime) {
+      toast.error("O horário de início deve ser menor que o horário de fim");
+      return;
+    }
     if (!user) return;
     setSaving(true);
 
@@ -199,7 +207,8 @@ export default function TriggerCampaigns({ instances }: Props) {
         name: name.trim(),
         module: moduleKey,
         status_id: statusId,
-        daily_limit: parseInt(dailyLimit) || 15,
+        start_time: startTime,
+        end_time: endTime,
         created_by: user.id,
         instance_id: instanceId || null,
         company_id: companyId,
@@ -373,8 +382,14 @@ export default function TriggerCampaigns({ instances }: Props) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Limite diário *</Label>
-              <Input type="number" min="1" value={dailyLimit} onChange={(e) => setDailyLimit(e.target.value)} />
+              <Label>Horário início diário *</Label>
+              <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+              <p className="text-[10px] text-muted-foreground">Hora do dia em que os envios começam</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Horário fim diário *</Label>
+              <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+              <p className="text-[10px] text-muted-foreground">Hora do dia em que os envios param</p>
             </div>
           </div>
 
@@ -518,7 +533,7 @@ export default function TriggerCampaigns({ instances }: Props) {
 
                   <div className="flex items-center gap-4 text-[11px] text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1">
-                      <Hash className="h-3 w-3" /> {c.daily_limit}/dia
+                      <Clock className="h-3 w-3" /> {(c.start_time || "08:00").slice(0, 5)}–{(c.end_time || "18:00").slice(0, 5)}
                     </span>
                     <span className="flex items-center gap-1">
                       <Zap className="h-3 w-3" /> {sortedSteps.length} etapa(s)
