@@ -230,13 +230,26 @@ export default function CobrancasPage() {
     return map;
   }, [activities]);
 
+  // Cobrancas with recent interaction (completed task or notes) — go to the END when no pending task
+  const cobrancasWithRecentActivity = useMemo(() => {
+    const ids = new Set<string>();
+    activities.filter(a => a.completed_at).forEach(a => ids.add(a.cobranca_id));
+    noteIds.forEach(id => ids.add(id));
+    return ids;
+  }, [activities, noteIds]);
+
   const sortByTaskPriority = useCallback(<T extends { id: string }>(items: T[]) => {
     return [...items].sort((a, b) => {
+      // 1) Pending task always dominates: cards with pending tasks go to the TOP
       const aPrio = cobrancaTaskPriority.get(a.id) || 0;
       const bPrio = cobrancaTaskPriority.get(b.id) || 0;
-      return bPrio - aPrio;
+      if (aPrio !== bPrio) return bPrio - aPrio;
+      // 2) When no pending task, cards with recent interaction go to the END
+      const aHasRecent = cobrancasWithRecentActivity.has(a.id) ? 1 : 0;
+      const bHasRecent = cobrancasWithRecentActivity.has(b.id) ? 1 : 0;
+      return aHasRecent - bHasRecent;
     });
-  }, [cobrancaTaskPriority]);
+  }, [cobrancaTaskPriority, cobrancasWithRecentActivity]);
 
   const getByStatus = useCallback((key: string) => {
     if (isSearching) {
