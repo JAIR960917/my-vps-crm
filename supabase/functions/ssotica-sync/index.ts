@@ -1109,7 +1109,7 @@ Deno.serve(async (req) => {
         .in("backfill_status", ["running", "scheduled"])
         .lte("backfill_next_run_at", new Date().toISOString())
         .limit(5); // até 5 lojas em paralelo no mesmo tick
-      const list = (pending ?? []) as Integration[];
+      const list = await decryptIntegrations(supabase, (pending ?? []) as Integration[]);
       if (list.length === 0) {
         return new Response(JSON.stringify({ ok: true, message: "Nenhum chunk pronto" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1157,6 +1157,7 @@ Deno.serve(async (req) => {
         .select("*")
         .single();
       if (error || !integ) throw error ?? new Error("Integração não encontrada");
+      await decryptIntegration(supabase, integ as any);
 
       // Já roda o primeiro chunk imediatamente (sem esperar o tick)
       const r = await runBackfillChunk(supabase, integ as Integration);
@@ -1184,6 +1185,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    await decryptIntegrations(supabase, integrations as Integration[]);
 
     const results: any[] = [];
     for (const integ of integrations as Integration[]) {
