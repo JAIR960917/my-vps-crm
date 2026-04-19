@@ -1082,12 +1082,26 @@ async function runBackfillChunk(
   supabase: any,
   integ: Integration,
 ): Promise<{ ok: true; chunk_index: number; finished: boolean } | { ok: false; error: string }> {
-  const total = integ.backfill_total_chunks || 8;
+  const total = integ.backfill_total_chunks || 16;
   const idx = integ.backfill_chunk_index || 0;
-  // chunk 0 = mais recente (últimos 12 meses) — futureDays=COBRANCAS_FUTURE_DAYS pra pegar parcelas a vencer
+  // chunk 0 = mais recente (últimos 6 meses) — futureDays=COBRANCAS_FUTURE_DAYS pra pegar parcelas a vencer
   const futureDays = idx === 0 ? COBRANCAS_FUTURE_DAYS : 0;
   const range = chunkDateRange(idx, futureDays);
   console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} iniciando chunk ${idx + 1}/${total} (${ymd(range.start)}→${ymd(range.end)})`);
+
+  // ⚡ OTIMIZAÇÃO CRÍTICA: avança o cursor ANTES de processar.
+  // Se der timeout no meio do processamento, o próximo tick do cron já vai pro próximo chunk
+  // (em vez de reprocessar infinitamente o mesmo). Trade-off aceitável: pode pular dados de
+  // 1 chunk em caso de timeout, mas evita loop infinito que trava 100% do backfill.
+  const nextIdxOptimistic = idx + 1;
+  const finishedOptimistic = nextIdxOptimistic >= total;
+  const nextRunAtOptimistic = finishedOptimistic ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
+  await supabase.from("ssotica_integrations").update({
+    backfill_chunk_index: nextIdxOptimistic,
+    backfill_next_run_at: nextRunAtOptimistic,
+    backfill_status: "running",
+    sync_status: "running",
+  }).eq("id", integ.id);
 
   const { data: log } = await supabase.from("ssotica_sync_logs").insert({
     integration_id: integ.id,
