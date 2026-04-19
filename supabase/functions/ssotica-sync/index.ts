@@ -306,6 +306,7 @@ async function syncContasReceber(
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
   // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
   const parcelasAtivasIds = new Set<number>();
+  const parcelasInativasIds = new Set<number>(); // parcelas vistas pagas/canceladas/renegociadas/baixadas
   const clientesAfetados = new Set<number>();
   // Agrupa todas as parcelas em atraso por cliente para upsert único depois
   const parcelasPorCliente = new Map<number, { cliente: any; parcelas: any[] }>();
@@ -386,6 +387,7 @@ async function syncContasReceber(
         if (isInativa) {
           const cliInativa = parcela.titulo?.cliente ?? parcela.cliente ?? {};
           if (cliInativa?.id) clientesAfetados.add(Number(cliInativa.id));
+          if (parcela.id) parcelasInativasIds.add(Number(parcela.id));
           continue;
         }
 
