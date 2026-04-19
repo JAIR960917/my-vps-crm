@@ -1580,10 +1580,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _get_encryption_key: { Args: never; Returns: string }
+      admin_decrypt_license: {
+        Args: { _integration_id: string }
+        Returns: string
+      }
       can_access_renovacao: {
         Args: { _renovacao_id: string }
         Returns: boolean
       }
+      decrypt_secret: { Args: { _ciphertext: string }; Returns: string }
+      encrypt_secret: { Args: { _plaintext: string }; Returns: string }
       get_company_user_ids: { Args: never; Returns: string[] }
       get_my_company_id: { Args: never; Returns: string }
       get_profile_names: {
@@ -1592,6 +1599,26 @@ export type Database = {
           avatar_url: string
           full_name: string
           user_id: string
+        }[]
+      }
+      get_ssotica_credentials: {
+        Args: { _integration_id: string }
+        Returns: {
+          backfill_chunk_index: number
+          backfill_next_run_at: string
+          backfill_started_at: string
+          backfill_status: string
+          backfill_total_chunks: number
+          bearer_token: string
+          cnpj: string
+          company_id: string
+          id: string
+          initial_sync_done: boolean
+          is_active: boolean
+          last_sync_receber_at: string
+          last_sync_vendas_at: string
+          license_code: string
+          sync_status: string
         }[]
       }
       has_role: {

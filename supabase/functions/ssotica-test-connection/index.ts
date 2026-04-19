@@ -46,6 +46,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Descriptografa tokens criptografados em repouso
+    if (integ.bearer_token && integ.bearer_token.startsWith("enc:")) {
+      const { data: dec } = await supabase.rpc("decrypt_secret", { _ciphertext: integ.bearer_token });
+      if (typeof dec === "string") integ.bearer_token = dec;
+    }
+    if (integ.license_code && integ.license_code.startsWith("enc:")) {
+      const { data: dec } = await supabase.rpc("decrypt_secret", { _ciphertext: integ.license_code });
+      if (typeof dec === "string") integ.license_code = dec;
+    }
+
     function normalize(v: string | null): string {
       const raw = (v ?? "").trim();
       const onlyDigits = raw.replace(/\D/g, "");
