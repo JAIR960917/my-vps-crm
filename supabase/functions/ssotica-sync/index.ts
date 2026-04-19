@@ -1347,7 +1347,9 @@ Deno.serve(async (req) => {
               .eq("id", integ.id)
               .single();
             if (!refreshed) break;
-            cur = refreshed as Integration;
+            // ⚠️ CRÍTICO: descriptografa antes do próximo chunk, senão o token vai como "enc:..." pra API
+            const refreshedDecrypted = await decryptIntegration(supabase, refreshed as any);
+            cur = (refreshedDecrypted ?? refreshed) as Integration;
             if (r.finished) break;
           }
         }
