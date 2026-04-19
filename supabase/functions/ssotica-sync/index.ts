@@ -1275,6 +1275,9 @@ Deno.serve(async (req) => {
         const cr = await syncContasReceber(supabase, integ);
         // 2. Vendas
         const v = await syncVendas(supabase, integ, forceFull, cr.clientesQuitados);
+        // 3. Reconciliação: garante que ninguém com cobrança aberta esteja em Renovação
+        const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
+        console.log(`[ssotica-sync][incremental] empresa=${integ.company_id} reconciliação removeu ${reconciled} renovações com dívida aberta`);
 
         const finishedAt = new Date().toISOString();
         await supabase.from("ssotica_integrations").update({
