@@ -124,14 +124,14 @@ export function usePaginatedColumns<T extends { id: string; status: string }>(
     [columns, fetchColumn],
   );
 
-  // Initial load + refresh
+  // Initial load + refresh (also re-run when filter changes)
   useEffect(() => {
     if (searchQuery && searchQuery.trim() && buildSearchOr) return; // search mode handles its own
     if (statusKeys.length === 0) return;
     setColumns({});
     statusKeys.forEach((k) => fetchColumn(k, 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusKeys.join("|"), refreshKey, searchQuery]);
+  }, [statusKeys.join("|"), refreshKey, searchQuery, filter]);
 
   // Search mode: single global query
   useEffect(() => {
