@@ -1016,6 +1016,60 @@ async function syncVendas(
   return { processed, created, updated, chunks: chunksProcessed };
 }
 
+// Reconciliação: para uma loja, encontra todas as renovações cujo cliente tem cobrança
+// aberta (status != pago/cancelado) e as remove, registrando a transição reversa.
+// É uma rede de segurança contra cards mal posicionados durante backfill por chunks.
+async function reconcileRenovacoesVsCobrancas(
+  supabase: any,
+  companyId: string,
+): Promise<number> {
+  const { data: wrong } = await supabase
+    .from("crm_renovacoes")
+    .select("id, ssotica_cliente_id, data")
+    .eq("ssotica_company_id", companyId)
+    .not("ssotica_cliente_id", "is", null);
+  if (!wrong || wrong.length === 0) return 0;
+
+  let removed = 0;
+  for (const ren of wrong) {
+    const clienteId = (ren as any).ssotica_cliente_id;
+    if (clienteId == null) continue;
+    const { data: cob } = await supabase
+      .from("crm_cobrancas")
+      .select("id")
+      .eq("ssotica_cliente_id", clienteId)
+      .eq("ssotica_company_id", companyId)
+      .not("status", "in", "(pago,cancelado)")
+      .limit(1);
+    if (!cob || cob.length === 0) continue;
+
+    const renData = (ren as any).data ?? {};
+    const clienteNome = String(renData?.nome ?? "Cliente SSótica");
+    const renId = (ren as any).id;
+    const { error: delErr } = await supabase.from("crm_renovacoes").delete().eq("id", renId);
+    if (delErr) {
+      console.error(`[reconcile] falha ao remover renovacao ${renId}:`, delErr.message);
+      continue;
+    }
+    await supabase.from("crm_module_transition_logs").insert({
+      cliente_nome: clienteNome,
+      from_module: "renovacao",
+      to_module: "cobranca",
+      to_status_key: null,
+      to_status_label: null,
+      source_record_id: renId,
+      target_record_id: cob[0].id,
+      ssotica_cliente_id: clienteId,
+      company_id: companyId,
+      triggered_by: null,
+      trigger_source: "auto_reconcile",
+    });
+    removed++;
+  }
+  return removed;
+}
+
+
 // Helper: roda 1 chunk de backfill (vendas + cobranças daquela janela de 12 meses).
 async function runBackfillChunk(
   supabase: any,
@@ -1038,6 +1092,12 @@ async function runBackfillChunk(
   try {
     const cr = await syncContasReceber(supabase, integ, range);
     const v = await syncVendas(supabase, integ, false, [], range);
+
+    // RECONCILIAÇÃO PÓS-CHUNK: remove renovações de clientes que possuem cobrança aberta
+    // (qualquer status != pago/cancelado). Necessário porque chunks anteriores podem ter
+    // criado renovações antes que as cobranças desses clientes fossem sincronizadas.
+    const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
+    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1} reconciliação removeu ${reconciled} renovações com dívida aberta`);
 
     const nextIdx = idx + 1;
     const finished = nextIdx >= total;
@@ -1269,6 +1329,9 @@ Deno.serve(async (req) => {
         const cr = await syncContasReceber(supabase, integ);
         // 2. Vendas
         const v = await syncVendas(supabase, integ, forceFull, cr.clientesQuitados);
+        // 3. Reconciliação: garante que ninguém com cobrança aberta esteja em Renovação
+        const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
+        console.log(`[ssotica-sync][incremental] empresa=${integ.company_id} reconciliação removeu ${reconciled} renovações com dívida aberta`);
 
         const finishedAt = new Date().toISOString();
         await supabase.from("ssotica_integrations").update({
