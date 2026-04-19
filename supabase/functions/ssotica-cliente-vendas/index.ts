@@ -102,6 +102,12 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Descriptografa token criptografado em repouso
+    if (integ.bearer_token && integ.bearer_token.startsWith("enc:")) {
+      const { data: dec } = await supabase.rpc("decrypt_secret", { _ciphertext: integ.bearer_token });
+      if (typeof dec === "string") integ.bearer_token = dec;
+    }
+
     const cnpj = normalizeIdentifier(integ.cnpj);
     const targetClienteId = Number(ssoticaClienteId);
 
