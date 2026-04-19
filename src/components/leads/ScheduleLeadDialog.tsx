@@ -148,7 +148,7 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
             </Select>
           </div>
 
-          <Button type="submit" className="w-full" disabled={saving || !date || !formaPagamento || !canal}>
+          <Button type="submit" className="w-full" disabled={saving || !dateStr || !formaPagamento || !canal}>
             {saving ? "Agendando..." : "Confirmar Agendamento"}
           </Button>
         </form>
