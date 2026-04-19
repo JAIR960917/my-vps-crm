@@ -852,18 +852,33 @@ async function syncVendas(
         updated++;
       }
     } else {
-      await supabase.from("crm_renovacoes").insert({
-        ssotica_cliente_id: clienteId,
-        ssotica_venda_id: info.vendaId,
-        ssotica_company_id: integ.company_id,
-        assigned_to: resolvedAssignedTo,
-        data: renovacaoData,
-        data_ultima_compra: dataReferencia,
-        valor: info.valor,
-        status: hasAssignedVendedor ? flowStatus : DIRECIONAMENTO_STATUS,
-        scheduled_date: dataReferencia,
-      });
+      const newStatusKey = hasAssignedVendedor ? flowStatus : DIRECIONAMENTO_STATUS;
+      const { data: inserted } = await supabase
+        .from("crm_renovacoes")
+        .insert({
+          ssotica_cliente_id: clienteId,
+          ssotica_venda_id: info.vendaId,
+          ssotica_company_id: integ.company_id,
+          assigned_to: resolvedAssignedTo,
+          data: renovacaoData,
+          data_ultima_compra: dataReferencia,
+          valor: info.valor,
+          status: newStatusKey,
+          scheduled_date: dataReferencia,
+        })
+        .select("id")
+        .maybeSingle();
       created++;
+
+      // Se o cliente saiu da Cobrança nesta sync, registra a transição
+      if (clientesQuitadosSet.has(clienteId)) {
+        await logRenovacaoTransition({
+          cliente_nome: cliente.nome,
+          statusKey: newStatusKey,
+          target_record_id: (inserted as any)?.id ?? null,
+          ssotica_cliente_id: clienteId,
+        });
+      }
     }
   }
 
