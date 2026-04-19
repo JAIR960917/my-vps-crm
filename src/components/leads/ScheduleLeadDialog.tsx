@@ -46,7 +46,7 @@ type Props = {
 };
 
 export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadPhone, saving, onSubmit }: Props) {
-  const [date, setDate] = useState<Date | undefined>();
+  const [dateStr, setDateStr] = useState("");
   const [time, setTime] = useState("09:00");
   const [valor, setValor] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("");
@@ -54,11 +54,11 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!date || !formaPagamento || !canal) return;
-    
+    if (!dateStr || !formaPagamento || !canal) return;
+
+    const [y, mo, d] = dateStr.split("-").map(Number);
     const [h, m] = time.split(":").map(Number);
-    const dt = new Date(date);
-    dt.setHours(h, m, 0, 0);
+    const dt = new Date(y, mo - 1, d, h, m, 0, 0);
 
     onSubmit({
       scheduled_datetime: dt.toISOString(),
@@ -68,7 +68,7 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
     });
 
     // Reset
-    setDate(undefined);
+    setDateStr("");
     setTime("09:00");
     setValor("");
     setFormaPagamento("");
