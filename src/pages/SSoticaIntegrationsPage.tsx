@@ -520,7 +520,7 @@ export default function SSoticaIntegrationsPage() {
                         </CardTitle>
                         <CardDescription className="truncate text-xs">
                           CNPJ: {integ?.cnpj || company.cnpj || "—"}
-                          {integ?.license_code && <> · Lic: {integ.license_code}</>}
+                          {integ?.license_code && <> · Lic: ••••</>}
                         </CardDescription>
                       </div>
                       {statusBadge(integ)}
@@ -672,14 +672,22 @@ export default function SSoticaIntegrationsPage() {
               </p>
             </div>
             <div>
-              <Label htmlFor="token">Bearer Token <span className="text-destructive">*</span></Label>
+              <Label htmlFor="token">
+                Bearer Token {!editing?.integration && <span className="text-destructive">*</span>}
+              </Label>
               <Input
                 id="token"
                 type="password"
                 value={form.bearer_token}
                 onChange={(e) => setForm({ ...form, bearer_token: e.target.value })}
-                placeholder="XXXyyyXXXyXXXXXXXXXXyXXXyXXXyXXX"
+                placeholder={editing?.integration ? "Deixe em branco para manter o atual" : "XXXyyyXXXyXXXXXXXXXXyXXXyXXXyXXX"}
+                autoComplete="new-password"
               />
+              {editing?.integration && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  🔒 O token atual está criptografado no servidor e não pode ser exibido. Digite um novo token apenas se quiser substituir.
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Switch
