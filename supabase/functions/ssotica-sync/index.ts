@@ -1017,7 +1017,60 @@ async function syncVendas(
 }
 
 // Helper: roda 1 chunk de backfill (vendas + cobranças daquela janela de 12 meses).
-async function runBackfillChunk(
+// Reconciliação: para uma loja, encontra todas as renovações cujo cliente tem cobrança
+// aberta (status != pago/cancelado) e as remove, registrando a transição reversa.
+// É uma rede de segurança contra cards mal posicionados durante backfill por chunks.
+async function reconcileRenovacoesVsCobrancas(
+  supabase: any,
+  companyId: string,
+): Promise<number> {
+  const { data: wrong } = await supabase
+    .from("crm_renovacoes")
+    .select("id, ssotica_cliente_id, data")
+    .eq("ssotica_company_id", companyId)
+    .not("ssotica_cliente_id", "is", null);
+  if (!wrong || wrong.length === 0) return 0;
+
+  let removed = 0;
+  for (const ren of wrong) {
+    const clienteId = (ren as any).ssotica_cliente_id;
+    if (clienteId == null) continue;
+    const { data: cob } = await supabase
+      .from("crm_cobrancas")
+      .select("id")
+      .eq("ssotica_cliente_id", clienteId)
+      .eq("ssotica_company_id", companyId)
+      .not("status", "in", "(pago,cancelado)")
+      .limit(1);
+    if (!cob || cob.length === 0) continue;
+
+    const renData = (ren as any).data ?? {};
+    const clienteNome = String(renData?.nome ?? "Cliente SSótica");
+    const renId = (ren as any).id;
+    const { error: delErr } = await supabase.from("crm_renovacoes").delete().eq("id", renId);
+    if (delErr) {
+      console.error(`[reconcile] falha ao remover renovacao ${renId}:`, delErr.message);
+      continue;
+    }
+    await supabase.from("crm_module_transition_logs").insert({
+      cliente_nome: clienteNome,
+      from_module: "renovacao",
+      to_module: "cobranca",
+      to_status_key: null,
+      to_status_label: null,
+      source_record_id: renId,
+      target_record_id: cob[0].id,
+      ssotica_cliente_id: clienteId,
+      company_id: companyId,
+      triggered_by: null,
+      trigger_source: "auto_reconcile",
+    });
+    removed++;
+  }
+  return removed;
+}
+
+
   supabase: any,
   integ: Integration,
 ): Promise<{ ok: true; chunk_index: number; finished: boolean } | { ok: false; error: string }> {
