@@ -598,6 +598,40 @@ async function syncVendas(
     .map((p) => p.user_id)
     .sort(); // ordem estável
 
+  // Cache de labels das colunas de renovação (key -> label) para registro de logs
+  const { data: renStatusRows } = await supabase
+    .from("crm_renovacao_statuses")
+    .select("key,label");
+  const renStatusLabelByKey = new Map<string, string>(
+    (renStatusRows ?? []).map((s: any) => [s.key, s.label]),
+  );
+  const clientesQuitadosSet = new Set<number>(clientesQuitados);
+
+  async function logRenovacaoTransition(params: {
+    cliente_nome: string;
+    statusKey: string;
+    target_record_id: string | null;
+    ssotica_cliente_id: number;
+  }) {
+    try {
+      await supabase.from("crm_module_transition_logs").insert({
+        cliente_nome: params.cliente_nome || "Cliente SSótica",
+        from_module: "cobranca",
+        to_module: "renovacao",
+        to_status_key: params.statusKey,
+        to_status_label: renStatusLabelByKey.get(params.statusKey) ?? params.statusKey,
+        source_record_id: null,
+        target_record_id: params.target_record_id,
+        ssotica_cliente_id: params.ssotica_cliente_id,
+        company_id: integ.company_id,
+        triggered_by: null,
+        trigger_source: "auto",
+      });
+    } catch (e) {
+      console.error("[transition-log] erro ao registrar:", e);
+    }
+  }
+
   const findResponsibleProfile = (responsavelNome: string | null | undefined) => {
     if (!responsavelNome) return null;
 
