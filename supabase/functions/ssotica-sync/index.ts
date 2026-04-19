@@ -9,10 +9,11 @@ const corsHeaders = {
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
 const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
-// Histórico total: 96 meses (8 anos), processado em chunks de 12 meses
-// para evitar timeout da edge function em lojas com histórico longo.
+// Histórico total: 96 meses (8 anos), processado em chunks de 6 meses
+// para evitar timeout da edge function em lojas grandes (~7000 cobranças/ano).
+// Antes: 12 meses × 8 chunks. Agora: 6 meses × 16 chunks (cada chunk ~50% mais rápido).
 const MAX_HISTORY_DAYS = 2880; // 96 meses
-const CHUNK_DAYS = 365;        // ~12 meses por chunk
+const CHUNK_DAYS = 183;        // ~6 meses por chunk
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
