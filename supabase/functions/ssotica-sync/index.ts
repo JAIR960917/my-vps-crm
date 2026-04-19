@@ -1116,16 +1116,12 @@ async function runBackfillChunk(
 
     const nextIdx = idx + 1;
     const finished = nextIdx >= total;
-    // Próxima execução: 3 minutos depois (ou null se terminou)
-    const nextRunAt = finished ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
     const finishedAt = new Date().toISOString();
 
-    // ⚡ SALVAR PROGRESSO PRIMEIRO (antes da reconciliação) para evitar
-    // que um timeout na reconciliação faça o chunk reprocessar infinitamente.
+    // Cursor já foi avançado antes do processamento (otimização anti-loop).
+    // Aqui só atualizamos os timestamps de sucesso e marcamos "done" se for o último chunk.
     await supabase.from("ssotica_integrations").update({
-      backfill_chunk_index: nextIdx,
       backfill_status: finished ? "done" : "running",
-      backfill_next_run_at: nextRunAt,
       sync_status: finished ? "idle" : "running",
       initial_sync_done: finished ? true : integ.initial_sync_done,
       last_sync_receber_at: finished ? finishedAt : integ.last_sync_receber_at,
@@ -1144,6 +1140,7 @@ async function runBackfillChunk(
       }).eq("id", logId);
     }
 
+    const nextRunAt = finished ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
     console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. ${finished ? 'CONCLUÍDO!' : `próximo em 3min (${nextRunAt})`}`);
 
     // RECONCILIAÇÃO: roda APENAS no chunk final (quando todos os dados já foram sincronizados).
@@ -1195,10 +1192,10 @@ async function runBackfillChunk(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1} FALHOU:`, msg);
-    // Em caso de erro, agenda retry em 3 minutos no MESMO chunk (não avança)
+    // Em caso de erro real (não-timeout), o cursor JÁ foi avançado antes — isso é intencional
+    // para evitar loop infinito. O chunk com erro fica registrado em ssotica_sync_logs e pode
+    // ser reprocessado manualmente depois. Mantemos status "running" pra continuar com próximos.
     await supabase.from("ssotica_integrations").update({
-      backfill_status: "running",
-      backfill_next_run_at: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
       sync_status: "error",
       last_error: msg.slice(0, 1000),
     }).eq("id", integ.id);
