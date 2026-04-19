@@ -561,15 +561,19 @@ async function syncContasReceber(
         if (parcelasPorCliente.has(clienteId)) continue;
 
         // Cliente NÃO apareceu na janela de sync → não temos evidência de pagamento.
-        // Mantém o card como está (a parcela pode ser de antes da janela de 12 meses
-        // ou pode ter sido pulada por algum motivo). NUNCA migra para Renovação sem
-        // ter visto explicitamente o cliente nos dados retornados pela API.
+        // Mantém o card (a parcela pode estar fora da janela ou pode não ter sido paginada).
         if (!clientesAfetados.has(clienteId)) continue;
 
-        // Cliente APARECEU na janela mas TODAS as parcelas estão pagas/renegociadas/canceladas.
-        // Se a parcela específica desse card está na lista de ativas, segura também
-        // (defesa extra contra race conditions).
+        // Defesa extra: se a parcela específica está listada como ativa nesta sync,
+        // segura (race condition entre páginas).
         if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
+
+        // CRÍTICO: só deleta se TEMOS EVIDÊNCIA DIRETA de que a parcela foi paga/cancelada.
+        // Isso significa que a parcela específica desse card foi retornada pela API
+        // com status pago/cancelado/renegociado/baixado.
+        // Se a parcela não foi vista (pode ter sumido por filtro de paginação ou janela),
+        // NÃO deletamos — preferimos manter um falso positivo do que migrar errado.
+        if (!parcelaId || !parcelasInativasIds.has(parcelaId)) continue;
 
         // OK, evidência confirmada de quitação: remove cobrança e cria/restaura Renovação.
         const cobData = (cob as any).data ?? {};
