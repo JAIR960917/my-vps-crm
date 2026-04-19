@@ -1099,24 +1099,19 @@ async function runBackfillChunk(
     const cr = await syncContasReceber(supabase, integ, range);
     const v = await syncVendas(supabase, integ, false, [], range);
 
-    // RECONCILIAÇÃO PÓS-CHUNK: remove renovações de clientes que possuem cobrança aberta
-    // (qualquer status != pago/cancelado). Necessário porque chunks anteriores podem ter
-    // criado renovações antes que as cobranças desses clientes fossem sincronizadas.
-    const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
-    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1} reconciliação removeu ${reconciled} renovações com dívida aberta`);
-
     const nextIdx = idx + 1;
     const finished = nextIdx >= total;
     // Próxima execução: 3 minutos depois (ou null se terminou)
     const nextRunAt = finished ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
     const finishedAt = new Date().toISOString();
 
+    // ⚡ SALVAR PROGRESSO PRIMEIRO (antes da reconciliação) para evitar
+    // que um timeout na reconciliação faça o chunk reprocessar infinitamente.
     await supabase.from("ssotica_integrations").update({
       backfill_chunk_index: nextIdx,
       backfill_status: finished ? "done" : "running",
       backfill_next_run_at: nextRunAt,
       sync_status: finished ? "idle" : "running",
-      // Quando termina, marca initial_sync_done para o sync incremental funcionar
       initial_sync_done: finished ? true : integ.initial_sync_done,
       last_sync_receber_at: finished ? finishedAt : integ.last_sync_receber_at,
       last_sync_vendas_at: finished ? finishedAt : integ.last_sync_vendas_at,
@@ -1135,6 +1130,18 @@ async function runBackfillChunk(
     }
 
     console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. ${finished ? 'CONCLUÍDO!' : `próximo em 3min (${nextRunAt})`}`);
+
+    // RECONCILIAÇÃO: roda APENAS no chunk final (quando todos os dados já foram sincronizados).
+    // Antes era a cada chunk, mas em lojas grandes (~7000 cobranças) isso causava timeout
+    // antes de salvar o progresso, fazendo o chunk reprocessar infinitamente.
+    if (finished) {
+      try {
+        const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
+        console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} reconciliação final removeu ${reconciled} renovações com dívida aberta`);
+      } catch (recErr) {
+        console.error(`[ssotica-sync][backfill] reconciliação final falhou (não crítico):`, recErr);
+      }
+    }
 
     // Quando o backfill é concluído, notifica todos os admins
     if (finished) {
