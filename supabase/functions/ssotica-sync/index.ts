@@ -554,11 +554,22 @@ async function syncContasReceber(
       for (const cob of storedCobrancas) {
         const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
         const clienteId = Number(cob.ssotica_cliente_id);
-        if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
-        if (clientesAfetados.has(clienteId) && parcelasPorCliente.has(clienteId)) continue;
 
-        // Cliente PAGOU/RENEGOCIOU: remove a cobrança e cria/restaura o card de Renovação
-        // imediatamente, sem depender de uma venda nova aparecer no syncVendas.
+        // Cliente AINDA tem parcelas em atraso na janela atual → mantém o card
+        if (parcelasPorCliente.has(clienteId)) continue;
+
+        // Cliente NÃO apareceu na janela de sync → não temos evidência de pagamento.
+        // Mantém o card como está (a parcela pode ser de antes da janela de 12 meses
+        // ou pode ter sido pulada por algum motivo). NUNCA migra para Renovação sem
+        // ter visto explicitamente o cliente nos dados retornados pela API.
+        if (!clientesAfetados.has(clienteId)) continue;
+
+        // Cliente APARECEU na janela mas TODAS as parcelas estão pagas/renegociadas/canceladas.
+        // Se a parcela específica desse card está na lista de ativas, segura também
+        // (defesa extra contra race conditions).
+        if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
+
+        // OK, evidência confirmada de quitação: remove cobrança e cria/restaura Renovação.
         const cobData = (cob as any).data ?? {};
         const clienteNome = String(cobData?.nome ?? cobData?.ssotica_raw?.titulo?.cliente?.nome ?? "Cliente SSótica");
         const telefone = String(cobData?.telefone ?? "");
@@ -578,7 +589,8 @@ async function syncContasReceber(
           .maybeSingle();
 
         if (!jaTemRen) {
-          // Sem data confiável de última compra → coluna inicial "novo"
+          // Sem data confiável de última compra → coluna inicial "novo".
+          // O syncVendas/syncOS subsequente vai reclassificar quando houver dado.
           const renStatusKey = "novo";
           const { data: insertedRen } = await supabase
             .from("crm_renovacoes")
