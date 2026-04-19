@@ -1090,6 +1090,31 @@ Deno.serve(async (req) => {
       let logId: string | null = null;
       try {
         await supabase.from("ssotica_integrations").update({ sync_status: "running", last_error: null }).eq("id", integ.id);
+
+        // ===== Se o backfill ainda está em andamento, roda TODOS os chunks pendentes
+        // de uma vez antes do incremental. Isso garante que o usuário não veja
+        // movimentações entre Renovação ↔ Cobrança aparecendo "aos pedaços" a cada
+        // clique manual em "Atualizar". =====
+        const backfillChunkResults: any[] = [];
+        if (integ.backfill_status === "running") {
+          let cur = integ as Integration;
+          let safety = 0;
+          while (cur.backfill_status === "running" && safety < 20) {
+            safety++;
+            const r = await runBackfillChunk(supabase, cur);
+            backfillChunkResults.push(r);
+            if (!r.ok) break;
+            const { data: refreshed } = await supabase
+              .from("ssotica_integrations")
+              .select("*")
+              .eq("id", integ.id)
+              .single();
+            if (!refreshed) break;
+            cur = refreshed as Integration;
+            if (r.finished) break;
+          }
+        }
+
         const { data: log } = await supabase.from("ssotica_sync_logs").insert({
           integration_id: integ.id,
           sync_type: forceFull ? "full_force" : "incremental",
@@ -1118,11 +1143,11 @@ Deno.serve(async (req) => {
             items_processed: cr.processed + v.processed,
             items_created: cr.created + v.created,
             items_updated: cr.updated + v.updated,
-            details: { contas_receber: cr, vendas: v },
+            details: { contas_receber: cr, vendas: v, backfill_chunks_run: backfillChunkResults.length },
           }).eq("id", logId);
         }
 
-        results.push({ integration_id: integ.id, ok: true, contas_receber: cr, vendas: v });
+        results.push({ integration_id: integ.id, ok: true, contas_receber: cr, vendas: v, backfill_chunks_run: backfillChunkResults });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`[ssotica-sync] integration ${integ.id} failed:`, msg);
