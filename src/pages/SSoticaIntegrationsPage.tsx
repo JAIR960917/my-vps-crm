@@ -267,8 +267,8 @@ export default function SSoticaIntegrationsPage() {
     // O admin deixa em branco para manter o atual ou digita um novo para substituir.
     // O license_code é descriptografado via RPC apenas para edição.
     let licenseDecrypted = integration?.license_code ?? "";
-    if (licenseDecrypted.startsWith("enc:")) {
-      const { data } = await supabase.rpc("decrypt_secret", { _ciphertext: licenseDecrypted });
+    if (integration && licenseDecrypted.startsWith("enc:")) {
+      const { data } = await supabase.rpc("admin_decrypt_license", { _integration_id: integration.id });
       if (typeof data === "string") licenseDecrypted = data;
     }
 
