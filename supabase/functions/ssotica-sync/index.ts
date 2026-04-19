@@ -1039,6 +1039,12 @@ async function runBackfillChunk(
     const cr = await syncContasReceber(supabase, integ, range);
     const v = await syncVendas(supabase, integ, false, [], range);
 
+    // RECONCILIAÇÃO PÓS-CHUNK: remove renovações de clientes que possuem cobrança aberta
+    // (qualquer status != pago/cancelado). Necessário porque chunks anteriores podem ter
+    // criado renovações antes que as cobranças desses clientes fossem sincronizadas.
+    const reconciled = await reconcileRenovacoesVsCobrancas(supabase, integ.company_id);
+    console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1} reconciliação removeu ${reconciled} renovações com dívida aberta`);
+
     const nextIdx = idx + 1;
     const finished = nextIdx >= total;
     // Próxima execução: 3 minutos depois (ou null se terminou)
