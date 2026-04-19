@@ -845,7 +845,8 @@ async function syncVendas(
       .upsert(rows, { onConflict: "company_id,ssotica_funcionario_id" });
   }
 
-  // Para cada cliente que comprou: se NÃO tem cobrança em aberto/vencida, vai para Renovações
+  // Para cada cliente que comprou: se NÃO tem cobrança em aberto/vencida, vai para Renovações.
+  // Se TEM cobrança aberta, garante que o card NÃO esteja em Renovação (remove se necessário).
   for (const [clienteId, info] of ultimaCompraPorCliente) {
     // Verifica se há cobrança em aberto desse cliente nesta loja
     // (qualquer status que não seja pago/cancelado conta como dívida pendente)
@@ -857,7 +858,35 @@ async function syncVendas(
       .not("status", "in", "(pago,cancelado)")
       .limit(1);
 
-    if (cobrancasAbertas && cobrancasAbertas.length > 0) continue; // tem dívida → não vai pra renovação
+    if (cobrancasAbertas && cobrancasAbertas.length > 0) {
+      // Cliente TEM dívida aberta → não pode estar em Renovação.
+      // Se já existe um card de renovação, remove e registra a transição reversa.
+      const { data: renExistente } = await supabase
+        .from("crm_renovacoes")
+        .select("id, data")
+        .eq("ssotica_cliente_id", clienteId)
+        .eq("ssotica_company_id", integ.company_id)
+        .maybeSingle();
+      if (renExistente) {
+        const renData = (renExistente as any).data ?? {};
+        const clienteNome = String(renData?.nome ?? info.cliente?.nome ?? "Cliente SSótica");
+        await supabase.from("crm_renovacoes").delete().eq("id", (renExistente as any).id);
+        await supabase.from("crm_module_transition_logs").insert({
+          cliente_nome: clienteNome,
+          from_module: "renovacao",
+          to_module: "cobranca",
+          to_status_key: null,
+          to_status_label: null,
+          source_record_id: (renExistente as any).id,
+          target_record_id: cobrancasAbertas[0].id,
+          ssotica_cliente_id: clienteId,
+          company_id: integ.company_id,
+          triggered_by: null,
+          trigger_source: "auto",
+        });
+      }
+      continue; // tem dívida → não cria nem mantém renovação
+    }
 
     const cliente = info.cliente;
     const telefone = cliente.telefones?.[0]?.numero ?? "";
