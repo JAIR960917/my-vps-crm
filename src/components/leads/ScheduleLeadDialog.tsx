@@ -4,12 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Clock } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { cn } from "@/lib/utils";
 
 const CANAIS_AGENDAMENTO = [
   "Ligação Leads",
@@ -51,7 +46,7 @@ type Props = {
 };
 
 export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadPhone, saving, onSubmit }: Props) {
-  const [date, setDate] = useState<Date | undefined>();
+  const [dateStr, setDateStr] = useState("");
   const [time, setTime] = useState("09:00");
   const [valor, setValor] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("");
@@ -59,11 +54,11 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!date || !formaPagamento || !canal) return;
-    
+    if (!dateStr || !formaPagamento || !canal) return;
+
+    const [y, mo, d] = dateStr.split("-").map(Number);
     const [h, m] = time.split(":").map(Number);
-    const dt = new Date(date);
-    dt.setHours(h, m, 0, 0);
+    const dt = new Date(y, mo - 1, d, h, m, 0, 0);
 
     onSubmit({
       scheduled_datetime: dt.toISOString(),
@@ -73,7 +68,7 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
     });
 
     // Reset
-    setDate(undefined);
+    setDateStr("");
     setTime("09:00");
     setValor("");
     setFormaPagamento("");
@@ -94,17 +89,17 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
 
           <div className="space-y-2">
             <Label>Data do Agendamento <span className="text-destructive">*</span></Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                  <CalendarIcon className="mr-2 h-4 w-4 text-destructive" />
-                  {date ? format(date, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={date} onSelect={setDate} locale={ptBR} className="p-3 pointer-events-auto" />
-              </PopoverContent>
-            </Popover>
+            <div className="relative">
+              <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive pointer-events-none" />
+              <Input
+                type="date"
+                value={dateStr}
+                onChange={(e) => setDateStr(e.target.value)}
+                required
+                onClick={(e) => (e.currentTarget as any).showPicker?.()}
+                className="pl-10 cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -153,7 +148,7 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
             </Select>
           </div>
 
-          <Button type="submit" className="w-full" disabled={saving || !date || !formaPagamento || !canal}>
+          <Button type="submit" className="w-full" disabled={saving || !dateStr || !formaPagamento || !canal}>
             {saving ? "Agendando..." : "Confirmar Agendamento"}
           </Button>
         </form>
