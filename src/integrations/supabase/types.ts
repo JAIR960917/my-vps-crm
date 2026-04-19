@@ -1581,6 +1581,10 @@ export type Database = {
     }
     Functions: {
       _get_encryption_key: { Args: never; Returns: string }
+      admin_decrypt_license: {
+        Args: { _integration_id: string }
+        Returns: string
+      }
       can_access_renovacao: {
         Args: { _renovacao_id: string }
         Returns: boolean
