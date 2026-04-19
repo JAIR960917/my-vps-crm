@@ -1580,10 +1580,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _get_encryption_key: { Args: never; Returns: string }
       can_access_renovacao: {
         Args: { _renovacao_id: string }
         Returns: boolean
       }
+      decrypt_secret: { Args: { _ciphertext: string }; Returns: string }
+      encrypt_secret: { Args: { _plaintext: string }; Returns: string }
       get_company_user_ids: { Args: never; Returns: string[] }
       get_my_company_id: { Args: never; Returns: string }
       get_profile_names: {
