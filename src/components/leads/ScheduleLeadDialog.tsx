@@ -97,7 +97,7 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
                 onChange={(e) => setDateStr(e.target.value)}
                 required
                 onClick={(e) => (e.currentTarget as any).showPicker?.()}
-                className="pl-10 cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                className="pl-10 cursor-pointer"
               />
             </div>
           </div>
