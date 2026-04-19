@@ -237,6 +237,44 @@ async function syncContasReceber(
     .maybeSingle();
   const defaultAssignee: string | null = (brendaProfile as any)?.user_id ?? null;
 
+  // Cache de labels das colunas de cobrança (key -> label) para registro de logs
+  const { data: cobStatusRows } = await supabase
+    .from("crm_cobranca_statuses")
+    .select("key,label");
+  const cobStatusLabelByKey = new Map<string, string>(
+    (cobStatusRows ?? []).map((s: any) => [s.key, s.label]),
+  );
+
+  // Helper: registra movimentação automática entre Renovação e Cobrança
+  async function logTransition(params: {
+    cliente_nome: string;
+    from_module: "renovacao" | "cobranca";
+    to_module: "renovacao" | "cobranca";
+    to_status_key?: string | null;
+    to_status_label?: string | null;
+    source_record_id?: string | null;
+    target_record_id?: string | null;
+    ssotica_cliente_id?: number | null;
+  }) {
+    try {
+      await supabase.from("crm_module_transition_logs").insert({
+        cliente_nome: params.cliente_nome || "Cliente SSótica",
+        from_module: params.from_module,
+        to_module: params.to_module,
+        to_status_key: params.to_status_key ?? null,
+        to_status_label: params.to_status_label ?? null,
+        source_record_id: params.source_record_id ?? null,
+        target_record_id: params.target_record_id ?? null,
+        ssotica_cliente_id: params.ssotica_cliente_id ?? null,
+        company_id: integ.company_id,
+        triggered_by: null,
+        trigger_source: "auto",
+      });
+    } catch (e) {
+      console.error("[transition-log] erro ao registrar:", e);
+    }
+  }
+
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
   // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
   const parcelasAtivasIds = new Set<number>();
