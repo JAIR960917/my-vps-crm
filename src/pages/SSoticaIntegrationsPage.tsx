@@ -259,20 +259,31 @@ export default function SSoticaIntegrationsPage() {
 
   const integrationByCompany = new Map(integrations.map((i) => [i.company_id, i]));
 
-  function openEdit(company: Company) {
+  async function openEdit(company: Company) {
     const integration = integrationByCompany.get(company.id);
     setEditing({ company, integration });
+
+    // Por segurança o bearer_token NUNCA é trazido para o navegador (fica criptografado no banco).
+    // O admin deixa em branco para manter o atual ou digita um novo para substituir.
+    // O license_code é descriptografado via RPC apenas para edição.
+    let licenseDecrypted = integration?.license_code ?? "";
+    if (licenseDecrypted.startsWith("enc:")) {
+      const { data } = await supabase.rpc("decrypt_secret", { _ciphertext: licenseDecrypted });
+      if (typeof data === "string") licenseDecrypted = data;
+    }
+
     setForm({
       cnpj: integration?.cnpj ?? company.cnpj ?? "",
-      license_code: integration?.license_code ?? "",
-      bearer_token: integration?.bearer_token ?? "",
+      license_code: licenseDecrypted,
+      bearer_token: "",
       is_active: integration?.is_active ?? true,
     });
   }
 
   async function handleSave() {
     if (!editing) return;
-    if (!form.cnpj.trim() || !form.bearer_token.trim()) {
+    const isNewIntegration = !editing.integration;
+    if (!form.cnpj.trim() || (isNewIntegration && !form.bearer_token.trim())) {
       toast({ title: "Preencha CNPJ e Token", variant: "destructive" });
       return;
     }
@@ -283,21 +294,27 @@ export default function SSoticaIntegrationsPage() {
       const onlyDigits = rawCnpj.replace(/\D/g, "");
       const isCnpj = !/[a-zA-Z]/.test(rawCnpj) && onlyDigits.length === 14;
       const cnpjToSave = isCnpj ? onlyDigits : rawCnpj;
-      const payload = {
+
+      const basePayload: any = {
         company_id: editing.company.id,
         cnpj: cnpjToSave,
         license_code: form.license_code.trim() || null,
-        bearer_token: form.bearer_token.trim(),
         is_active: form.is_active,
       };
+
       if (editing.integration) {
+        // Em edição: só atualiza o token se um novo foi informado
+        if (form.bearer_token.trim()) {
+          basePayload.bearer_token = form.bearer_token.trim();
+        }
         const { error } = await supabase
           .from("ssotica_integrations")
-          .update(payload)
+          .update(basePayload)
           .eq("id", editing.integration.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("ssotica_integrations").insert(payload);
+        basePayload.bearer_token = form.bearer_token.trim();
+        const { error } = await supabase.from("ssotica_integrations").insert(basePayload);
         if (error) throw error;
       }
       toast({ title: "Integração salva" });
