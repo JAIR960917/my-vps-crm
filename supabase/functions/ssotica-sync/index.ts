@@ -509,10 +509,18 @@ async function syncContasReceber(
   if (!isBackfillChunk) {
     const { data: cobrancasNoBanco } = await supabase
       .from("crm_cobrancas")
-      .select("id, ssotica_parcela_id, ssotica_cliente_id")
+      .select("id, ssotica_parcela_id, ssotica_cliente_id, data")
       .eq("ssotica_company_id", integ.company_id)
       .not("ssotica_cliente_id", "is", null);
-    const storedCobrancas = (cobrancasNoBanco ?? []) as StoredCobranca[];
+    const storedCobrancas = (cobrancasNoBanco ?? []) as (StoredCobranca & { data?: any })[];
+
+    // Cache de labels das colunas de Renovação (para registrar log da transição reversa)
+    const { data: renStatusRowsForCob } = await supabase
+      .from("crm_renovacao_statuses")
+      .select("key,label");
+    const renStatusLabelByKeyForCob = new Map<string, string>(
+      (renStatusRowsForCob ?? []).map((s: any) => [s.key, s.label]),
+    );
 
     if (storedCobrancas.length > 0) {
       for (const cob of storedCobrancas) {
@@ -520,9 +528,63 @@ async function syncContasReceber(
         const clienteId = Number(cob.ssotica_cliente_id);
         if (parcelaId && parcelasAtivasIds.has(parcelaId)) continue;
         if (clientesAfetados.has(clienteId) && parcelasPorCliente.has(clienteId)) continue;
+
+        // Cliente PAGOU/RENEGOCIOU: remove a cobrança e cria/restaura o card de Renovação
+        // imediatamente, sem depender de uma venda nova aparecer no syncVendas.
+        const cobData = (cob as any).data ?? {};
+        const clienteNome = String(cobData?.nome ?? cobData?.ssotica_raw?.titulo?.cliente?.nome ?? "Cliente SSótica");
+        const telefone = String(cobData?.telefone ?? "");
+        const documento = String(cobData?.documento ?? cobData?.cpf ?? "");
+        const email = String(cobData?.email ?? "");
+
         await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
         removed++;
         clientesQuitadosSet.add(clienteId);
+
+        // Verifica se já existe Renovação desse cliente; se não, cria com base no que sabemos
+        const { data: jaTemRen } = await supabase
+          .from("crm_renovacoes")
+          .select("id")
+          .eq("ssotica_cliente_id", clienteId)
+          .eq("ssotica_company_id", integ.company_id)
+          .maybeSingle();
+
+        if (!jaTemRen) {
+          // Sem data confiável de última compra → coluna inicial "novo"
+          const renStatusKey = "novo";
+          const { data: insertedRen } = await supabase
+            .from("crm_renovacoes")
+            .insert({
+              ssotica_cliente_id: clienteId,
+              ssotica_company_id: integ.company_id,
+              assigned_to: null,
+              data: {
+                nome: clienteNome,
+                telefone,
+                documento,
+                cpf: documento,
+                email,
+                origem_transicao: "cobranca_quitada",
+              },
+              status: renStatusKey,
+            })
+            .select("id")
+            .maybeSingle();
+
+          await supabase.from("crm_module_transition_logs").insert({
+            cliente_nome: clienteNome,
+            from_module: "cobranca",
+            to_module: "renovacao",
+            to_status_key: renStatusKey,
+            to_status_label: renStatusLabelByKeyForCob.get(renStatusKey) ?? renStatusKey,
+            source_record_id: cob.id,
+            target_record_id: (insertedRen as any)?.id ?? null,
+            ssotica_cliente_id: clienteId,
+            company_id: integ.company_id,
+            triggered_by: null,
+            trigger_source: "auto",
+          });
+        }
       }
     }
   }
@@ -1010,11 +1072,13 @@ Deno.serve(async (req) => {
 
     // ========== MODO 1: tick do cron — processa próximo chunk de qualquer integração pronta ==========
     if (mode === "backfill_tick") {
+      // Inclui tanto "running" (já em andamento) quanto "scheduled" (agendadas pelo "Ressincronizar tudo").
+      // Quando uma loja "scheduled" é pega, promovemos para "running" antes de processar.
       const { data: pending } = await supabase
         .from("ssotica_integrations")
         .select("*")
         .eq("is_active", true)
-        .eq("backfill_status", "running")
+        .in("backfill_status", ["running", "scheduled"])
         .lte("backfill_next_run_at", new Date().toISOString())
         .limit(5); // até 5 lojas em paralelo no mesmo tick
       const list = (pending ?? []) as Integration[];
@@ -1025,6 +1089,14 @@ Deno.serve(async (req) => {
       }
       const results: any[] = [];
       for (const integ of list) {
+        // Promove "scheduled" → "running" para que runBackfillChunk processe normalmente
+        if (integ.backfill_status === "scheduled") {
+          await supabase
+            .from("ssotica_integrations")
+            .update({ backfill_status: "running", sync_status: "running" })
+            .eq("id", integ.id);
+          (integ as any).backfill_status = "running";
+        }
         const r = await runBackfillChunk(supabase, integ);
         results.push({ integration_id: integ.id, ...r });
       }
