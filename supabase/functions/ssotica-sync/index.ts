@@ -1016,7 +1016,6 @@ async function syncVendas(
   return { processed, created, updated, chunks: chunksProcessed };
 }
 
-// Helper: roda 1 chunk de backfill (vendas + cobranças daquela janela de 12 meses).
 // Reconciliação: para uma loja, encontra todas as renovações cujo cliente tem cobrança
 // aberta (status != pago/cancelado) e as remove, registrando a transição reversa.
 // É uma rede de segurança contra cards mal posicionados durante backfill por chunks.
