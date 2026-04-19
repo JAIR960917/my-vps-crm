@@ -766,35 +766,44 @@ async function syncVendas(
   const windows = buildWindows(overallStart, overallEnd);
 
   // ===== PASSO 1: Ordens de Serviço (receitas) =====
-  for (const w of windows) {
-    const url =
-      `${SSOTICA_BASE}/ordens-servico/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
-    let ordens: any[] = [];
-    try {
-      ordens = await fetchSSotica(url, integ.bearer_token) as any[];
-    } catch (e) {
-      console.warn(`[ssotica-sync][os] janela ${w.start}→${w.end} falhou:`, (e as Error).message);
-      continue;
-    }
-    if (!Array.isArray(ordens)) continue;
-    for (const os of ordens) {
-      // Só interessa quando a O.S. tem receita registrada
-      const receita = os?.receita;
-      if (!receita || !os?.cliente?.id || !os?.data) continue;
-      const clienteId = Number(os.cliente.id);
-      const dataOs = String(os.data); // YYYY-MM-DD — data em que a O.S./receita foi emitida
-      const prev = ultimaReceitaPorCliente.get(clienteId);
-      if (!prev || prev.data < dataOs) {
-        ultimaReceitaPorCliente.set(clienteId, {
-          data: dataOs,
-          osId: Number(os.id ?? 0),
-          optometrista: String(receita.optometrista ?? ""),
-          validade: receita.validade ? String(receita.validade).slice(0, 10) : null,
-        });
+  // ⚡ OTIMIZAÇÃO: durante backfill (chunks históricos), pulamos a busca de O.S.
+  // — é a parte mais cara da sync (loja grande = ~1500 clientes_com_receita por chunk
+  // de 6 meses, demora 30-60s só pra esse passo) e raramente muda a coluna do card,
+  // já que o que importa é a data da última VENDA. No sync incremental (janela curta),
+  // continuamos buscando OS para manter "última receita" precisa.
+  if (!isBackfillChunk) {
+    for (const w of windows) {
+      const url =
+        `${SSOTICA_BASE}/ordens-servico/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+      let ordens: any[] = [];
+      try {
+        ordens = await fetchSSotica(url, integ.bearer_token) as any[];
+      } catch (e) {
+        console.warn(`[ssotica-sync][os] janela ${w.start}→${w.end} falhou:`, (e as Error).message);
+        continue;
+      }
+      if (!Array.isArray(ordens)) continue;
+      for (const os of ordens) {
+        // Só interessa quando a O.S. tem receita registrada
+        const receita = os?.receita;
+        if (!receita || !os?.cliente?.id || !os?.data) continue;
+        const clienteId = Number(os.cliente.id);
+        const dataOs = String(os.data); // YYYY-MM-DD — data em que a O.S./receita foi emitida
+        const prev = ultimaReceitaPorCliente.get(clienteId);
+        if (!prev || prev.data < dataOs) {
+          ultimaReceitaPorCliente.set(clienteId, {
+            data: dataOs,
+            osId: Number(os.id ?? 0),
+            optometrista: String(receita.optometrista ?? ""),
+            validade: receita.validade ? String(receita.validade).slice(0, 10) : null,
+          });
+        }
       }
     }
+    console.log(`[ssotica-sync][os] empresa=${integ.company_id} clientes_com_receita=${ultimaReceitaPorCliente.size}`);
+  } else {
+    console.log(`[ssotica-sync][os] empresa=${integ.company_id} pulado (backfill chunk — usa data da venda)`);
   }
-  console.log(`[ssotica-sync][os] empresa=${integ.company_id} clientes_com_receita=${ultimaReceitaPorCliente.size}`);
 
   // ===== PASSO 2: Vendas =====
   for (const w of windows) {
