@@ -136,6 +136,34 @@ interface Integration {
   backfill_next_run_at: string | null;
 }
 
+// Descriptografa bearer_token e license_code (que ficam criptografados em repouso no banco).
+// Tokens não criptografados (sem prefixo "enc:") passam sem alteração.
+async function decryptIntegrations<T extends { bearer_token?: string | null; license_code?: string | null }>(
+  supabase: any,
+  list: T[],
+): Promise<T[]> {
+  for (const it of list) {
+    if (it.bearer_token && it.bearer_token.startsWith("enc:")) {
+      const { data } = await supabase.rpc("decrypt_secret", { _ciphertext: it.bearer_token });
+      if (typeof data === "string") it.bearer_token = data;
+    }
+    if (it.license_code && it.license_code.startsWith("enc:")) {
+      const { data } = await supabase.rpc("decrypt_secret", { _ciphertext: it.license_code });
+      if (typeof data === "string") it.license_code = data;
+    }
+  }
+  return list;
+}
+
+async function decryptIntegration<T extends { bearer_token?: string | null; license_code?: string | null }>(
+  supabase: any,
+  item: T | null,
+): Promise<T | null> {
+  if (!item) return item;
+  await decryptIntegrations(supabase, [item]);
+  return item;
+}
+
 // Calcula a janela de datas de um chunk específico (chunk 0 = mais recente).
 // chunk 0 → últimos 12 meses; chunk 1 → 12-24 meses atrás; ... ; chunk 7 → 84-96 meses atrás.
 function chunkDateRange(chunkIndex: number, futureDays = 0): { start: Date; end: Date } {
