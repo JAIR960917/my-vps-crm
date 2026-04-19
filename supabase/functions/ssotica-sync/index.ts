@@ -1010,11 +1010,13 @@ Deno.serve(async (req) => {
 
     // ========== MODO 1: tick do cron — processa próximo chunk de qualquer integração pronta ==========
     if (mode === "backfill_tick") {
+      // Inclui tanto "running" (já em andamento) quanto "scheduled" (agendadas pelo "Ressincronizar tudo").
+      // Quando uma loja "scheduled" é pega, promovemos para "running" antes de processar.
       const { data: pending } = await supabase
         .from("ssotica_integrations")
         .select("*")
         .eq("is_active", true)
-        .eq("backfill_status", "running")
+        .in("backfill_status", ["running", "scheduled"])
         .lte("backfill_next_run_at", new Date().toISOString())
         .limit(5); // até 5 lojas em paralelo no mesmo tick
       const list = (pending ?? []) as Integration[];
@@ -1025,6 +1027,14 @@ Deno.serve(async (req) => {
       }
       const results: any[] = [];
       for (const integ of list) {
+        // Promove "scheduled" → "running" para que runBackfillChunk processe normalmente
+        if (integ.backfill_status === "scheduled") {
+          await supabase
+            .from("ssotica_integrations")
+            .update({ backfill_status: "running", sync_status: "running" })
+            .eq("id", integ.id);
+          (integ as any).backfill_status = "running";
+        }
         const r = await runBackfillChunk(supabase, integ);
         results.push({ integration_id: integ.id, ...r });
       }
