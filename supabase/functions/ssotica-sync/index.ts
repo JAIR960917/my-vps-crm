@@ -1071,6 +1071,8 @@ async function reconcileRenovacoesVsCobrancas(
 }
 
 
+// Helper: roda 1 chunk de backfill (vendas + cobranças daquela janela de 12 meses).
+async function runBackfillChunk(
   supabase: any,
   integ: Integration,
 ): Promise<{ ok: true; chunk_index: number; finished: boolean } | { ok: false; error: string }> {
