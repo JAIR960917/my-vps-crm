@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare, CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare, CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Role = "admin" | "gerente" | "financeiro" | "vendedor";
@@ -32,6 +32,7 @@ const navItems: NavItem[] = [
   { path: "/whatsapp", label: "WhatsApp", icon: MessageSquare, roles: ["admin", "gerente"] },
   { path: "/importar", label: "Importar Leads", icon: Upload, roles: ["admin"] },
   { path: "/integracoes-ssotica", label: "Integrações SSótica", icon: Plug, roles: ["admin"] },
+  { path: "/logs-movimentacao", label: "Logs Movimentação", icon: History, roles: ["admin"] },
 ];
 
 interface Props {

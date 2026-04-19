@@ -237,6 +237,44 @@ async function syncContasReceber(
     .maybeSingle();
   const defaultAssignee: string | null = (brendaProfile as any)?.user_id ?? null;
 
+  // Cache de labels das colunas de cobrança (key -> label) para registro de logs
+  const { data: cobStatusRows } = await supabase
+    .from("crm_cobranca_statuses")
+    .select("key,label");
+  const cobStatusLabelByKey = new Map<string, string>(
+    (cobStatusRows ?? []).map((s: any) => [s.key, s.label]),
+  );
+
+  // Helper: registra movimentação automática entre Renovação e Cobrança
+  async function logTransition(params: {
+    cliente_nome: string;
+    from_module: "renovacao" | "cobranca";
+    to_module: "renovacao" | "cobranca";
+    to_status_key?: string | null;
+    to_status_label?: string | null;
+    source_record_id?: string | null;
+    target_record_id?: string | null;
+    ssotica_cliente_id?: number | null;
+  }) {
+    try {
+      await supabase.from("crm_module_transition_logs").insert({
+        cliente_nome: params.cliente_nome || "Cliente SSótica",
+        from_module: params.from_module,
+        to_module: params.to_module,
+        to_status_key: params.to_status_key ?? null,
+        to_status_label: params.to_status_label ?? null,
+        source_record_id: params.source_record_id ?? null,
+        target_record_id: params.target_record_id ?? null,
+        ssotica_cliente_id: params.ssotica_cliente_id ?? null,
+        company_id: integ.company_id,
+        triggered_by: null,
+        trigger_source: "auto",
+      });
+    } catch (e) {
+      console.error("[transition-log] erro ao registrar:", e);
+    }
+  }
+
   // Coletamos IDs de parcelas que ainda estão em aberto/vencidas neste sync.
   // Usamos para detectar cobranças do banco que sumiram da API (foram pagas).
   const parcelasAtivasIds = new Set<number>();
@@ -435,12 +473,32 @@ async function syncContasReceber(
       created++;
     }
 
-    // Cliente entrou em cobrança → remove da Renovação (se estiver lá)
+    // Cliente entrou em cobrança → remove da Renovação (se estiver lá) e registra log
+    const { data: renovacaoExistente } = await supabase
+      .from("crm_renovacoes")
+      .select("id")
+      .eq("ssotica_cliente_id", clienteIdNum)
+      .eq("ssotica_company_id", integ.company_id)
+      .maybeSingle();
+
     await supabase
       .from("crm_renovacoes")
       .delete()
       .eq("ssotica_cliente_id", clienteIdNum)
       .eq("ssotica_company_id", integ.company_id);
+
+    if (renovacaoExistente) {
+      await logTransition({
+        cliente_nome: data.nome,
+        from_module: "renovacao",
+        to_module: "cobranca",
+        to_status_key: colunaKey,
+        to_status_label: cobStatusLabelByKey.get(colunaKey) ?? colunaKey,
+        source_record_id: (renovacaoExistente as any).id,
+        target_record_id: existingCobranca?.id ?? null,
+        ssotica_cliente_id: clienteIdNum,
+      });
+    }
   }
 
   // ===== Pós-processamento: remover cards de clientes que não têm mais nenhuma parcela em atraso =====
@@ -539,6 +597,40 @@ async function syncVendas(
     .filter((p) => roleByUserId.get(p.user_id) === "vendedor")
     .map((p) => p.user_id)
     .sort(); // ordem estável
+
+  // Cache de labels das colunas de renovação (key -> label) para registro de logs
+  const { data: renStatusRows } = await supabase
+    .from("crm_renovacao_statuses")
+    .select("key,label");
+  const renStatusLabelByKey = new Map<string, string>(
+    (renStatusRows ?? []).map((s: any) => [s.key, s.label]),
+  );
+  const clientesQuitadosSet = new Set<number>(clientesQuitados);
+
+  async function logRenovacaoTransition(params: {
+    cliente_nome: string;
+    statusKey: string;
+    target_record_id: string | null;
+    ssotica_cliente_id: number;
+  }) {
+    try {
+      await supabase.from("crm_module_transition_logs").insert({
+        cliente_nome: params.cliente_nome || "Cliente SSótica",
+        from_module: "cobranca",
+        to_module: "renovacao",
+        to_status_key: params.statusKey,
+        to_status_label: renStatusLabelByKey.get(params.statusKey) ?? params.statusKey,
+        source_record_id: null,
+        target_record_id: params.target_record_id,
+        ssotica_cliente_id: params.ssotica_cliente_id,
+        company_id: integ.company_id,
+        triggered_by: null,
+        trigger_source: "auto",
+      });
+    } catch (e) {
+      console.error("[transition-log] erro ao registrar:", e);
+    }
+  }
 
   const findResponsibleProfile = (responsavelNome: string | null | undefined) => {
     if (!responsavelNome) return null;
@@ -760,18 +852,33 @@ async function syncVendas(
         updated++;
       }
     } else {
-      await supabase.from("crm_renovacoes").insert({
-        ssotica_cliente_id: clienteId,
-        ssotica_venda_id: info.vendaId,
-        ssotica_company_id: integ.company_id,
-        assigned_to: resolvedAssignedTo,
-        data: renovacaoData,
-        data_ultima_compra: dataReferencia,
-        valor: info.valor,
-        status: hasAssignedVendedor ? flowStatus : DIRECIONAMENTO_STATUS,
-        scheduled_date: dataReferencia,
-      });
+      const newStatusKey = hasAssignedVendedor ? flowStatus : DIRECIONAMENTO_STATUS;
+      const { data: inserted } = await supabase
+        .from("crm_renovacoes")
+        .insert({
+          ssotica_cliente_id: clienteId,
+          ssotica_venda_id: info.vendaId,
+          ssotica_company_id: integ.company_id,
+          assigned_to: resolvedAssignedTo,
+          data: renovacaoData,
+          data_ultima_compra: dataReferencia,
+          valor: info.valor,
+          status: newStatusKey,
+          scheduled_date: dataReferencia,
+        })
+        .select("id")
+        .maybeSingle();
       created++;
+
+      // Se o cliente saiu da Cobrança nesta sync, registra a transição
+      if (clientesQuitadosSet.has(clienteId)) {
+        await logRenovacaoTransition({
+          cliente_nome: cliente.nome,
+          statusKey: newStatusKey,
+          target_record_id: (inserted as any)?.id ?? null,
+          ssotica_cliente_id: clienteId,
+        });
+      }
     }
   }
 

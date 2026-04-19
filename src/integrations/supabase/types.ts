@@ -469,6 +469,62 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_module_transition_logs: {
+        Row: {
+          cliente_nome: string
+          company_id: string | null
+          created_at: string
+          from_module: string
+          id: string
+          source_record_id: string | null
+          ssotica_cliente_id: number | null
+          target_record_id: string | null
+          to_module: string
+          to_status_key: string | null
+          to_status_label: string | null
+          trigger_source: string
+          triggered_by: string | null
+        }
+        Insert: {
+          cliente_nome: string
+          company_id?: string | null
+          created_at?: string
+          from_module: string
+          id?: string
+          source_record_id?: string | null
+          ssotica_cliente_id?: number | null
+          target_record_id?: string | null
+          to_module: string
+          to_status_key?: string | null
+          to_status_label?: string | null
+          trigger_source?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          cliente_nome?: string
+          company_id?: string | null
+          created_at?: string
+          from_module?: string
+          id?: string
+          source_record_id?: string | null
+          ssotica_cliente_id?: number | null
+          target_record_id?: string | null
+          to_module?: string
+          to_status_key?: string | null
+          to_status_label?: string | null
+          trigger_source?: string
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_module_transition_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_renovacao_form_fields: {
         Row: {
           created_at: string
