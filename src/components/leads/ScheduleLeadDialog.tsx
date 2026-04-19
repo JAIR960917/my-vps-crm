@@ -89,17 +89,17 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
 
           <div className="space-y-2">
             <Label>Data do Agendamento <span className="text-destructive">*</span></Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                  <CalendarIcon className="mr-2 h-4 w-4 text-destructive" />
-                  {date ? format(date, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={date} onSelect={setDate} locale={ptBR} className="p-3 pointer-events-auto" />
-              </PopoverContent>
-            </Popover>
+            <div className="relative">
+              <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive pointer-events-none" />
+              <Input
+                type="date"
+                value={dateStr}
+                onChange={(e) => setDateStr(e.target.value)}
+                required
+                onClick={(e) => (e.currentTarget as any).showPicker?.()}
+                className="pl-10 cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
