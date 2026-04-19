@@ -132,7 +132,7 @@ export default function TransitionLogsPage() {
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 onClick={(e) => (e.currentTarget as any).showPicker?.()}
-                className="cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                className="cursor-pointer"
               />
             </div>
             <div className="space-y-1.5">
@@ -143,7 +143,7 @@ export default function TransitionLogsPage() {
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 onClick={(e) => (e.currentTarget as any).showPicker?.()}
-                className="cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                className="cursor-pointer"
               />
             </div>
             <div className="space-y-1.5">
