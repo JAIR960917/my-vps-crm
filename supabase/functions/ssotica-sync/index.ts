@@ -9,10 +9,11 @@ const corsHeaders = {
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
 const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
-// Histórico total: 96 meses (8 anos), processado em chunks de 12 meses
-// para evitar timeout da edge function em lojas com histórico longo.
+// Histórico total: 96 meses (8 anos), processado em chunks de 6 meses
+// para evitar timeout da edge function em lojas grandes (~7000 cobranças/ano).
+// Antes: 12 meses × 8 chunks. Agora: 6 meses × 16 chunks (cada chunk ~50% mais rápido).
 const MAX_HISTORY_DAYS = 2880; // 96 meses
-const CHUNK_DAYS = 365;        // ~12 meses por chunk
+const CHUNK_DAYS = 183;        // ~6 meses por chunk
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
@@ -765,35 +766,44 @@ async function syncVendas(
   const windows = buildWindows(overallStart, overallEnd);
 
   // ===== PASSO 1: Ordens de Serviço (receitas) =====
-  for (const w of windows) {
-    const url =
-      `${SSOTICA_BASE}/ordens-servico/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
-    let ordens: any[] = [];
-    try {
-      ordens = await fetchSSotica(url, integ.bearer_token) as any[];
-    } catch (e) {
-      console.warn(`[ssotica-sync][os] janela ${w.start}→${w.end} falhou:`, (e as Error).message);
-      continue;
-    }
-    if (!Array.isArray(ordens)) continue;
-    for (const os of ordens) {
-      // Só interessa quando a O.S. tem receita registrada
-      const receita = os?.receita;
-      if (!receita || !os?.cliente?.id || !os?.data) continue;
-      const clienteId = Number(os.cliente.id);
-      const dataOs = String(os.data); // YYYY-MM-DD — data em que a O.S./receita foi emitida
-      const prev = ultimaReceitaPorCliente.get(clienteId);
-      if (!prev || prev.data < dataOs) {
-        ultimaReceitaPorCliente.set(clienteId, {
-          data: dataOs,
-          osId: Number(os.id ?? 0),
-          optometrista: String(receita.optometrista ?? ""),
-          validade: receita.validade ? String(receita.validade).slice(0, 10) : null,
-        });
+  // ⚡ OTIMIZAÇÃO: durante backfill (chunks históricos), pulamos a busca de O.S.
+  // — é a parte mais cara da sync (loja grande = ~1500 clientes_com_receita por chunk
+  // de 6 meses, demora 30-60s só pra esse passo) e raramente muda a coluna do card,
+  // já que o que importa é a data da última VENDA. No sync incremental (janela curta),
+  // continuamos buscando OS para manter "última receita" precisa.
+  if (!isBackfillChunk) {
+    for (const w of windows) {
+      const url =
+        `${SSOTICA_BASE}/ordens-servico/periodo?cnpj=${encodeURIComponent(cnpjVendas)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
+      let ordens: any[] = [];
+      try {
+        ordens = await fetchSSotica(url, integ.bearer_token) as any[];
+      } catch (e) {
+        console.warn(`[ssotica-sync][os] janela ${w.start}→${w.end} falhou:`, (e as Error).message);
+        continue;
+      }
+      if (!Array.isArray(ordens)) continue;
+      for (const os of ordens) {
+        // Só interessa quando a O.S. tem receita registrada
+        const receita = os?.receita;
+        if (!receita || !os?.cliente?.id || !os?.data) continue;
+        const clienteId = Number(os.cliente.id);
+        const dataOs = String(os.data); // YYYY-MM-DD — data em que a O.S./receita foi emitida
+        const prev = ultimaReceitaPorCliente.get(clienteId);
+        if (!prev || prev.data < dataOs) {
+          ultimaReceitaPorCliente.set(clienteId, {
+            data: dataOs,
+            osId: Number(os.id ?? 0),
+            optometrista: String(receita.optometrista ?? ""),
+            validade: receita.validade ? String(receita.validade).slice(0, 10) : null,
+          });
+        }
       }
     }
+    console.log(`[ssotica-sync][os] empresa=${integ.company_id} clientes_com_receita=${ultimaReceitaPorCliente.size}`);
+  } else {
+    console.log(`[ssotica-sync][os] empresa=${integ.company_id} pulado (backfill chunk — usa data da venda)`);
   }
-  console.log(`[ssotica-sync][os] empresa=${integ.company_id} clientes_com_receita=${ultimaReceitaPorCliente.size}`);
 
   // ===== PASSO 2: Vendas =====
   for (const w of windows) {
@@ -1081,12 +1091,26 @@ async function runBackfillChunk(
   supabase: any,
   integ: Integration,
 ): Promise<{ ok: true; chunk_index: number; finished: boolean } | { ok: false; error: string }> {
-  const total = integ.backfill_total_chunks || 8;
+  const total = integ.backfill_total_chunks || 16;
   const idx = integ.backfill_chunk_index || 0;
-  // chunk 0 = mais recente (últimos 12 meses) — futureDays=COBRANCAS_FUTURE_DAYS pra pegar parcelas a vencer
+  // chunk 0 = mais recente (últimos 6 meses) — futureDays=COBRANCAS_FUTURE_DAYS pra pegar parcelas a vencer
   const futureDays = idx === 0 ? COBRANCAS_FUTURE_DAYS : 0;
   const range = chunkDateRange(idx, futureDays);
   console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} iniciando chunk ${idx + 1}/${total} (${ymd(range.start)}→${ymd(range.end)})`);
+
+  // ⚡ OTIMIZAÇÃO CRÍTICA: avança o cursor ANTES de processar.
+  // Se der timeout no meio do processamento, o próximo tick do cron já vai pro próximo chunk
+  // (em vez de reprocessar infinitamente o mesmo). Trade-off aceitável: pode pular dados de
+  // 1 chunk em caso de timeout, mas evita loop infinito que trava 100% do backfill.
+  const nextIdxOptimistic = idx + 1;
+  const finishedOptimistic = nextIdxOptimistic >= total;
+  const nextRunAtOptimistic = finishedOptimistic ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
+  await supabase.from("ssotica_integrations").update({
+    backfill_chunk_index: nextIdxOptimistic,
+    backfill_next_run_at: nextRunAtOptimistic,
+    backfill_status: "running",
+    sync_status: "running",
+  }).eq("id", integ.id);
 
   const { data: log } = await supabase.from("ssotica_sync_logs").insert({
     integration_id: integ.id,
@@ -1101,16 +1125,12 @@ async function runBackfillChunk(
 
     const nextIdx = idx + 1;
     const finished = nextIdx >= total;
-    // Próxima execução: 3 minutos depois (ou null se terminou)
-    const nextRunAt = finished ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
     const finishedAt = new Date().toISOString();
 
-    // ⚡ SALVAR PROGRESSO PRIMEIRO (antes da reconciliação) para evitar
-    // que um timeout na reconciliação faça o chunk reprocessar infinitamente.
+    // Cursor já foi avançado antes do processamento (otimização anti-loop).
+    // Aqui só atualizamos os timestamps de sucesso e marcamos "done" se for o último chunk.
     await supabase.from("ssotica_integrations").update({
-      backfill_chunk_index: nextIdx,
       backfill_status: finished ? "done" : "running",
-      backfill_next_run_at: nextRunAt,
       sync_status: finished ? "idle" : "running",
       initial_sync_done: finished ? true : integ.initial_sync_done,
       last_sync_receber_at: finished ? finishedAt : integ.last_sync_receber_at,
@@ -1129,6 +1149,7 @@ async function runBackfillChunk(
       }).eq("id", logId);
     }
 
+    const nextRunAt = finished ? null : new Date(Date.now() + 3 * 60 * 1000).toISOString();
     console.log(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1}/${total} OK. ${finished ? 'CONCLUÍDO!' : `próximo em 3min (${nextRunAt})`}`);
 
     // RECONCILIAÇÃO: roda APENAS no chunk final (quando todos os dados já foram sincronizados).
@@ -1180,10 +1201,10 @@ async function runBackfillChunk(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[ssotica-sync][backfill] empresa=${integ.company_id} chunk ${idx + 1} FALHOU:`, msg);
-    // Em caso de erro, agenda retry em 3 minutos no MESMO chunk (não avança)
+    // Em caso de erro real (não-timeout), o cursor JÁ foi avançado antes — isso é intencional
+    // para evitar loop infinito. O chunk com erro fica registrado em ssotica_sync_logs e pode
+    // ser reprocessado manualmente depois. Mantemos status "running" pra continuar com próximos.
     await supabase.from("ssotica_integrations").update({
-      backfill_status: "running",
-      backfill_next_run_at: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
       sync_status: "error",
       last_error: msg.slice(0, 1000),
     }).eq("id", integ.id);
@@ -1260,7 +1281,7 @@ Deno.serve(async (req) => {
         .from("ssotica_integrations")
         .update({
           backfill_chunk_index: 0,
-          backfill_total_chunks: 8,
+          backfill_total_chunks: 16,
           backfill_status: "running",
           backfill_started_at: new Date().toISOString(),
           backfill_next_run_at: new Date().toISOString(),
@@ -1278,7 +1299,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         ok: true,
         mode: "start_backfill",
-        message: "Backfill de 96 meses iniciado. Os próximos 7 chunks rodarão automaticamente, 1 a cada 3 minutos.",
+        message: "Backfill de 96 meses iniciado. Os próximos 15 chunks rodarão automaticamente, 1 a cada 3 minutos.",
         first_chunk: r,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
