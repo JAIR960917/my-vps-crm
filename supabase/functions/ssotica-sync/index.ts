@@ -626,7 +626,7 @@ async function syncContasReceber(
         // NÃO deletamos — preferimos manter um falso positivo do que migrar errado.
         if (!parcelaId || !parcelasInativasIds.has(parcelaId)) continue;
 
-        // OK, evidência confirmada de quitação: remove cobrança e cria/restaura Renovação.
+        // OK, evidência confirmada de quitação DESTA parcela: remove só este card.
         const cobData = (cob as any).data ?? {};
         const clienteNome = String(cobData?.nome ?? cobData?.ssotica_raw?.titulo?.cliente?.nome ?? "Cliente SSótica");
         const telefone = String(cobData?.telefone ?? "");
@@ -635,9 +635,28 @@ async function syncContasReceber(
 
         await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
         removed++;
+
+        // ⚠️ IMPORTANTE: o cliente pode ter OUTRAS parcelas em aberto (mais
+        // antigas ou em outros cards). Só consideramos "quitado de verdade"
+        // — e portanto candidato a voltar para Renovação — se NÃO existir
+        // mais nenhum card de cobrança ativa para esse cliente nesta loja.
+        const { data: cobrancasRestantes } = await supabase
+          .from("crm_cobrancas")
+          .select("id")
+          .eq("ssotica_cliente_id", clienteId)
+          .eq("ssotica_company_id", integ.company_id)
+          .not("status", "in", "(pago,cancelado)")
+          .limit(1);
+
+        if (cobrancasRestantes && cobrancasRestantes.length > 0) {
+          // Ainda há parcelas em aberto desse cliente → mantém em Cobrança,
+          // não cria Renovação e não loga a transição.
+          continue;
+        }
+
         clientesQuitadosSet.add(clienteId);
 
-        // Log: exclusão automática do card de cobrança (cliente quitou)
+        // Log: exclusão automática do card de cobrança (cliente quitou TUDO)
         await supabase.from("crm_module_transition_logs").insert({
           cliente_nome: clienteNome,
           from_module: "cobranca",
