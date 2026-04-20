@@ -504,7 +504,7 @@ async function syncContasReceber(
       created++;
 
       // Log: card de cobrança criado automaticamente
-      await logTransition({
+      await supabase.from("crm_module_transition_logs").insert({
         cliente_nome: String((data as any)?.nome ?? "Cliente SSótica"),
         from_module: "none",
         to_module: "cobranca",
@@ -512,6 +512,9 @@ async function syncContasReceber(
         to_status_label: cobStatusLabelByKey.get(colunaKey) ?? colunaKey,
         target_record_id: (insertedCob as any)?.id ?? null,
         ssotica_cliente_id: clienteIdNum,
+        company_id: integ.company_id,
+        triggered_by: null,
+        trigger_source: "auto",
       });
     }
 
