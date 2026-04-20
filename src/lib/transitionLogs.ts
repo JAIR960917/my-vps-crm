@@ -25,6 +25,15 @@ export type LogTransitionParams = {
  */
 export async function logTransition(params: LogTransitionParams) {
   try {
+    const triggerSource = params.trigger_source ?? "manual";
+    // Para logs manuais, garante que triggered_by seja o usuário corrente
+    // (RLS exige isso desde a correção de segurança).
+    let triggeredBy: string | null = params.triggered_by ?? null;
+    if (triggerSource === "manual" && !triggeredBy) {
+      const { data: userData } = await supabase.auth.getUser();
+      triggeredBy = userData?.user?.id ?? null;
+    }
+
     await (supabase as any).from("crm_module_transition_logs").insert({
       cliente_nome: params.cliente_nome || "Cliente",
       from_module: params.from_module,
@@ -35,8 +44,8 @@ export async function logTransition(params: LogTransitionParams) {
       target_record_id: params.target_record_id ?? null,
       company_id: params.company_id ?? null,
       ssotica_cliente_id: params.ssotica_cliente_id ?? null,
-      triggered_by: params.triggered_by ?? null,
-      trigger_source: params.trigger_source ?? "manual",
+      triggered_by: triggeredBy,
+      trigger_source: triggerSource,
     });
   } catch (e) {
     console.error("[transition-log] erro ao registrar:", e);
