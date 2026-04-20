@@ -34,7 +34,7 @@ type TransitionLog = {
 type Company = { id: string; name: string };
 
 const moduleLabel = (m: string) =>
-  m === "renovacao" ? "Renovação" : m === "cobranca" ? "Cobrança" : m === "none" ? "—" : m;
+  m === "renovacao" ? "Renovação" : m === "cobranca" ? "Cobrança" : m === "none" ? "Criado" : m;
 
 type EventKind = "create_ren" | "create_cob" | "delete_ren" | "delete_cob" | "ren_to_cob" | "cob_to_ren" | "other";
 
