@@ -581,6 +581,28 @@ async function syncContasReceber(
       (renStatusRowsForCob ?? []).map((s: any) => [s.key, s.label]),
     );
 
+    // Pool de vendedores ATIVOS da empresa para fallback round-robin
+    // (mesma lógica usada em syncVendas) — quando a cobrança é quitada e
+    // criamos um card de Renovação, garantimos um responsável.
+    const { data: cobCompanyProfiles } = await supabase
+      .from("profiles")
+      .select("user_id, full_name")
+      .eq("company_id", integ.company_id);
+    const cobCompanyUserIds = (cobCompanyProfiles ?? []).map((p: any) => p.user_id);
+    const { data: cobCompanyRoles } = cobCompanyUserIds.length > 0
+      ? await supabase.from("user_roles").select("user_id, role").in("user_id", cobCompanyUserIds)
+      : { data: [] as Array<{ user_id: string; role: AppRole }> };
+    const cobRoleByUserId = new Map<string, AppRole>(
+      (cobCompanyRoles ?? []).map((r: any) => [r.user_id, r.role as AppRole]),
+    );
+    const cobVendedoresPool = (cobCompanyProfiles ?? [])
+      .filter((p: any) => cobRoleByUserId.get(p.user_id) === "vendedor")
+      .map((p: any) => p.user_id as string)
+      .sort();
+    const cobManagerUserId = (cobCompanyProfiles ?? []).find(
+      (p: any) => cobRoleByUserId.get(p.user_id) === "gerente",
+    )?.user_id ?? null;
+
     if (storedCobrancas.length > 0) {
       for (const cob of storedCobrancas) {
         const parcelaId = cob.ssotica_parcela_id ? Number(cob.ssotica_parcela_id) : null;
