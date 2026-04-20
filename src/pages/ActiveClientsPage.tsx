@@ -320,8 +320,29 @@ export default function ActiveClientsPage() {
 
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
+    let snapshot: Renovacao | null = null;
+    for (const k of Object.keys(paginatedColumns)) {
+      const found = paginatedColumns[k]?.items.find((it) => it.id === deleteConfirmId);
+      if (found) { snapshot = found as Renovacao; break; }
+    }
     const { error } = await supabase.from("crm_renovacoes").delete().eq("id", deleteConfirmId);
-    if (error) toast.error("Erro ao excluir"); else toast.success("Renovação excluída");
+    if (error) toast.error("Erro ao excluir");
+    else {
+      toast.success("Renovação excluída");
+      const statusLabel = statuses.find((s) => s.key === snapshot?.status)?.label ?? snapshot?.status ?? null;
+      await logTransition({
+        cliente_nome: String((snapshot?.data as any)?.nome ?? "Cliente"),
+        from_module: "renovacao",
+        to_module: "none",
+        to_status_key: snapshot?.status ?? null,
+        to_status_label: statusLabel,
+        source_record_id: deleteConfirmId,
+        ssotica_cliente_id: snapshot?.ssotica_cliente_id ?? null,
+        company_id: snapshot?.ssotica_company_id ?? null,
+        triggered_by: user?.id ?? null,
+        trigger_source: "manual",
+      });
+    }
     removeItem(deleteConfirmId);
     setDeleteConfirmId(null);
   };
