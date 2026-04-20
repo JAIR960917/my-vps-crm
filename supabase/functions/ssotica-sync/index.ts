@@ -487,7 +487,7 @@ async function syncContasReceber(
         .eq("id", existingCobranca.id);
       updated++;
     } else {
-      await supabase.from("crm_cobrancas").insert({
+      const { data: insertedCob } = await supabase.from("crm_cobrancas").insert({
         company_id: integ.company_id,
         ssotica_parcela_id: maisAntiga.parcela_id,
         ssotica_titulo_id: maisAntiga.titulo_id,
@@ -500,8 +500,19 @@ async function syncContasReceber(
         dias_atraso: maisAntiga.dias_atraso,
         status: colunaKey,
         scheduled_date: maisAntiga.vencimento,
-      });
+      }).select("id").maybeSingle();
       created++;
+
+      // Log: card de cobrança criado automaticamente
+      await logTransition({
+        cliente_nome: String((data as any)?.nome ?? "Cliente SSótica"),
+        from_module: "none",
+        to_module: "cobranca",
+        to_status_key: colunaKey,
+        to_status_label: cobStatusLabelByKey.get(colunaKey) ?? colunaKey,
+        target_record_id: (insertedCob as any)?.id ?? null,
+        ssotica_cliente_id: clienteIdNum,
+      });
     }
 
     // Cliente entrou em cobrança → remove da Renovação (se estiver lá) e registra log
