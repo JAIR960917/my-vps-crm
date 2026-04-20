@@ -17,6 +17,7 @@ import { ptBR } from "date-fns/locale";
 import RenovacaoEditSheet from "@/components/renovacoes/RenovacaoEditSheet";
 import ScheduleLeadDialog from "@/components/leads/ScheduleLeadDialog";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
+import { logTransition } from "@/lib/transitionLogs";
 
 type Renovacao = {
   id: string;
@@ -291,8 +292,26 @@ export default function ActiveClientsPage() {
       const { error } = await supabase.from("crm_renovacoes").update(payload).eq("id", editingItem.id);
       if (error) toast.error("Erro ao atualizar"); else toast.success("Renovação atualizada");
     } else {
-      const { error } = await supabase.from("crm_renovacoes").insert({ ...payload, created_by: user?.id });
-      if (error) toast.error("Erro ao criar renovação"); else toast.success("Renovação criada");
+      const { data: created, error } = await supabase
+        .from("crm_renovacoes")
+        .insert({ ...payload, created_by: user?.id })
+        .select()
+        .single();
+      if (error) toast.error("Erro ao criar renovação");
+      else {
+        toast.success("Renovação criada");
+        const statusLabel = statuses.find((s) => s.key === resolvedStatus)?.label ?? resolvedStatus;
+        await logTransition({
+          cliente_nome: String((dataToSave as any)?.nome ?? "Cliente"),
+          from_module: "none",
+          to_module: "renovacao",
+          to_status_key: resolvedStatus,
+          to_status_label: statusLabel,
+          target_record_id: (created as any)?.id ?? null,
+          triggered_by: user?.id ?? null,
+          trigger_source: "manual",
+        });
+      }
     }
     setSaving(false);
     setDialogOpen(false);
