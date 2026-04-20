@@ -240,7 +240,7 @@ async function syncContasReceber(
   const today = new Date();
   // Janela: por padrão, últimos 12 meses + 60 dias à frente (sync incremental).
   // Quando há windowOverride (modo backfill), processa apenas o chunk de 12 meses indicado.
-  const overallStart = windowOverride?.start ?? addDays(today, -CHUNK_DAYS);
+  const overallStart = windowOverride?.start ?? addDays(today, -COBRANCAS_LOOKBACK_DAYS);
   const overallEnd = windowOverride?.end ?? addDays(today, COBRANCAS_FUTURE_DAYS);
   const isBackfillChunk = !!windowOverride;
 
