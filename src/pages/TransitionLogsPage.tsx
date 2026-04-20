@@ -15,11 +15,13 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
+type ModuleVal = "renovacao" | "cobranca" | "none";
+
 type TransitionLog = {
   id: string;
   cliente_nome: string;
-  from_module: "renovacao" | "cobranca";
-  to_module: "renovacao" | "cobranca";
+  from_module: ModuleVal;
+  to_module: ModuleVal;
   to_status_key: string | null;
   to_status_label: string | null;
   company_id: string | null;
@@ -31,7 +33,20 @@ type TransitionLog = {
 
 type Company = { id: string; name: string };
 
-const moduleLabel = (m: string) => (m === "renovacao" ? "Renovação" : m === "cobranca" ? "Cobrança" : m);
+const moduleLabel = (m: string) =>
+  m === "renovacao" ? "Renovação" : m === "cobranca" ? "Cobrança" : m === "none" ? "—" : m;
+
+type EventKind = "create_ren" | "create_cob" | "delete_ren" | "delete_cob" | "ren_to_cob" | "cob_to_ren" | "other";
+
+const classifyEvent = (l: TransitionLog): EventKind => {
+  if (l.from_module === "none" && l.to_module === "renovacao") return "create_ren";
+  if (l.from_module === "none" && l.to_module === "cobranca") return "create_cob";
+  if (l.from_module === "renovacao" && l.to_module === "none") return "delete_ren";
+  if (l.from_module === "cobranca" && l.to_module === "none") return "delete_cob";
+  if (l.from_module === "renovacao" && l.to_module === "cobranca") return "ren_to_cob";
+  if (l.from_module === "cobranca" && l.to_module === "renovacao") return "cob_to_ren";
+  return "other";
+};
 
 export default function TransitionLogsPage() {
   const { isAdmin, loading: authLoading } = useAuth();
