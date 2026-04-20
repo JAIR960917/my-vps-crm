@@ -568,7 +568,7 @@ async function syncContasReceber(
   if (!isBackfillChunk) {
     const { data: cobrancasNoBanco } = await supabase
       .from("crm_cobrancas")
-      .select("id, ssotica_parcela_id, ssotica_cliente_id, data")
+      .select("id, ssotica_parcela_id, ssotica_cliente_id, data, assigned_to")
       .eq("ssotica_company_id", integ.company_id)
       .not("ssotica_cliente_id", "is", null);
     const storedCobrancas = (cobrancasNoBanco ?? []) as (StoredCobranca & { data?: any })[];
@@ -580,6 +580,28 @@ async function syncContasReceber(
     const renStatusLabelByKeyForCob = new Map<string, string>(
       (renStatusRowsForCob ?? []).map((s: any) => [s.key, s.label]),
     );
+
+    // Pool de vendedores ATIVOS da empresa para fallback round-robin
+    // (mesma lógica usada em syncVendas) — quando a cobrança é quitada e
+    // criamos um card de Renovação, garantimos um responsável.
+    const { data: cobCompanyProfiles } = await supabase
+      .from("profiles")
+      .select("user_id, full_name")
+      .eq("company_id", integ.company_id);
+    const cobCompanyUserIds = (cobCompanyProfiles ?? []).map((p: any) => p.user_id);
+    const { data: cobCompanyRoles } = cobCompanyUserIds.length > 0
+      ? await supabase.from("user_roles").select("user_id, role").in("user_id", cobCompanyUserIds)
+      : { data: [] as Array<{ user_id: string; role: AppRole }> };
+    const cobRoleByUserId = new Map<string, AppRole>(
+      (cobCompanyRoles ?? []).map((r: any) => [r.user_id, r.role as AppRole]),
+    );
+    const cobVendedoresPool = (cobCompanyProfiles ?? [])
+      .filter((p: any) => cobRoleByUserId.get(p.user_id) === "vendedor")
+      .map((p: any) => p.user_id as string)
+      .sort();
+    const cobManagerUserId = (cobCompanyProfiles ?? []).find(
+      (p: any) => cobRoleByUserId.get(p.user_id) === "gerente",
+    )?.user_id ?? null;
 
     if (storedCobrancas.length > 0) {
       for (const cob of storedCobrancas) {
@@ -638,24 +660,67 @@ async function syncContasReceber(
           .maybeSingle();
 
         if (!jaTemRen) {
-          // Sem data confiável de última compra → coluna inicial "novo".
-          // O syncVendas/syncOS subsequente vai reclassificar quando houver dado.
-          const renStatusKey = "novo";
+          // Resolve responsável: prioriza vendedor que já atendeu o cliente
+          // (assigned_to da cobrança quitada se for vendedor da loja) e cai
+          // para round-robin estável entre vendedores ativos da empresa.
+          // Último fallback: gerente da loja.
+          const cobAssignedTo = (cob as any).assigned_to as string | null | undefined;
+          const cobAssignedRole = cobAssignedTo ? cobRoleByUserId.get(cobAssignedTo) : null;
+          const preserveCobVendedor = cobAssignedRole === "vendedor";
+          const fallbackVendedor = cobVendedoresPool.length > 0
+            ? cobVendedoresPool[Math.abs(clienteId) % cobVendedoresPool.length]
+            : null;
+          const resolvedAssignedTo: string | null = preserveCobVendedor
+            ? cobAssignedTo!
+            : (fallbackVendedor ?? cobManagerUserId ?? null);
+
+          // Tenta extrair data da última receita/venda dos dados já armazenados
+          // na cobrança (preenchidos pelo sync anterior). Se não houver, deixa
+          // null — o próximo syncVendas/syncOS vai reclassificar com a data real.
+          const dataReceita: string | null =
+            (cobData?.data_ultima_receita as string | undefined) ??
+            (cobData?.ssotica_raw?.data_ultima_receita as string | undefined) ??
+            null;
+          const dataVenda: string | null =
+            (cobData?.data_ultima_venda as string | undefined) ??
+            (cobData?.data_ultima_compra as string | undefined) ??
+            null;
+          const dataReferencia: string | null = dataReceita ?? dataVenda;
+
+          // Define status com base na data conhecida (igual syncVendas).
+          // Sem data confiável → coluna de direcionamento se tiver vendedor,
+          // ou "novo" se não tivermos ninguém.
+          let renStatusKey: string;
+          if (dataReferencia) {
+            const refDate = new Date(dataReferencia + "T00:00:00Z");
+            const dias = daysBetween(refDate, new Date());
+            renStatusKey = resolvedAssignedTo
+              ? statusKeyForRenovacao(dias)
+              : DIRECIONAMENTO_STATUS;
+          } else {
+            renStatusKey = resolvedAssignedTo ? DIRECIONAMENTO_STATUS : "novo";
+          }
+
           const { data: insertedRen } = await supabase
             .from("crm_renovacoes")
             .insert({
               ssotica_cliente_id: clienteId,
               ssotica_company_id: integ.company_id,
-              assigned_to: null,
+              assigned_to: resolvedAssignedTo,
               data: {
                 nome: clienteNome,
                 telefone,
                 documento,
                 cpf: documento,
                 email,
+                data_ultima_receita: dataReceita,
+                data_ultima_venda: dataVenda,
+                data_ultima_compra: dataReferencia,
                 origem_transicao: "cobranca_quitada",
               },
               status: renStatusKey,
+              data_ultima_compra: dataReferencia,
+              scheduled_date: dataReferencia,
             })
             .select("id")
             .maybeSingle();
