@@ -568,7 +568,7 @@ async function syncContasReceber(
   if (!isBackfillChunk) {
     const { data: cobrancasNoBanco } = await supabase
       .from("crm_cobrancas")
-      .select("id, ssotica_parcela_id, ssotica_cliente_id, data")
+      .select("id, ssotica_parcela_id, ssotica_cliente_id, data, assigned_to")
       .eq("ssotica_company_id", integ.company_id)
       .not("ssotica_cliente_id", "is", null);
     const storedCobrancas = (cobrancasNoBanco ?? []) as (StoredCobranca & { data?: any })[];
