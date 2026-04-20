@@ -506,22 +506,33 @@ async function syncContasReceber(
       }).select("id").maybeSingle();
       created++;
 
-      // Log: card de cobrança criado automaticamente
-      await supabase.from("crm_module_transition_logs").insert({
-        cliente_nome: String((data as any)?.nome ?? "Cliente SSótica"),
-        from_module: "none",
-        to_module: "cobranca",
-        to_status_key: colunaKey,
-        to_status_label: cobStatusLabelByKey.get(colunaKey) ?? colunaKey,
-        target_record_id: (insertedCob as any)?.id ?? null,
-        ssotica_cliente_id: clienteIdNum,
-        company_id: integ.company_id,
-        triggered_by: null,
-        trigger_source: "auto",
-      });
+      // Verifica se o cliente vinha de Renovação ANTES de logar
+      const { data: renPreCheck } = await supabase
+        .from("crm_renovacoes")
+        .select("id")
+        .eq("ssotica_cliente_id", clienteIdNum)
+        .eq("ssotica_company_id", integ.company_id)
+        .maybeSingle();
+
+      // Só loga "criação direta" (none → cobranca) se NÃO vinha de Renovação.
+      // Se vinha, o log de transição (renovacao → cobranca) será gerado abaixo.
+      if (!renPreCheck) {
+        await supabase.from("crm_module_transition_logs").insert({
+          cliente_nome: String((data as any)?.nome ?? "Cliente SSótica"),
+          from_module: "none",
+          to_module: "cobranca",
+          to_status_key: colunaKey,
+          to_status_label: cobStatusLabelByKey.get(colunaKey) ?? colunaKey,
+          target_record_id: (insertedCob as any)?.id ?? null,
+          ssotica_cliente_id: clienteIdNum,
+          company_id: integ.company_id,
+          triggered_by: null,
+          trigger_source: "auto",
+        });
+      }
     }
 
-    // Cliente entrou em cobrança → remove da Renovação (se estiver lá) e registra log
+    // Cliente entrou em cobrança → remove da Renovação (se estiver lá) e registra log de transição
     const { data: renovacaoExistente } = await supabase
       .from("crm_renovacoes")
       .select("id")
