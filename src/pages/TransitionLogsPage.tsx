@@ -58,7 +58,9 @@ export default function TransitionLogsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [clientFilter, setClientFilter] = useState("");
-  const [direction, setDirection] = useState<"all" | "ren_to_cob" | "cob_to_ren">("all");
+  const [direction, setDirection] = useState<
+    "all" | "ren_to_cob" | "cob_to_ren" | "create_ren" | "create_cob" | "delete_ren" | "delete_cob"
+  >("all");
   const [companyId, setCompanyId] = useState<string>("all");
 
   const load = async () => {
@@ -74,6 +76,10 @@ export default function TransitionLogsPage() {
     if (clientFilter.trim()) q = q.ilike("cliente_nome", `%${clientFilter.trim()}%`);
     if (direction === "ren_to_cob") q = q.eq("from_module", "renovacao").eq("to_module", "cobranca");
     if (direction === "cob_to_ren") q = q.eq("from_module", "cobranca").eq("to_module", "renovacao");
+    if (direction === "create_ren") q = q.eq("from_module", "none").eq("to_module", "renovacao");
+    if (direction === "create_cob") q = q.eq("from_module", "none").eq("to_module", "cobranca");
+    if (direction === "delete_ren") q = q.eq("from_module", "renovacao").eq("to_module", "none");
+    if (direction === "delete_cob") q = q.eq("from_module", "cobranca").eq("to_module", "none");
     if (companyId !== "all") q = q.eq("company_id", companyId);
 
     const { data, error } = await q;
