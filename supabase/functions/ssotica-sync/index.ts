@@ -915,6 +915,20 @@ async function syncVendas(
         const renData = (renExistente as any).data ?? {};
         const clienteNome = String(renData?.nome ?? info.cliente?.nome ?? "Cliente SSótica");
         await supabase.from("crm_renovacoes").delete().eq("id", (renExistente as any).id);
+        // Log: exclusão automática do card de renovação (cliente entrou em cobrança)
+        await supabase.from("crm_module_transition_logs").insert({
+          cliente_nome: clienteNome,
+          from_module: "renovacao",
+          to_module: "none",
+          to_status_key: null,
+          to_status_label: null,
+          source_record_id: (renExistente as any).id,
+          ssotica_cliente_id: clienteId,
+          company_id: integ.company_id,
+          triggered_by: null,
+          trigger_source: "auto",
+        });
+        // Log: transição (renovacao -> cobranca)
         await supabase.from("crm_module_transition_logs").insert({
           cliente_nome: clienteNome,
           from_module: "renovacao",
