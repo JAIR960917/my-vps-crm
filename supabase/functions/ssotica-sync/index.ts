@@ -660,24 +660,67 @@ async function syncContasReceber(
           .maybeSingle();
 
         if (!jaTemRen) {
-          // Sem data confiável de última compra → coluna inicial "novo".
-          // O syncVendas/syncOS subsequente vai reclassificar quando houver dado.
-          const renStatusKey = "novo";
+          // Resolve responsável: prioriza vendedor que já atendeu o cliente
+          // (assigned_to da cobrança quitada se for vendedor da loja) e cai
+          // para round-robin estável entre vendedores ativos da empresa.
+          // Último fallback: gerente da loja.
+          const cobAssignedTo = (cob as any).assigned_to as string | null | undefined;
+          const cobAssignedRole = cobAssignedTo ? cobRoleByUserId.get(cobAssignedTo) : null;
+          const preserveCobVendedor = cobAssignedRole === "vendedor";
+          const fallbackVendedor = cobVendedoresPool.length > 0
+            ? cobVendedoresPool[Math.abs(clienteId) % cobVendedoresPool.length]
+            : null;
+          const resolvedAssignedTo: string | null = preserveCobVendedor
+            ? cobAssignedTo!
+            : (fallbackVendedor ?? cobManagerUserId ?? null);
+
+          // Tenta extrair data da última receita/venda dos dados já armazenados
+          // na cobrança (preenchidos pelo sync anterior). Se não houver, deixa
+          // null — o próximo syncVendas/syncOS vai reclassificar com a data real.
+          const dataReceita: string | null =
+            (cobData?.data_ultima_receita as string | undefined) ??
+            (cobData?.ssotica_raw?.data_ultima_receita as string | undefined) ??
+            null;
+          const dataVenda: string | null =
+            (cobData?.data_ultima_venda as string | undefined) ??
+            (cobData?.data_ultima_compra as string | undefined) ??
+            null;
+          const dataReferencia: string | null = dataReceita ?? dataVenda;
+
+          // Define status com base na data conhecida (igual syncVendas).
+          // Sem data confiável → coluna de direcionamento se tiver vendedor,
+          // ou "novo" se não tivermos ninguém.
+          let renStatusKey: string;
+          if (dataReferencia) {
+            const refDate = new Date(dataReferencia + "T00:00:00Z");
+            const dias = daysBetween(refDate, new Date());
+            renStatusKey = resolvedAssignedTo
+              ? statusKeyForRenovacao(dias)
+              : DIRECIONAMENTO_STATUS;
+          } else {
+            renStatusKey = resolvedAssignedTo ? DIRECIONAMENTO_STATUS : "novo";
+          }
+
           const { data: insertedRen } = await supabase
             .from("crm_renovacoes")
             .insert({
               ssotica_cliente_id: clienteId,
               ssotica_company_id: integ.company_id,
-              assigned_to: null,
+              assigned_to: resolvedAssignedTo,
               data: {
                 nome: clienteNome,
                 telefone,
                 documento,
                 cpf: documento,
                 email,
+                data_ultima_receita: dataReceita,
+                data_ultima_venda: dataVenda,
+                data_ultima_compra: dataReferencia,
                 origem_transicao: "cobranca_quitada",
               },
               status: renStatusKey,
+              data_ultima_compra: dataReferencia,
+              scheduled_date: dataReferencia,
             })
             .select("id")
             .maybeSingle();
