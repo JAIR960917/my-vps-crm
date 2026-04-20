@@ -16,6 +16,7 @@ import CobrancaEditSheet from "@/components/cobrancas/CobrancaEditSheet";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
+import { logTransition } from "@/lib/transitionLogs";
 
 type CobrancaActivity = {
   id: string;
@@ -174,6 +175,18 @@ export default function CobrancasPage() {
       else {
         toast.success("Cobrança criada — agora você pode adicionar comentários e tarefas");
         if (created) setEditingCobranca(created as Cobranca);
+        const statusLabel = statuses.find((s) => s.key === formStatus)?.label ?? formStatus;
+        await logTransition({
+          cliente_nome: String((formData as any)?.nome ?? "Cliente"),
+          from_module: "none",
+          to_module: "cobranca",
+          to_status_key: formStatus,
+          to_status_label: statusLabel,
+          target_record_id: (created as any)?.id ?? null,
+          company_id: formCompanyId || null,
+          triggered_by: user?.id ?? null,
+          trigger_source: "manual",
+        });
       }
     }
     setSaving(false);
@@ -184,9 +197,29 @@ export default function CobrancasPage() {
 
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
+    // Captura dados do card antes de excluir, para o log
+    let snapshot: Cobranca | null = null;
+    for (const k of Object.keys(paginatedColumns)) {
+      const found = paginatedColumns[k]?.items.find((it) => it.id === deleteConfirmId);
+      if (found) { snapshot = found as Cobranca; break; }
+    }
     const { error } = await supabase.from("crm_cobrancas").delete().eq("id", deleteConfirmId);
     if (error) toast.error("Erro ao excluir");
-    else toast.success("Cobrança excluída");
+    else {
+      toast.success("Cobrança excluída");
+      const statusLabel = statuses.find((s) => s.key === snapshot?.status)?.label ?? snapshot?.status ?? null;
+      await logTransition({
+        cliente_nome: String((snapshot?.data as any)?.nome ?? "Cliente"),
+        from_module: "cobranca",
+        to_module: "none",
+        to_status_key: snapshot?.status ?? null,
+        to_status_label: statusLabel,
+        source_record_id: deleteConfirmId,
+        company_id: snapshot?.company_id ?? null,
+        triggered_by: user?.id ?? null,
+        trigger_source: "manual",
+      });
+    }
     removeItem(deleteConfirmId);
     setDeleteConfirmId(null);
   };

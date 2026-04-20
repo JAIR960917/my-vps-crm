@@ -15,11 +15,13 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
+type ModuleVal = "renovacao" | "cobranca" | "none";
+
 type TransitionLog = {
   id: string;
   cliente_nome: string;
-  from_module: "renovacao" | "cobranca";
-  to_module: "renovacao" | "cobranca";
+  from_module: ModuleVal;
+  to_module: ModuleVal;
   to_status_key: string | null;
   to_status_label: string | null;
   company_id: string | null;
@@ -31,7 +33,20 @@ type TransitionLog = {
 
 type Company = { id: string; name: string };
 
-const moduleLabel = (m: string) => (m === "renovacao" ? "Renovação" : m === "cobranca" ? "Cobrança" : m);
+const moduleLabel = (m: string) =>
+  m === "renovacao" ? "Renovação" : m === "cobranca" ? "Cobrança" : m === "none" ? "—" : m;
+
+type EventKind = "create_ren" | "create_cob" | "delete_ren" | "delete_cob" | "ren_to_cob" | "cob_to_ren" | "other";
+
+const classifyEvent = (l: TransitionLog): EventKind => {
+  if (l.from_module === "none" && l.to_module === "renovacao") return "create_ren";
+  if (l.from_module === "none" && l.to_module === "cobranca") return "create_cob";
+  if (l.from_module === "renovacao" && l.to_module === "none") return "delete_ren";
+  if (l.from_module === "cobranca" && l.to_module === "none") return "delete_cob";
+  if (l.from_module === "renovacao" && l.to_module === "cobranca") return "ren_to_cob";
+  if (l.from_module === "cobranca" && l.to_module === "renovacao") return "cob_to_ren";
+  return "other";
+};
 
 export default function TransitionLogsPage() {
   const { isAdmin, loading: authLoading } = useAuth();
@@ -43,7 +58,9 @@ export default function TransitionLogsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [clientFilter, setClientFilter] = useState("");
-  const [direction, setDirection] = useState<"all" | "ren_to_cob" | "cob_to_ren">("all");
+  const [direction, setDirection] = useState<
+    "all" | "ren_to_cob" | "cob_to_ren" | "create_ren" | "create_cob" | "delete_ren" | "delete_cob"
+  >("all");
   const [companyId, setCompanyId] = useState<string>("all");
 
   const load = async () => {
@@ -59,6 +76,10 @@ export default function TransitionLogsPage() {
     if (clientFilter.trim()) q = q.ilike("cliente_nome", `%${clientFilter.trim()}%`);
     if (direction === "ren_to_cob") q = q.eq("from_module", "renovacao").eq("to_module", "cobranca");
     if (direction === "cob_to_ren") q = q.eq("from_module", "cobranca").eq("to_module", "renovacao");
+    if (direction === "create_ren") q = q.eq("from_module", "none").eq("to_module", "renovacao");
+    if (direction === "create_cob") q = q.eq("from_module", "none").eq("to_module", "cobranca");
+    if (direction === "delete_ren") q = q.eq("from_module", "renovacao").eq("to_module", "none");
+    if (direction === "delete_cob") q = q.eq("from_module", "cobranca").eq("to_module", "none");
     if (companyId !== "all") q = q.eq("company_id", companyId);
 
     const { data, error } = await q;
@@ -163,6 +184,10 @@ export default function TransitionLogsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="create_ren">Criado em Renovação</SelectItem>
+                  <SelectItem value="delete_ren">Excluído de Renovação</SelectItem>
+                  <SelectItem value="create_cob">Criado em Cobrança</SelectItem>
+                  <SelectItem value="delete_cob">Excluído de Cobrança</SelectItem>
                   <SelectItem value="ren_to_cob">Renovação → Cobrança</SelectItem>
                   <SelectItem value="cob_to_ren">Cobrança → Renovação</SelectItem>
                 </SelectContent>
@@ -228,29 +253,50 @@ export default function TransitionLogsPage() {
                     </TableCell>
                     <TableCell className="font-medium">{log.cliente_nome}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Badge
-                          variant="outline"
-                          className={
-                            log.from_module === "renovacao"
-                              ? "border-emerald-300 bg-emerald-500/10 text-emerald-700"
-                              : "border-amber-300 bg-amber-500/10 text-amber-700"
-                          }
-                        >
-                          {moduleLabel(log.from_module)}
-                        </Badge>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                        <Badge
-                          variant="outline"
-                          className={
-                            log.to_module === "renovacao"
-                              ? "border-emerald-300 bg-emerald-500/10 text-emerald-700"
-                              : "border-amber-300 bg-amber-500/10 text-amber-700"
-                          }
-                        >
-                          {moduleLabel(log.to_module)}
-                        </Badge>
-                      </div>
+                      {(() => {
+                        const kind = classifyEvent(log);
+                        const moduleClass = (m: ModuleVal) =>
+                          m === "renovacao"
+                            ? "border-emerald-300 bg-emerald-500/10 text-emerald-700"
+                            : m === "cobranca"
+                              ? "border-amber-300 bg-amber-500/10 text-amber-700"
+                              : "border-muted-foreground/30 bg-muted text-muted-foreground";
+                        if (kind === "create_ren" || kind === "create_cob") {
+                          return (
+                            <div className="flex items-center gap-2 text-sm">
+                              <Badge className="border border-emerald-300 bg-emerald-500/15 text-emerald-700">
+                                + Criado
+                              </Badge>
+                              <Badge variant="outline" className={moduleClass(log.to_module)}>
+                                {moduleLabel(log.to_module)}
+                              </Badge>
+                            </div>
+                          );
+                        }
+                        if (kind === "delete_ren" || kind === "delete_cob") {
+                          return (
+                            <div className="flex items-center gap-2 text-sm">
+                              <Badge className="border border-red-300 bg-red-500/15 text-red-700">
+                                − Excluído
+                              </Badge>
+                              <Badge variant="outline" className={moduleClass(log.from_module)}>
+                                {moduleLabel(log.from_module)}
+                              </Badge>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Badge variant="outline" className={moduleClass(log.from_module)}>
+                              {moduleLabel(log.from_module)}
+                            </Badge>
+                            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Badge variant="outline" className={moduleClass(log.to_module)}>
+                              {moduleLabel(log.to_module)}
+                            </Badge>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {log.to_status_label ?? log.to_status_key ?? "—"}

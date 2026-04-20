@@ -487,7 +487,7 @@ async function syncContasReceber(
         .eq("id", existingCobranca.id);
       updated++;
     } else {
-      await supabase.from("crm_cobrancas").insert({
+      const { data: insertedCob } = await supabase.from("crm_cobrancas").insert({
         company_id: integ.company_id,
         ssotica_parcela_id: maisAntiga.parcela_id,
         ssotica_titulo_id: maisAntiga.titulo_id,
@@ -500,8 +500,22 @@ async function syncContasReceber(
         dias_atraso: maisAntiga.dias_atraso,
         status: colunaKey,
         scheduled_date: maisAntiga.vencimento,
-      });
+      }).select("id").maybeSingle();
       created++;
+
+      // Log: card de cobrança criado automaticamente
+      await supabase.from("crm_module_transition_logs").insert({
+        cliente_nome: String((data as any)?.nome ?? "Cliente SSótica"),
+        from_module: "none",
+        to_module: "cobranca",
+        to_status_key: colunaKey,
+        to_status_label: cobStatusLabelByKey.get(colunaKey) ?? colunaKey,
+        target_record_id: (insertedCob as any)?.id ?? null,
+        ssotica_cliente_id: clienteIdNum,
+        company_id: integ.company_id,
+        triggered_by: null,
+        trigger_source: "auto",
+      });
     }
 
     // Cliente entrou em cobrança → remove da Renovação (se estiver lá) e registra log
@@ -586,6 +600,20 @@ async function syncContasReceber(
         await supabase.from("crm_cobrancas").delete().eq("id", cob.id);
         removed++;
         clientesQuitadosSet.add(clienteId);
+
+        // Log: exclusão automática do card de cobrança (cliente quitou)
+        await supabase.from("crm_module_transition_logs").insert({
+          cliente_nome: clienteNome,
+          from_module: "cobranca",
+          to_module: "none",
+          to_status_key: null,
+          to_status_label: null,
+          source_record_id: cob.id,
+          ssotica_cliente_id: clienteId,
+          company_id: integ.company_id,
+          triggered_by: null,
+          trigger_source: "auto",
+        });
 
         // Verifica se já existe Renovação desse cliente; se não, cria com base no que sabemos
         const { data: jaTemRen } = await supabase
@@ -887,6 +915,20 @@ async function syncVendas(
         const renData = (renExistente as any).data ?? {};
         const clienteNome = String(renData?.nome ?? info.cliente?.nome ?? "Cliente SSótica");
         await supabase.from("crm_renovacoes").delete().eq("id", (renExistente as any).id);
+        // Log: exclusão automática do card de renovação (cliente entrou em cobrança)
+        await supabase.from("crm_module_transition_logs").insert({
+          cliente_nome: clienteNome,
+          from_module: "renovacao",
+          to_module: "none",
+          to_status_key: null,
+          to_status_label: null,
+          source_record_id: (renExistente as any).id,
+          ssotica_cliente_id: clienteId,
+          company_id: integ.company_id,
+          triggered_by: null,
+          trigger_source: "auto",
+        });
+        // Log: transição (renovacao -> cobranca)
         await supabase.from("crm_module_transition_logs").insert({
           cliente_nome: clienteNome,
           from_module: "renovacao",
@@ -1017,6 +1059,20 @@ async function syncVendas(
         .maybeSingle();
       created++;
 
+      // Log: card de renovação criado automaticamente
+      await supabase.from("crm_module_transition_logs").insert({
+        cliente_nome: cliente.nome ?? "Cliente SSótica",
+        from_module: "none",
+        to_module: "renovacao",
+        to_status_key: newStatusKey,
+        to_status_label: renStatusLabelByKey.get(newStatusKey) ?? newStatusKey,
+        target_record_id: (inserted as any)?.id ?? null,
+        ssotica_cliente_id: clienteId,
+        company_id: integ.company_id,
+        triggered_by: null,
+        trigger_source: "auto",
+      });
+
       // Se o cliente saiu da Cobrança nesta sync, registra a transição
       if (clientesQuitadosSet.has(clienteId)) {
         await logRenovacaoTransition({
@@ -1067,6 +1123,20 @@ async function reconcileRenovacoesVsCobrancas(
       console.error(`[reconcile] falha ao remover renovacao ${renId}:`, delErr.message);
       continue;
     }
+    // Log: exclusão automática (reconcile) — renovação removida porque cliente tem cobrança aberta
+    await supabase.from("crm_module_transition_logs").insert({
+      cliente_nome: clienteNome,
+      from_module: "renovacao",
+      to_module: "none",
+      to_status_key: null,
+      to_status_label: null,
+      source_record_id: renId,
+      ssotica_cliente_id: clienteId,
+      company_id: companyId,
+      triggered_by: null,
+      trigger_source: "auto_reconcile",
+    });
+    // Log: transição reconcile (renovacao -> cobranca)
     await supabase.from("crm_module_transition_logs").insert({
       cliente_nome: clienteNome,
       from_module: "renovacao",
