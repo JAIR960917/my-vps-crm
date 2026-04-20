@@ -601,6 +601,20 @@ async function syncContasReceber(
         removed++;
         clientesQuitadosSet.add(clienteId);
 
+        // Log: exclusão automática do card de cobrança (cliente quitou)
+        await supabase.from("crm_module_transition_logs").insert({
+          cliente_nome: clienteNome,
+          from_module: "cobranca",
+          to_module: "none",
+          to_status_key: null,
+          to_status_label: null,
+          source_record_id: cob.id,
+          ssotica_cliente_id: clienteId,
+          company_id: integ.company_id,
+          triggered_by: null,
+          trigger_source: "auto",
+        });
+
         // Verifica se já existe Renovação desse cliente; se não, cria com base no que sabemos
         const { data: jaTemRen } = await supabase
           .from("crm_renovacoes")
