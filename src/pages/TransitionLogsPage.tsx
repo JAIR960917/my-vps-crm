@@ -184,6 +184,10 @@ export default function TransitionLogsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="create_ren">Criado em Renovação</SelectItem>
+                  <SelectItem value="delete_ren">Excluído de Renovação</SelectItem>
+                  <SelectItem value="create_cob">Criado em Cobrança</SelectItem>
+                  <SelectItem value="delete_cob">Excluído de Cobrança</SelectItem>
                   <SelectItem value="ren_to_cob">Renovação → Cobrança</SelectItem>
                   <SelectItem value="cob_to_ren">Cobrança → Renovação</SelectItem>
                 </SelectContent>
@@ -249,29 +253,50 @@ export default function TransitionLogsPage() {
                     </TableCell>
                     <TableCell className="font-medium">{log.cliente_nome}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Badge
-                          variant="outline"
-                          className={
-                            log.from_module === "renovacao"
-                              ? "border-emerald-300 bg-emerald-500/10 text-emerald-700"
-                              : "border-amber-300 bg-amber-500/10 text-amber-700"
-                          }
-                        >
-                          {moduleLabel(log.from_module)}
-                        </Badge>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                        <Badge
-                          variant="outline"
-                          className={
-                            log.to_module === "renovacao"
-                              ? "border-emerald-300 bg-emerald-500/10 text-emerald-700"
-                              : "border-amber-300 bg-amber-500/10 text-amber-700"
-                          }
-                        >
-                          {moduleLabel(log.to_module)}
-                        </Badge>
-                      </div>
+                      {(() => {
+                        const kind = classifyEvent(log);
+                        const moduleClass = (m: ModuleVal) =>
+                          m === "renovacao"
+                            ? "border-emerald-300 bg-emerald-500/10 text-emerald-700"
+                            : m === "cobranca"
+                              ? "border-amber-300 bg-amber-500/10 text-amber-700"
+                              : "border-muted-foreground/30 bg-muted text-muted-foreground";
+                        if (kind === "create_ren" || kind === "create_cob") {
+                          return (
+                            <div className="flex items-center gap-2 text-sm">
+                              <Badge className="border border-emerald-300 bg-emerald-500/15 text-emerald-700">
+                                + Criado
+                              </Badge>
+                              <Badge variant="outline" className={moduleClass(log.to_module)}>
+                                {moduleLabel(log.to_module)}
+                              </Badge>
+                            </div>
+                          );
+                        }
+                        if (kind === "delete_ren" || kind === "delete_cob") {
+                          return (
+                            <div className="flex items-center gap-2 text-sm">
+                              <Badge className="border border-red-300 bg-red-500/15 text-red-700">
+                                − Excluído
+                              </Badge>
+                              <Badge variant="outline" className={moduleClass(log.from_module)}>
+                                {moduleLabel(log.from_module)}
+                              </Badge>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Badge variant="outline" className={moduleClass(log.from_module)}>
+                              {moduleLabel(log.from_module)}
+                            </Badge>
+                            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Badge variant="outline" className={moduleClass(log.to_module)}>
+                              {moduleLabel(log.to_module)}
+                            </Badge>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {log.to_status_label ?? log.to_status_key ?? "—"}
