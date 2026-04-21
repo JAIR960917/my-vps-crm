@@ -43,34 +43,43 @@ Deno.serve(async (req) => {
 
     const tries: Array<{ name: string; url: string }> = [];
 
-    // 1. Sem filtro de status, janela larga
-    tries.push({
-      name: "periodo_sem_filtro",
-      url: `${BASE}/financeiro/contas-a-receber/periodo?empresa=${empresa}&inicio_periodo=2025-11-01&fim_periodo=2026-05-31&page=1&perPage=500`,
-    });
-    // 2. Com possíveis flags de status
+    // Janela máx = 31 dias. Cobrir 12/2025 (parcela 2), 01/2026 (3), 02/2026 (4), 03/2026 (5), 04/2026 (6)
+    const janelas = [
+      ["2025-12-01", "2025-12-31"],
+      ["2026-01-01", "2026-01-31"],
+      ["2026-02-01", "2026-02-28"],
+      ["2026-03-01", "2026-03-31"],
+      ["2026-04-01", "2026-04-30"],
+    ];
+    for (const [ini, fim] of janelas) {
+      tries.push({
+        name: `periodo_${ini}`,
+        url: `${BASE}/financeiro/contas-a-receber/periodo?empresa=${empresa}&inicio_periodo=${ini}&fim_periodo=${fim}&page=1&perPage=500`,
+      });
+    }
+    // Flags em janela curta
     for (const extra of [
-      "&status=todos",
       "&status=negativado",
-      "&status=em_aberto",
-      "&situacao=todos",
-      "&situacao=negativado_serasa",
+      "&situacao=negativado",
       "&incluir_negativados=1",
       "&incluir_negativados=true",
       "&todos=1",
       "&apenas_em_aberto=0",
+      "&tipo=todos",
+      "&serasa=1",
     ]) {
       tries.push({
-        name: `periodo${extra}`,
-        url: `${BASE}/financeiro/contas-a-receber/periodo?empresa=${empresa}&inicio_periodo=2025-11-01&fim_periodo=2026-05-31&page=1&perPage=500${extra}`,
+        name: `flag${extra}`,
+        url: `${BASE}/financeiro/contas-a-receber/periodo?empresa=${empresa}&inicio_periodo=2025-12-01&fim_periodo=2025-12-31&page=1&perPage=500${extra}`,
       });
     }
-    // 3. Endpoints alternativos possíveis
     tries.push({ name: "titulo_direto", url: `${BASE}/financeiro/contas-a-receber/${tituloId}?empresa=${empresa}` });
     tries.push({ name: "titulos_titulo", url: `${BASE}/financeiro/titulos/${tituloId}?empresa=${empresa}` });
     tries.push({ name: "negativados", url: `${BASE}/financeiro/negativados?empresa=${empresa}` });
     tries.push({ name: "serasa", url: `${BASE}/financeiro/serasa?empresa=${empresa}` });
     tries.push({ name: "parcelas_titulo", url: `${BASE}/financeiro/contas-a-receber/parcelas/${tituloId}?empresa=${empresa}` });
+    tries.push({ name: "negativados_periodo", url: `${BASE}/financeiro/negativados/periodo?empresa=${empresa}&inicio_periodo=2025-12-01&fim_periodo=2025-12-31` });
+    tries.push({ name: "serasa_periodo", url: `${BASE}/financeiro/serasa/periodo?empresa=${empresa}&inicio_periodo=2025-12-01&fim_periodo=2025-12-31` });
 
     const out: any[] = [];
     for (const t of tries) {
