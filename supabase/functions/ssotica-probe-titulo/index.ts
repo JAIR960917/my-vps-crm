@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     for (const [ini, fim] of janelas) {
       tries.push({
         name: `periodo_${ini}`,
-        url: `${BASE}/financeiro/contas-a-receber/periodo?empresa=${empresa}&inicio_periodo=${ini}&fim_periodo=${fim}&page=1&perPage=500`,
+        url: `${BASE}/financeiro/contas-a-receber/periodo?empresa=${empresa}&inicio_periodo=${ini}&fim_periodo=${fim}&page=1&perPage=100`,
       });
     }
     // Flags em janela curta
@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     ]) {
       tries.push({
         name: `flag${extra}`,
-        url: `${BASE}/financeiro/contas-a-receber/periodo?empresa=${empresa}&inicio_periodo=2025-12-01&fim_periodo=2025-12-31&page=1&perPage=500${extra}`,
+        url: `${BASE}/financeiro/contas-a-receber/periodo?empresa=${empresa}&inicio_periodo=2025-12-01&fim_periodo=2025-12-31&page=1&perPage=100${extra}`,
       });
     }
     tries.push({ name: "titulo_direto", url: `${BASE}/financeiro/contas-a-receber/${tituloId}?empresa=${empresa}` });
