@@ -40,15 +40,9 @@ Deno.serve(async (req) => {
     const empresa = (integ.license_code || integ.cnpj.replace(/\D/g, "")).trim();
     const tok = integ.bearer_token;
 
-    const janelas = [
-      ["2025-11-01", "2025-11-30"],
-      ["2025-12-01", "2025-12-31"],
-      ["2026-01-01", "2026-01-31"],
-      ["2026-02-01", "2026-02-28"],
-      ["2026-03-01", "2026-03-31"],
-      ["2026-04-01", "2026-04-30"],
-      ["2026-05-01", "2026-05-31"],
-    ];
+    const ini: string = body.ini ?? "2025-12-01";
+    const fim: string = body.fim ?? "2025-12-31";
+    const janelas: string[][] = [[ini, fim]];
 
     const encontradas: any[] = [];
     const resumo: any[] = [];
