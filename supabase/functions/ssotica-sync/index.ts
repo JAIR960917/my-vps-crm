@@ -400,7 +400,9 @@ async function syncContasReceber(
         const vencDate = new Date(vencimento + "T00:00:00Z");
         const diasAtraso = daysBetween(vencDate, today);
 
-        if (diasAtraso < 1) { skipped.naoEmAtraso++; continue; }
+        // Aceita parcelas em atraso (>=1) e parcelas que vencem amanhã (=-1)
+        // para popular a coluna "1 Dia antes do vencimento" (status `pendente`).
+        if (diasAtraso < -1 || diasAtraso === 0) { skipped.naoEmAtraso++; continue; }
 
         if (parcela.id) parcelasAtivasIds.add(Number(parcela.id));
 
