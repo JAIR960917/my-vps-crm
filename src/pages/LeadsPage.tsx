@@ -507,9 +507,9 @@ export default function LeadsPage() {
   };
 
   const handleToggleComprou = async (leadId: string, value: boolean) => {
-    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, comprou: value } : l));
+    patchItem(leadId, { comprou: value } as Partial<Lead>);
     const { error } = await supabase.from("crm_leads").update({ comprou: value } as any).eq("id", leadId);
-    if (error) { toast.error("Erro ao atualizar"); fetchAll(); }
+    if (error) { toast.error("Erro ao atualizar"); setRefreshKey(k => k + 1); }
     else toast.success(value ? "Marcado como cliente ativo" : "Marcação removida");
   };
 
@@ -517,15 +517,16 @@ export default function LeadsPage() {
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const newStatus = result.destination.droppableId;
+    const fromStatus = result.source.droppableId;
     const leadId = result.draggableId;
-    if (newStatus === result.source.droppableId) return;
-
-    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, status: newStatus } : l));
-
+    if (newStatus === fromStatus) return;
+    const item = paginatedColumns[fromStatus]?.items.find(it => it.id === leadId)
+      || (searchResults || []).find(it => it.id === leadId);
+    updateItemStatus(leadId, fromStatus, newStatus, item);
     const { error } = await supabase.from("crm_leads").update({ status: newStatus }).eq("id", leadId);
     if (error) {
       toast.error("Erro ao mover lead");
-      fetchAll();
+      setRefreshKey(k => k + 1);
     }
   };
 
