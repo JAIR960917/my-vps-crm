@@ -1,0 +1,3 @@
+UPDATE ssotica_integrations SET sync_status='idle', last_error=NULL WHERE id IN ('92093af4-69a1-4033-a272-4c23062e3d6d','5cc5dc5e-0707-4af4-8948-700d77967856','cf5660c7-e098-4bc2-a524-83753a5ddb9b');
+
+UPDATE ssotica_sync_logs SET status='error', error_message='Timeout - destravado manualmente', finished_at=now() WHERE integration_id IN ('92093af4-69a1-4033-a272-4c23062e3d6d','5cc5dc5e-0707-4af4-8948-700d77967856','cf5660c7-e098-4bc2-a524-83753a5ddb9b') AND status='running';
