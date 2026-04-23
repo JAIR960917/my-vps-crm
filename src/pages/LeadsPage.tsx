@@ -97,7 +97,6 @@ export default function LeadsPage() {
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
-      setLeads(JSON.parse(localStorage.getItem("crm_cache_leads") || "[]"));
       setProfiles(JSON.parse(localStorage.getItem("crm_cache_profiles") || "[]"));
       setStatuses(JSON.parse(localStorage.getItem("crm_cache_statuses_full") || "[]"));
       setCompanies(JSON.parse(localStorage.getItem("crm_cache_companies") || "[]"));
@@ -106,24 +105,9 @@ export default function LeadsPage() {
     } catch {}
   }, []);
 
-  const fetchAllLeads = async () => {
-    const PAGE_SIZE = 1000;
-    let allLeads: any[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from("crm_leads")
-        .select("*")
-        .order("updated_at", { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
-      if (error || !data) break;
-      allLeads = allLeads.concat(data);
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-    return allLeads;
-  };
-
+  // Carrega APENAS metadados (colunas/status/perfis/etc). Os leads em si são
+  // carregados sob demanda, 50 por coluna, via usePaginatedColumns — assim a
+  // tela abre instantânea mesmo com milhares de leads.
   const fetchAll = async () => {
     if (!navigator.onLine) {
       loadFromCache();
@@ -131,9 +115,7 @@ export default function LeadsPage() {
     }
 
     try {
-      // Fetch critical data first (leads + structure)
-      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
-        fetchAllLeads(),
+      const [{ data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
@@ -144,7 +126,6 @@ export default function LeadsPage() {
       ]);
 
       setColumns(cols || []);
-      const loadedLeads = (lds || []) as Lead[];
       const companyMap = new Map((fullProfs || []).map((p: any) => [p.user_id, p.company_id]));
       const enrichedProfiles = (profs || []).map((p: any) => ({ ...p, company_id: companyMap.get(p.user_id) || null }));
       setProfiles(enrichedProfiles);
@@ -154,7 +135,6 @@ export default function LeadsPage() {
       setFormFields(loadedFields);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
-      setLeads(loadedLeads);
       setFullProfiles((fullProfs || []) as Profile[]);
 
       // Cache for offline
