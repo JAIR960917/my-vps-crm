@@ -105,6 +105,69 @@ export default function LeadsPage() {
     } catch {}
   }, []);
 
+  // -------- Paginated columns (50 leads/coluna sob demanda) --------
+  const statusKeys = useMemo(() => statuses.map(s => s.key), [statuses]);
+
+  const columnFilter = useMemo(() => ({
+    apply: (q: any) => {
+      let res = q;
+      if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
+        res = res.or(`assigned_to.eq.${filterVendedor},created_by.eq.${filterVendedor}`);
+      }
+      if (filterDateFrom) {
+        const from = new Date(filterDateFrom); from.setHours(0, 0, 0, 0);
+        res = res.gte("created_at", from.toISOString());
+      }
+      if (filterDateTo) {
+        const to = new Date(filterDateTo); to.setHours(23, 59, 59, 999);
+        res = res.lte("created_at", to.toISOString());
+      }
+      return res;
+    },
+  }), [isAdmin, isGerente, filterVendedor, filterDateFrom, filterDateTo]);
+
+  const buildSearchOr = useCallback((q: string) => {
+    const safe = q.replace(/[%,()]/g, "");
+    if (!safe) return null;
+    const digits = safe.replace(/\D/g, "");
+    const parts = [
+      `data->>nome_lead.ilike.%${safe}%`,
+      `data->>telefone.ilike.%${safe}%`,
+    ];
+    if (digits) parts.push(`data->>telefone.ilike.%${digits}%`);
+    formFields.filter(f => f.is_name_field).forEach(f => parts.push(`data->>field_${f.id}.ilike.%${safe}%`));
+    formFields.filter(f => f.is_phone_field).forEach(f => {
+      parts.push(`data->>field_${f.id}.ilike.%${safe}%`);
+      if (digits) parts.push(`data->>field_${f.id}.ilike.%${digits}%`);
+    });
+    return parts.join(",");
+  }, [formFields]);
+
+  const {
+    columns: paginatedColumns,
+    loadMore,
+    updateItemStatus,
+    patchItem,
+    removeItem: removePaginatedItem,
+    searchResults,
+    searching,
+    isSearching,
+  } = usePaginatedColumns<Lead>({
+    table: "crm_leads",
+    statusKeys,
+    filter: columnFilter,
+    searchQuery,
+    buildSearchOr,
+    refreshKey,
+    orderColumn: "updated_at",
+    orderAscending: false,
+  });
+
+  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) loadMore(statusKey);
+  };
+
   // Carrega APENAS metadados (colunas/status/perfis/etc). Os leads em si são
   // carregados sob demanda, 50 por coluna, via usePaginatedColumns — assim a
   // tela abre instantânea mesmo com milhares de leads.
