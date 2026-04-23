@@ -804,9 +804,10 @@ export default function LeadsPage() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map((status) => {
-            const statusLeads = getLeadsByStatus(status.key);
-            const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
-            const hasMore = statusLeads.length > visibleLeads.length;
+          const colState = getColumnState(status.key);
+          const statusLeads = colState.items;
+          const visibleLeads = statusLeads;
+          const hasMore = colState.hasMore;
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
