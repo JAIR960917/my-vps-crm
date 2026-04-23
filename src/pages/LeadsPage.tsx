@@ -320,16 +320,28 @@ export default function LeadsPage() {
 
       let existingLead: Lead | null = null;
       if (leadName && leadPhone) {
-        // Search for existing lead with same name+phone using already loaded leads
-        const allLeads = leads;
-        if (allLeads) {
-          existingLead = (allLeads as Lead[]).find(l => {
+        // Server-side duplicate check (fast — não carrega todos os leads)
+        const safeName = String(leadName).replace(/[%,()]/g, "");
+        const safePhone = String(leadPhone).replace(/\D/g, "");
+        const orParts: string[] = [];
+        // tenta achar pelo telefone (mais confiável); inclui colunas dinâmicas via field_id
+        if (safePhone) {
+          phoneFieldIds.forEach(id => orParts.push(`data->>field_${id}.ilike.%${safePhone.slice(-8)}%`));
+          orParts.push(`data->>telefone.ilike.%${safePhone.slice(-8)}%`);
+        }
+        if (orParts.length > 0) {
+          const { data: candidates } = await supabase
+            .from("crm_leads")
+            .select("id, data, status, assigned_to, created_by, created_at")
+            .or(orParts.join(","))
+            .limit(50);
+          existingLead = (candidates as any[] | null)?.find(l => {
             const d = typeof l.data === "object" ? (l.data as Record<string, any>) : {};
             const eName = nameFieldIds.reduce<string | null>((f, id) => f || d[`field_${id}`] || null, null) || d.nome_lead || "";
             const ePhone = phoneFieldIds.reduce<string | null>((f, id) => f || d[`field_${id}`] || null, null) || d.telefone || "";
             return String(eName).trim().toLowerCase() === String(leadName).trim().toLowerCase()
-              && String(ePhone).replace(/\D/g, "") === String(leadPhone).replace(/\D/g, "");
-          }) || null;
+              && String(ePhone).replace(/\D/g, "") === safePhone;
+          }) as Lead | undefined ?? null;
         }
       }
 
