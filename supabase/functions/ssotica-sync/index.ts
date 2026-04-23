@@ -237,7 +237,12 @@ async function syncContasReceber(
   integ: Integration,
   windowOverride?: { start: Date; end: Date },
 ): Promise<{ processed: number; created: number; updated: number; removed: number; chunks: number; clientesQuitados: number[] }> {
-  const today = new Date();
+  // Normaliza "hoje" para meia-noite UTC do dia atual no fuso de Brasília (UTC-3).
+  // Sem isso, após 21h de Brasília o `new Date()` em UTC já estaria no dia seguinte,
+  // fazendo parcelas que vencem hoje aparecerem como "1 dia de atraso" ao invés de
+  // "1 dia antes do vencimento".
+  const nowBR = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const today = new Date(Date.UTC(nowBR.getUTCFullYear(), nowBR.getUTCMonth(), nowBR.getUTCDate()));
   // Janela: por padrão, últimos 12 meses + 60 dias à frente (sync incremental).
   // Quando há windowOverride (modo backfill), processa apenas o chunk de 12 meses indicado.
   const overallStart = windowOverride?.start ?? addDays(today, -COBRANCAS_LOOKBACK_DAYS);
