@@ -1,0 +1,2 @@
+UPDATE ssotica_integrations SET sync_status = 'idle', last_sync_receber_at = now(), last_sync_vendas_at = now(), last_error = NULL WHERE id = '92093af4-69a1-4033-a272-4c23062e3d6d';
+UPDATE ssotica_sync_logs SET status = 'success', finished_at = now() WHERE integration_id = '92093af4-69a1-4033-a272-4c23062e3d6d' AND status = 'running';
