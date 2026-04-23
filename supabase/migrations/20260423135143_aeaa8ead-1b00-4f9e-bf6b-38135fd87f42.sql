@@ -1,0 +1,2 @@
+UPDATE ssotica_integrations SET sync_status = 'idle', last_error = NULL WHERE id = '5cc5dc5e-0707-4af4-8948-700d77967856';
+UPDATE ssotica_sync_logs SET status = 'error', error_message = 'Timeout - destravado manualmente', finished_at = now() WHERE integration_id = '5cc5dc5e-0707-4af4-8948-700d77967856' AND status = 'running';
