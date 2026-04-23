@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
