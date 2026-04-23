@@ -1,0 +1,2 @@
+UPDATE ssotica_integrations SET sync_status = 'idle', last_error = NULL WHERE id = 'cf5660c7-e098-4bc2-a524-83753a5ddb9b';
+UPDATE ssotica_sync_logs SET status = 'error', error_message = 'Timeout - destravado para reprocessar com fix de negativadas', finished_at = now() WHERE integration_id = 'cf5660c7-e098-4bc2-a524-83753a5ddb9b' AND status = 'running';

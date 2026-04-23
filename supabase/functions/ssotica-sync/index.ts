@@ -362,21 +362,29 @@ async function syncContasReceber(
           (renegociacaoObj.id != null || renegociacaoObj.valor_renegociacao != null);
         const foiRenegociada = situacao.startsWith("renegoc") || temObjetoRenegociacao;
 
-        const foiBaixada = !!parcela.baixado_em;
-        const foiCancelada = !!parcela.cancelado_em;
-        const foiEstornada = !!parcela.estornado_em;
+        // Negativado SERASA = dívida AINDA ATIVA. A SSótica pode marcar
+        // cancelado_em/baixado_em/estornado_em quando negativa a parcela,
+        // mas a dívida continua válida e o cliente deve permanecer na cobrança
+        // na coluna correspondente à parcela mais antiga em aberto.
+        const isNegativada = situacao.startsWith("negativado");
+
+        const foiBaixada = !isNegativada && !!parcela.baixado_em;
+        const foiCancelada = !isNegativada && !!parcela.cancelado_em;
+        const foiEstornada = !isNegativada && !!parcela.estornado_em;
         const dataPagamento = parcela.data_pagamento ?? parcela.dataPagamento ?? null;
         const valorRecebido = Number(parcela.valor_recebido ?? parcela.valorRecebido ?? 0);
         const valorParcela = Number(parcela.valor ?? 0);
         const foiPaga =
-          !!dataPagamento ||
-          situacao === "pago" ||
-          situacao === "paga" ||
-          situacao === "quitado" ||
-          situacao === "quitada" ||
-          situacao === "liquidado" ||
-          situacao === "liquidada" ||
-          (valorParcela > 0 && valorRecebido >= valorParcela);
+          !isNegativada && (
+            !!dataPagamento ||
+            situacao === "pago" ||
+            situacao === "paga" ||
+            situacao === "quitado" ||
+            situacao === "quitada" ||
+            situacao === "liquidado" ||
+            situacao === "liquidada" ||
+            (valorParcela > 0 && valorRecebido >= valorParcela)
+          );
 
         if (!isAtiva) skipped.naoAtiva++;
         else if (foiRenegociada) skipped.renegociada++;
