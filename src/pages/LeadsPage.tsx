@@ -52,7 +52,6 @@ export default function LeadsPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const navigate = useNavigate();
   const [columns, setColumns] = useState<CrmColumn[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -74,6 +73,8 @@ export default function LeadsPage() {
   // Offline sync tracking
   const [offlineIds, setOfflineIds] = useState<Set<string>>(new Set());
   const [recentlySyncedIds, setRecentlySyncedIds] = useState<Set<string>>(new Set());
+  const [offlineLeads, setOfflineLeads] = useState<Lead[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Filters (admin/gerente only)
   const [filterVendedor, setFilterVendedor] = useState<string>("all");
@@ -91,22 +92,7 @@ export default function LeadsPage() {
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
   const [leadNoteIds, setLeadNoteIds] = useState<Set<string>>(new Set());
 
-  // Lazy rendering: track how many leads to show per status column
-  const LEADS_PER_PAGE = 20;
-  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || LEADS_PER_PAGE;
-  const loadMore = (statusKey: string) => {
-    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || LEADS_PER_PAGE) + LEADS_PER_PAGE }));
-  };
-
-  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-      loadMore(statusKey);
-    }
-  };
 
   const loadFromCache = useCallback(() => {
     try {
