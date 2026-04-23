@@ -1,0 +1,1 @@
+UPDATE ssotica_integrations SET sync_status = 'idle', last_error = NULL WHERE is_active = true AND sync_status = 'running';
