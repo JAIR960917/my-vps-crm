@@ -14,6 +14,27 @@ interface Body {
   company_id?: string | null; // se null/ausente, processa todas as lojas
 }
 
+const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
+
+// Mantido em sincronia com supabase/functions/ssotica-sync/index.ts e
+// src/pages/ActiveClientsPage.tsx — mapeia dias desde a última compra para
+// a key da coluna em crm_renovacao_statuses.
+function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
+  if (diasDesdeUltimaCompra === null) return "novo";
+  if (diasDesdeUltimaCompra < 365) return "em_contato";
+  if (diasDesdeUltimaCompra < 730) return "agendado";
+  if (diasDesdeUltimaCompra < 1095) return "renovado";
+  return "mais_de_3_anos";
+}
+
+function flowStatusFromDate(dateValue: string | null | undefined): string {
+  if (!dateValue) return "novo";
+  const ts = new Date(dateValue).getTime();
+  if (Number.isNaN(ts)) return "novo";
+  const dias = Math.floor((Date.now() - ts) / 86400000);
+  return statusKeyForRenovacao(dias);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
