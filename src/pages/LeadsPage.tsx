@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
@@ -51,7 +52,6 @@ export default function LeadsPage() {
   const { user, isAdmin, isGerente } = useAuth();
   const navigate = useNavigate();
   const [columns, setColumns] = useState<CrmColumn[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [statuses, setStatuses] = useState<CrmStatus[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -73,6 +73,8 @@ export default function LeadsPage() {
   // Offline sync tracking
   const [offlineIds, setOfflineIds] = useState<Set<string>>(new Set());
   const [recentlySyncedIds, setRecentlySyncedIds] = useState<Set<string>>(new Set());
+  const [offlineLeads, setOfflineLeads] = useState<Lead[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Filters (admin/gerente only)
   const [filterVendedor, setFilterVendedor] = useState<string>("all");
@@ -90,27 +92,11 @@ export default function LeadsPage() {
   const [leadActivities, setLeadActivities] = useState<LeadActivity[]>([]);
   const [leadNoteIds, setLeadNoteIds] = useState<Set<string>>(new Set());
 
-  // Lazy rendering: track how many leads to show per status column
-  const LEADS_PER_PAGE = 20;
-  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  const getVisibleCount = (statusKey: string) => visibleCounts[statusKey] || LEADS_PER_PAGE;
-  const loadMore = (statusKey: string) => {
-    setVisibleCounts(prev => ({ ...prev, [statusKey]: (prev[statusKey] || LEADS_PER_PAGE) + LEADS_PER_PAGE }));
-  };
-
-  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
-      loadMore(statusKey);
-    }
-  };
 
   const loadFromCache = useCallback(() => {
     try {
       setColumns(JSON.parse(localStorage.getItem("crm_cache_columns") || "[]"));
-      setLeads(JSON.parse(localStorage.getItem("crm_cache_leads") || "[]"));
       setProfiles(JSON.parse(localStorage.getItem("crm_cache_profiles") || "[]"));
       setStatuses(JSON.parse(localStorage.getItem("crm_cache_statuses_full") || "[]"));
       setCompanies(JSON.parse(localStorage.getItem("crm_cache_companies") || "[]"));
@@ -119,24 +105,72 @@ export default function LeadsPage() {
     } catch {}
   }, []);
 
-  const fetchAllLeads = async () => {
-    const PAGE_SIZE = 1000;
-    let allLeads: any[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from("crm_leads")
-        .select("*")
-        .order("updated_at", { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
-      if (error || !data) break;
-      allLeads = allLeads.concat(data);
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-    return allLeads;
+  // -------- Paginated columns (50 leads/coluna sob demanda) --------
+  const statusKeys = useMemo(() => statuses.map(s => s.key), [statuses]);
+
+  const columnFilter = useMemo(() => ({
+    apply: (q: any) => {
+      let res = q;
+      if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
+        res = res.or(`assigned_to.eq.${filterVendedor},created_by.eq.${filterVendedor}`);
+      }
+      if (filterDateFrom) {
+        const from = new Date(filterDateFrom); from.setHours(0, 0, 0, 0);
+        res = res.gte("created_at", from.toISOString());
+      }
+      if (filterDateTo) {
+        const to = new Date(filterDateTo); to.setHours(23, 59, 59, 999);
+        res = res.lte("created_at", to.toISOString());
+      }
+      return res;
+    },
+  }), [isAdmin, isGerente, filterVendedor, filterDateFrom, filterDateTo]);
+
+  const buildSearchOr = useCallback((q: string) => {
+    const safe = q.replace(/[%,()]/g, "");
+    if (!safe) return null;
+    const digits = safe.replace(/\D/g, "");
+    const parts = [
+      `data->>nome_lead.ilike.%${safe}%`,
+      `data->>telefone.ilike.%${safe}%`,
+    ];
+    if (digits) parts.push(`data->>telefone.ilike.%${digits}%`);
+    formFields.filter(f => f.is_name_field).forEach(f => parts.push(`data->>field_${f.id}.ilike.%${safe}%`));
+    formFields.filter(f => f.is_phone_field).forEach(f => {
+      parts.push(`data->>field_${f.id}.ilike.%${safe}%`);
+      if (digits) parts.push(`data->>field_${f.id}.ilike.%${digits}%`);
+    });
+    return parts.join(",");
+  }, [formFields]);
+
+  const {
+    columns: paginatedColumns,
+    loadMore,
+    updateItemStatus,
+    patchItem,
+    removeItem: removePaginatedItem,
+    searchResults,
+    searching,
+    isSearching,
+  } = usePaginatedColumns<Lead>({
+    table: "crm_leads",
+    statusKeys,
+    filter: columnFilter,
+    searchQuery,
+    buildSearchOr,
+    refreshKey,
+    orderColumn: "updated_at",
+    orderAscending: false,
+  });
+
+  const handleColumnScroll = (statusKey: string, e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) loadMore(statusKey);
   };
 
+  // Carrega APENAS metadados (colunas/status/perfis/etc). Os leads em si são
+  // carregados sob demanda, 50 por coluna, via usePaginatedColumns — assim a
+  // tela abre instantânea mesmo com milhares de leads.
   const fetchAll = async () => {
     if (!navigator.onLine) {
       loadFromCache();
@@ -144,9 +178,7 @@ export default function LeadsPage() {
     }
 
     try {
-      // Fetch critical data first (leads + structure)
-      const [lds, { data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
-        fetchAllLeads(),
+      const [{ data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
@@ -157,7 +189,6 @@ export default function LeadsPage() {
       ]);
 
       setColumns(cols || []);
-      const loadedLeads = (lds || []) as Lead[];
       const companyMap = new Map((fullProfs || []).map((p: any) => [p.user_id, p.company_id]));
       const enrichedProfiles = (profs || []).map((p: any) => ({ ...p, company_id: companyMap.get(p.user_id) || null }));
       setProfiles(enrichedProfiles);
@@ -167,7 +198,6 @@ export default function LeadsPage() {
       setFormFields(loadedFields);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
       setCurrentUserName(me?.full_name || user?.email || "");
-      setLeads(loadedLeads);
       setFullProfiles((fullProfs || []) as Profile[]);
 
       // Cache for offline
@@ -223,23 +253,14 @@ export default function LeadsPage() {
     const queue = getOfflineQueue();
     const queueIds = new Set(queue.map(l => l.id));
     setOfflineIds(queueIds);
-    if (queue.length > 0) {
-      setLeads(prev => {
-        const existingIds = new Set(prev.map(l => l.id));
-        const newOfflineLeads = queue
-          .filter(l => !existingIds.has(l.id))
-          .map(l => ({
-            id: l.id,
-            data: l.data,
-            assigned_to: l.assigned_to,
-            created_by: l.created_by,
-            status: l.status,
-            created_at: l.created_at,
-          }));
-        if (newOfflineLeads.length === 0) return prev;
-        return [...prev, ...newOfflineLeads];
-      });
-    }
+    setOfflineLeads(queue.map(l => ({
+      id: l.id,
+      data: l.data,
+      assigned_to: l.assigned_to,
+      created_by: l.created_by,
+      status: l.status,
+      created_at: l.created_at,
+    })) as Lead[]);
   }, []);
 
   useEffect(() => {
@@ -362,16 +383,28 @@ export default function LeadsPage() {
 
       let existingLead: Lead | null = null;
       if (leadName && leadPhone) {
-        // Search for existing lead with same name+phone using already loaded leads
-        const allLeads = leads;
-        if (allLeads) {
-          existingLead = (allLeads as Lead[]).find(l => {
+        // Server-side duplicate check (fast — não carrega todos os leads)
+        const safeName = String(leadName).replace(/[%,()]/g, "");
+        const safePhone = String(leadPhone).replace(/\D/g, "");
+        const orParts: string[] = [];
+        // tenta achar pelo telefone (mais confiável); inclui colunas dinâmicas via field_id
+        if (safePhone) {
+          phoneFieldIds.forEach(id => orParts.push(`data->>field_${id}.ilike.%${safePhone.slice(-8)}%`));
+          orParts.push(`data->>telefone.ilike.%${safePhone.slice(-8)}%`);
+        }
+        if (orParts.length > 0) {
+          const { data: candidates } = await supabase
+            .from("crm_leads")
+            .select("id, data, status, assigned_to, created_by, created_at")
+            .or(orParts.join(","))
+            .limit(50);
+          existingLead = (candidates as any[] | null)?.find(l => {
             const d = typeof l.data === "object" ? (l.data as Record<string, any>) : {};
             const eName = nameFieldIds.reduce<string | null>((f, id) => f || d[`field_${id}`] || null, null) || d.nome_lead || "";
             const ePhone = phoneFieldIds.reduce<string | null>((f, id) => f || d[`field_${id}`] || null, null) || d.telefone || "";
             return String(eName).trim().toLowerCase() === String(leadName).trim().toLowerCase()
-              && String(ePhone).replace(/\D/g, "") === String(leadPhone).replace(/\D/g, "");
-          }) || null;
+              && String(ePhone).replace(/\D/g, "") === safePhone;
+          }) as Lead | undefined ?? null;
         }
       }
 
@@ -474,9 +507,9 @@ export default function LeadsPage() {
   };
 
   const handleToggleComprou = async (leadId: string, value: boolean) => {
-    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, comprou: value } : l));
+    patchItem(leadId, { comprou: value } as Partial<Lead>);
     const { error } = await supabase.from("crm_leads").update({ comprou: value } as any).eq("id", leadId);
-    if (error) { toast.error("Erro ao atualizar"); fetchAll(); }
+    if (error) { toast.error("Erro ao atualizar"); setRefreshKey(k => k + 1); }
     else toast.success(value ? "Marcado como cliente ativo" : "Marcação removida");
   };
 
@@ -484,15 +517,16 @@ export default function LeadsPage() {
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
     const newStatus = result.destination.droppableId;
+    const fromStatus = result.source.droppableId;
     const leadId = result.draggableId;
-    if (newStatus === result.source.droppableId) return;
-
-    setLeads((prev) => prev.map((l) => l.id === leadId ? { ...l, status: newStatus } : l));
-
+    if (newStatus === fromStatus) return;
+    const item = paginatedColumns[fromStatus]?.items.find(it => it.id === leadId)
+      || (searchResults || []).find(it => it.id === leadId);
+    updateItemStatus(leadId, fromStatus, newStatus, item);
     const { error } = await supabase.from("crm_leads").update({ status: newStatus }).eq("id", leadId);
     if (error) {
       toast.error("Erro ao mover lead");
-      fetchAll();
+      setRefreshKey(k => k + 1);
     }
   };
 
@@ -516,38 +550,6 @@ export default function LeadsPage() {
     const telefone = phoneFields.reduce<string>((found, f) => found || data[`field_${f.id}`] || "", null as any) || data.telefone || "";
     return `${nome} ${telefone}`.toLowerCase();
   }, [formFields]);
-
-  // Apply filters to leads
-  const filteredLeads = useMemo(() => {
-    let result = leads.filter(l => !appointedLeadIds.has(l.id));
-    if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
-      result = result.filter(l => l.assigned_to === filterVendedor || l.created_by === filterVendedor);
-    }
-    if (filterDateFrom) {
-      const from = new Date(filterDateFrom);
-      from.setHours(0, 0, 0, 0);
-      result = result.filter(l => new Date(l.created_at) >= from);
-    }
-    if (filterDateTo) {
-      const to = new Date(filterDateTo);
-      to.setHours(23, 59, 59, 999);
-      result = result.filter(l => new Date(l.created_at) <= to);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase().replace(/\D/g, "") || searchQuery.trim().toLowerCase();
-      const qText = searchQuery.trim().toLowerCase();
-      result = result.filter(l => {
-        const text = getLeadSearchText(l);
-        return text.includes(qText) || text.replace(/\D/g, "").includes(q);
-      });
-    }
-    return result;
-  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds, searchQuery, getLeadSearchText]);
-
-  // Reset visible counts when filters change
-  useEffect(() => {
-    setVisibleCounts({});
-  }, [filterVendedor, filterDateFrom, filterDateTo, searchQuery]);
 
   // Build a set of lead IDs that have recent activity (completed task or note)
   const leadsWithRecentActivity = useMemo(() => {
@@ -576,19 +578,43 @@ export default function LeadsPage() {
     return map;
   }, [leadActivities]);
 
-  const getLeadsByStatus = (status: string) => {
-    const statusLeads = filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
-    return statusLeads.sort((a, b) => {
-      // 1) Pending task ALWAYS dominates: cards with pending tasks go to the TOP
+  const sortByTaskPriority = useCallback((items: Lead[]) => {
+    return [...items].sort((a, b) => {
       const aPrio = leadTaskPriority.get(a.id) || 0;
       const bPrio = leadTaskPriority.get(b.id) || 0;
       if (aPrio !== bPrio) return bPrio - aPrio;
-      // 2) When no pending task, cards with recent interaction (completed task or notes) go to the END
       const aHasRecent = leadsWithRecentActivity.has(a.id) ? 1 : 0;
       const bHasRecent = leadsWithRecentActivity.has(b.id) ? 1 : 0;
       return aHasRecent - bHasRecent;
     });
-  };
+  }, [leadTaskPriority, leadsWithRecentActivity]);
+
+  // Retorna {items, total, hasMore, loading} por status, usando o hook paginado
+  const getColumnState = useCallback((status: string) => {
+    // Mescla leads offline (criados sem internet) na coluna correspondente
+    const offlineForStatus = offlineLeads.filter(l => getLeadDisplayStatus(l) === status);
+    if (isSearching) {
+      const filtered = (searchResults || []).filter(l => getLeadDisplayStatus(l) === status && !appointedLeadIds.has(l.id));
+      const merged = [...offlineForStatus, ...filtered];
+      return { items: sortByTaskPriority(merged), total: merged.length, hasMore: false, loading: searching };
+    }
+    const col = paginatedColumns[status];
+    const items = (col?.items || []).filter(l => !appointedLeadIds.has(l.id));
+    const merged = [...offlineForStatus, ...items];
+    return {
+      items: sortByTaskPriority(merged),
+      total: (col?.total || 0) + offlineForStatus.length,
+      hasMore: col?.hasMore || false,
+      loading: col?.loading || false,
+    };
+  }, [paginatedColumns, isSearching, searchResults, searching, sortByTaskPriority, appointedLeadIds, offlineLeads, getLeadDisplayStatus]);
+
+  const getLeadsByStatus = (status: string) => getColumnState(status).items;
+
+  const totalDisplayed = useMemo(() => {
+    if (isSearching) return (searchResults || []).filter(l => !appointedLeadIds.has(l.id)).length;
+    return Object.values(paginatedColumns).reduce((acc, col) => acc + (col?.total || 0), 0);
+  }, [paginatedColumns, isSearching, searchResults, appointedLeadIds]);
 
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
 
@@ -606,8 +632,7 @@ export default function LeadsPage() {
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold">Leads</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            {filteredLeads.length} lead{filteredLeads.length !== 1 ? "s" : ""}
-            {hasActiveFilters && ` (filtrado de ${leads.length})`}
+            {totalDisplayed} lead{totalDisplayed !== 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -728,9 +753,10 @@ export default function LeadsPage() {
       {/* Mobile: Active column cards */}
       <div className="lg:hidden space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }} onScroll={(e) => handleColumnScroll(mobileTab, e)}>
         {statuses.filter(s => s.key === mobileTab).map((status) => {
-          const statusLeads = getLeadsByStatus(status.key);
-          const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
-          const hasMore = statusLeads.length > visibleLeads.length;
+          const colState = getColumnState(status.key);
+          const statusLeads = colState.items;
+          const visibleLeads = statusLeads;
+          const hasMore = colState.hasMore;
           return (
             <div key={status.key}>
               {statusLeads.length === 0 && (
@@ -778,9 +804,10 @@ export default function LeadsPage() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="hidden lg:flex gap-3 overflow-x-auto pb-4" style={{ height: "calc(100vh - 200px)" }}>
           {statuses.map((status) => {
-            const statusLeads = getLeadsByStatus(status.key);
-            const visibleLeads = statusLeads.slice(0, getVisibleCount(status.key));
-            const hasMore = statusLeads.length > visibleLeads.length;
+          const colState = getColumnState(status.key);
+          const statusLeads = colState.items;
+          const visibleLeads = statusLeads;
+          const hasMore = colState.hasMore;
             const colors = colorMap[status.color] || colorMap.blue;
             return (
               <div key={status.key} className="flex-shrink-0 w-[280px] flex flex-col min-h-0">
