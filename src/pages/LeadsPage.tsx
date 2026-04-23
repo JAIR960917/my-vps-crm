@@ -190,23 +190,14 @@ export default function LeadsPage() {
     const queue = getOfflineQueue();
     const queueIds = new Set(queue.map(l => l.id));
     setOfflineIds(queueIds);
-    if (queue.length > 0) {
-      setLeads(prev => {
-        const existingIds = new Set(prev.map(l => l.id));
-        const newOfflineLeads = queue
-          .filter(l => !existingIds.has(l.id))
-          .map(l => ({
-            id: l.id,
-            data: l.data,
-            assigned_to: l.assigned_to,
-            created_by: l.created_by,
-            status: l.status,
-            created_at: l.created_at,
-          }));
-        if (newOfflineLeads.length === 0) return prev;
-        return [...prev, ...newOfflineLeads];
-      });
-    }
+    setOfflineLeads(queue.map(l => ({
+      id: l.id,
+      data: l.data,
+      assigned_to: l.assigned_to,
+      created_by: l.created_by,
+      status: l.status,
+      created_at: l.created_at,
+    })) as Lead[]);
   }, []);
 
   useEffect(() => {
