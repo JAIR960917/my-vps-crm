@@ -14,6 +14,27 @@ interface Body {
   company_id?: string | null; // se null/ausente, processa todas as lojas
 }
 
+const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
+
+// Mantido em sincronia com supabase/functions/ssotica-sync/index.ts e
+// src/pages/ActiveClientsPage.tsx — mapeia dias desde a última compra para
+// a key da coluna em crm_renovacao_statuses.
+function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
+  if (diasDesdeUltimaCompra === null) return "novo";
+  if (diasDesdeUltimaCompra < 365) return "em_contato";
+  if (diasDesdeUltimaCompra < 730) return "agendado";
+  if (diasDesdeUltimaCompra < 1095) return "renovado";
+  return "mais_de_3_anos";
+}
+
+function flowStatusFromDate(dateValue: string | null | undefined): string {
+  if (!dateValue) return "novo";
+  const ts = new Date(dateValue).getTime();
+  if (Number.isNaN(ts)) return "novo";
+  const dias = Math.floor((Date.now() - ts) / 86400000);
+  return statusKeyForRenovacao(dias);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -137,37 +158,50 @@ Deno.serve(async (req) => {
       // Pega TODOS os leads sem responsável dessa loja (paginado)
       const PAGE = 1000;
       let from = 0;
-      const ids: string[] = [];
+      const rows: { id: string; data_ultima_compra: string | null; status: string }[] = [];
       while (true) {
         const { data: page } = await admin
           .from("crm_renovacoes")
-          .select("id")
+          .select("id, data_ultima_compra, status")
           .eq("ssotica_company_id", cid)
           .is("assigned_to", null)
           .range(from, from + PAGE - 1);
-        const arr = (page ?? []).map((r: any) => r.id as string);
-        ids.push(...arr);
+        const arr = (page ?? []) as any[];
+        rows.push(...arr.map((r) => ({
+          id: r.id as string,
+          data_ultima_compra: r.data_ultima_compra ?? null,
+          status: r.status as string,
+        })));
         if (arr.length < PAGE) break;
         from += PAGE;
       }
 
       // Round-robin determinístico ordenando por id (estável, idempotente)
-      ids.sort();
+      rows.sort((a, b) => a.id.localeCompare(b.id));
       let assignedHere = 0;
-      // Atualiza em lotes por vendedor para reduzir chamadas
-      const buckets: Record<string, string[]> = {};
-      ids.forEach((id, idx) => {
-        const v = vendedores[idx % vendedores.length];
-        (buckets[v] ??= []).push(id);
+      // Agrupa por (vendedor, novoStatus). Quando o card está na coluna
+      // "fazer direcionamento", recalcula o status para o flow normal a
+      // partir da data da última compra. Status manuais (em_atendimento,
+      // nunca_fez_exame) são preservados.
+      const buckets: Record<string, { ids: string[]; status: string | null; userId: string }> = {};
+      rows.forEach((row, idx) => {
+        const userId = vendedores[idx % vendedores.length];
+        const isManual = row.status === "em_atendimento" || row.status === "nunca_fez_exame";
+        const newStatus = !isManual && row.status === DIRECIONAMENTO_STATUS
+          ? flowStatusFromDate(row.data_ultima_compra)
+          : null; // null = não atualizar status
+        const key = `${userId}|${newStatus ?? "__keep__"}`;
+        (buckets[key] ??= { ids: [], status: newStatus, userId }).ids.push(row.id);
       });
 
-      for (const [userId, leadIds] of Object.entries(buckets)) {
-        // chunk em lotes de 200 ids para o filtro IN
+      for (const { ids: leadIds, status, userId } of Object.values(buckets)) {
         for (let i = 0; i < leadIds.length; i += 200) {
           const slice = leadIds.slice(i, i + 200);
+          const update: Record<string, any> = { assigned_to: userId };
+          if (status) update.status = status;
           const { error } = await admin
             .from("crm_renovacoes")
-            .update({ assigned_to: userId })
+            .update(update)
             .in("id", slice);
           if (!error) assignedHere += slice.length;
         }
