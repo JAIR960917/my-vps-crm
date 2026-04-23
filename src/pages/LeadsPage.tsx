@@ -551,38 +551,6 @@ export default function LeadsPage() {
     return `${nome} ${telefone}`.toLowerCase();
   }, [formFields]);
 
-  // Apply filters to leads
-  const filteredLeads = useMemo(() => {
-    let result = leads.filter(l => !appointedLeadIds.has(l.id));
-    if ((isAdmin || isGerente) && filterVendedor && filterVendedor !== "all") {
-      result = result.filter(l => l.assigned_to === filterVendedor || l.created_by === filterVendedor);
-    }
-    if (filterDateFrom) {
-      const from = new Date(filterDateFrom);
-      from.setHours(0, 0, 0, 0);
-      result = result.filter(l => new Date(l.created_at) >= from);
-    }
-    if (filterDateTo) {
-      const to = new Date(filterDateTo);
-      to.setHours(23, 59, 59, 999);
-      result = result.filter(l => new Date(l.created_at) <= to);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase().replace(/\D/g, "") || searchQuery.trim().toLowerCase();
-      const qText = searchQuery.trim().toLowerCase();
-      result = result.filter(l => {
-        const text = getLeadSearchText(l);
-        return text.includes(qText) || text.replace(/\D/g, "").includes(q);
-      });
-    }
-    return result;
-  }, [leads, filterVendedor, filterDateFrom, filterDateTo, isAdmin, isGerente, appointedLeadIds, searchQuery, getLeadSearchText]);
-
-  // Reset visible counts when filters change
-  useEffect(() => {
-    setVisibleCounts({});
-  }, [filterVendedor, filterDateFrom, filterDateTo, searchQuery]);
-
   // Build a set of lead IDs that have recent activity (completed task or note)
   const leadsWithRecentActivity = useMemo(() => {
     const ids = new Set<string>();
@@ -610,19 +578,43 @@ export default function LeadsPage() {
     return map;
   }, [leadActivities]);
 
-  const getLeadsByStatus = (status: string) => {
-    const statusLeads = filteredLeads.filter((l) => getLeadDisplayStatus(l) === status);
-    return statusLeads.sort((a, b) => {
-      // 1) Pending task ALWAYS dominates: cards with pending tasks go to the TOP
+  const sortByTaskPriority = useCallback((items: Lead[]) => {
+    return [...items].sort((a, b) => {
       const aPrio = leadTaskPriority.get(a.id) || 0;
       const bPrio = leadTaskPriority.get(b.id) || 0;
       if (aPrio !== bPrio) return bPrio - aPrio;
-      // 2) When no pending task, cards with recent interaction (completed task or notes) go to the END
       const aHasRecent = leadsWithRecentActivity.has(a.id) ? 1 : 0;
       const bHasRecent = leadsWithRecentActivity.has(b.id) ? 1 : 0;
       return aHasRecent - bHasRecent;
     });
-  };
+  }, [leadTaskPriority, leadsWithRecentActivity]);
+
+  // Retorna {items, total, hasMore, loading} por status, usando o hook paginado
+  const getColumnState = useCallback((status: string) => {
+    // Mescla leads offline (criados sem internet) na coluna correspondente
+    const offlineForStatus = offlineLeads.filter(l => getLeadDisplayStatus(l) === status);
+    if (isSearching) {
+      const filtered = (searchResults || []).filter(l => getLeadDisplayStatus(l) === status && !appointedLeadIds.has(l.id));
+      const merged = [...offlineForStatus, ...filtered];
+      return { items: sortByTaskPriority(merged), total: merged.length, hasMore: false, loading: searching };
+    }
+    const col = paginatedColumns[status];
+    const items = (col?.items || []).filter(l => !appointedLeadIds.has(l.id));
+    const merged = [...offlineForStatus, ...items];
+    return {
+      items: sortByTaskPriority(merged),
+      total: (col?.total || 0) + offlineForStatus.length,
+      hasMore: col?.hasMore || false,
+      loading: col?.loading || false,
+    };
+  }, [paginatedColumns, isSearching, searchResults, searching, sortByTaskPriority, appointedLeadIds, offlineLeads, getLeadDisplayStatus]);
+
+  const getLeadsByStatus = (status: string) => getColumnState(status).items;
+
+  const totalDisplayed = useMemo(() => {
+    if (isSearching) return (searchResults || []).filter(l => !appointedLeadIds.has(l.id)).length;
+    return Object.values(paginatedColumns).reduce((acc, col) => acc + (col?.total || 0), 0);
+  }, [paginatedColumns, isSearching, searchResults, appointedLeadIds]);
 
   const getActivitiesForLead = (leadId: string) => leadActivities.filter(a => a.lead_id === leadId);
 
