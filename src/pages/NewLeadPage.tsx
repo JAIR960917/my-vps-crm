@@ -107,15 +107,32 @@ export default function NewLeadPage() {
 
     const fetchData = async () => {
       try {
-        const [{ data: flds }, { data: sts }, { data: comps }, { data: profs }] = await Promise.all([
+        const [{ data: flds }, { data: sts }, { data: profs }, { data: myProfile }, { data: managerCos }] = await Promise.all([
           supabase.from("crm_form_fields").select("*").order("position"),
           supabase.from("crm_statuses").select("*").order("position"),
-          supabase.from("companies").select("id, name").order("name"),
           supabase.rpc("get_profile_names"),
+          supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle(),
+          supabase.from("manager_companies").select("company_id").eq("user_id", user!.id),
         ]);
+
+        // Build list of company ids the user belongs to
+        const companyIds = new Set<string>();
+        if (myProfile?.company_id) companyIds.add(myProfile.company_id);
+        (managerCos || []).forEach((mc: any) => mc.company_id && companyIds.add(mc.company_id));
+
+        let comps: Company[] = [];
+        if (companyIds.size > 0) {
+          const { data: c } = await supabase
+            .from("companies")
+            .select("id, name")
+            .in("id", Array.from(companyIds))
+            .order("name");
+          comps = (c || []) as Company[];
+        }
+
         if (flds) setFields(flds as unknown as FormField[]);
         if (sts) setStatuses(sts as CrmStatus[]);
-        if (comps) setCompanies(comps as Company[]);
+        setCompanies(comps);
         if (sts && sts.length > 0) setFormStatus(searchParams.get("status") || sts[0].key);
         const me = (profs || []).find((p: any) => p.user_id === user?.id);
         setCurrentUserName(me?.full_name || user?.email || "");
