@@ -438,6 +438,7 @@ export default function NewLeadPage() {
         scheduled_datetime: apptPayload.scheduled_datetime,
         nome: apptPayload.nome,
         telefone: apptPayload.telefone,
+        idade: (apptPayload as any).idade || "",
         valor: apptPayload.valor,
         forma_pagamento: apptPayload.forma_pagamento,
         canal_agendamento: apptPayload.canal_agendamento,
