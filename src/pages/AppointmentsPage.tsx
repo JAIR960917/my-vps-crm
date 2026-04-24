@@ -79,6 +79,10 @@ export default function AppointmentsPage() {
   // Delete
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Return to Leads confirmation
+  const [returnId, setReturnId] = useState<string | null>(null);
+  const [returning, setReturning] = useState(false);
+
   // Sale dialog (when "Vendido" is selected)
   const [saleDialogOpen, setSaleDialogOpen] = useState(false);
   const [saleApptId, setSaleApptId] = useState<string | null>(null);
