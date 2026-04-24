@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
+import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
@@ -178,11 +179,12 @@ export default function LeadsPage() {
     }
 
     try {
-      const [{ data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
+      const [{ data: cols }, { data: profs }, { data: sts }, { data: myProfile }, { data: managerCos }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
-        supabase.from("companies").select("id, name").order("name"),
+        supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle(),
+        supabase.from("manager_companies").select("company_id").eq("user_id", user!.id),
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
         supabase.from("crm_form_fields").select("*").order("position"),
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
@@ -193,7 +195,24 @@ export default function LeadsPage() {
       const enrichedProfiles = (profs || []).map((p: any) => ({ ...p, company_id: companyMap.get(p.user_id) || null }));
       setProfiles(enrichedProfiles);
       setStatuses((sts || []) as CrmStatus[]);
-      setCompanies((comps || []) as Company[]);
+      let allowedCompanies: Company[] = [];
+      if (isAdmin) {
+        const { data: allCompanies } = await supabase.from("companies").select("id, name").order("name");
+        allowedCompanies = (allCompanies || []) as Company[];
+      } else {
+        const companyIds = new Set<string>();
+        if (myProfile?.company_id) companyIds.add(myProfile.company_id);
+        (managerCos || []).forEach((mc: any) => mc.company_id && companyIds.add(mc.company_id));
+        if (companyIds.size > 0) {
+          const { data: filteredCompanies } = await supabase
+            .from("companies")
+            .select("id, name")
+            .in("id", Array.from(companyIds))
+            .order("name");
+          allowedCompanies = (filteredCompanies || []) as Company[];
+        }
+      }
+      setCompanies(allowedCompanies);
       const loadedFields = (ff || []) as unknown as FormFieldInfo[];
       setFormFields(loadedFields);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
@@ -205,7 +224,7 @@ export default function LeadsPage() {
         localStorage.setItem("crm_cache_columns", JSON.stringify(cols || []));
         localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
-        localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
+        localStorage.setItem("crm_cache_companies", JSON.stringify(allowedCompanies || []));
         localStorage.setItem("crm_cache_formfields", JSON.stringify(ff || []));
         localStorage.setItem("crm_cache_fields", JSON.stringify(ffFull || []));
         localStorage.setItem("crm_cache_statuses", JSON.stringify(sts || []));
@@ -245,6 +264,7 @@ export default function LeadsPage() {
     // Update offline ids with remaining queue
     const remaining = getOfflineQueue();
     setOfflineIds(new Set(remaining.map(l => l.id)));
+    setRefreshKey((k) => k + 1);
     await fetchAll();
   }, []);
 
@@ -454,35 +474,16 @@ export default function LeadsPage() {
   const getLeadSnapshot = useCallback((lead: Lead | null) => {
     if (!lead) return { nome: "", telefone: "", idade: "" };
 
-    const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
-    const nameFields = formFields.filter((f) => f.is_name_field);
-    const phoneFields = formFields.filter((f) => f.is_phone_field);
-    const ageFields = formFields.filter((f) => f.label?.toLowerCase().includes("idade"));
+    const data = normalizeLeadData(typeof lead.data === "object" ? (lead.data as Record<string, any>) : {}, formFields);
+    const identity = resolveLeadIdentity(data, formFields);
+    return {
+      nome: identity.nome || "Lead",
+      telefone: identity.telefone || "",
+      idade: identity.idade || "",
+    };
+  }, [formFields]);
 
-    const nome =
-      nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
-      data.nome_lead ||
-      columns.reduce<string | null>((found, c) => found || data[c.field_key] || null, null) ||
-      "Lead";
-
-    const telefone =
-      phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
-      data.telefone ||
-      columns.find((c) => /telefone|celular|whatsapp|fone/i.test(`${c.name} ${c.field_key}`))?.field_key &&
-        data[columns.find((c) => /telefone|celular|whatsapp|fone/i.test(`${c.name} ${c.field_key}`))!.field_key] ||
-      "";
-
-    const idade =
-      ageFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
-      data.idade ||
-      columns.find((c) => /idade/i.test(`${c.name} ${c.field_key}`))?.field_key &&
-        data[columns.find((c) => /idade/i.test(`${c.name} ${c.field_key}`))!.field_key] ||
-      "";
-
-    return { nome: String(nome || ""), telefone: String(telefone || ""), idade: String(idade || "") };
-  }, [columns, formFields]);
-
-  const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
+  const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; forma_pagamento: string; canal_agendamento: string }) => {
     if (!schedulingLead || !user) return;
     setScheduleSaving(true);
     const { nome, telefone, idade } = getLeadSnapshot(schedulingLead);
@@ -490,7 +491,7 @@ export default function LeadsPage() {
       lead_id: schedulingLead.id,
       scheduled_by: user.id,
       scheduled_datetime: schedData.scheduled_datetime,
-      valor: schedData.valor,
+      valor: 0,
       forma_pagamento: schedData.forma_pagamento,
       canal_agendamento: schedData.canal_agendamento,
       previous_status: schedulingLead.status,

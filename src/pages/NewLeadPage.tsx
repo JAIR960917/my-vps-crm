@@ -18,6 +18,7 @@ import { formatPhoneBR } from "@/lib/phoneFormat";
 import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
 
 type DateStatusRange = { max_years: number; status_key: string };
 type DateStatusConfig = { ranges: DateStatusRange[]; above_all: string; no_answer: string };
@@ -33,6 +34,8 @@ type FormField = {
   parent_trigger_value: string | null;
   status_mapping: Record<string, string> | null;
   date_status_ranges: DateStatusConfig | null;
+  is_name_field?: boolean;
+  is_phone_field?: boolean;
 };
 
 type CrmStatus = { id: string; key: string; label: string; position: number; color: string };
@@ -107,7 +110,7 @@ export default function NewLeadPage() {
     const fetchData = async () => {
       try {
         const [{ data: flds }, { data: sts }, { data: profs }, { data: myProfile }, { data: managerCos }] = await Promise.all([
-          supabase.from("crm_form_fields").select("*").order("position"),
+          supabase.from("crm_form_fields").select("id, label, field_type, options, position, is_required, parent_field_id, parent_trigger_value, status_mapping, date_status_ranges, is_name_field, is_phone_field").order("position"),
           supabase.from("crm_statuses").select("*").order("position"),
           supabase.rpc("get_profile_names"),
           supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle(),
@@ -317,16 +320,10 @@ export default function NewLeadPage() {
     }
 
     // Merge observacao into data so it's persisted on the lead
-    const finalData: Record<string, any> = { ...formData };
+    const finalData: Record<string, any> = normalizeLeadData({ ...formData }, fields);
     if (observacao.trim()) finalData.observacao = observacao.trim();
 
-    // Resolve lead name + phone + idade from name/phone marked fields
-    const nameField = fields.find(f => (f as any).is_name_field);
-    const phoneField = fields.find(f => (f as any).is_phone_field);
-    const ageField = fields.find(f => f.label?.toLowerCase().includes("idade"));
-    const leadName = nameField ? String(finalData[`field_${nameField.id}`] || "") : "";
-    const leadPhone = phoneField ? String(finalData[`field_${phoneField.id}`] || "") : "";
-    const leadIdade = ageField ? String(finalData[`field_${ageField.id}`] || "") : "";
+    const { nome: leadName, telefone: leadPhone, idade: leadIdade } = resolveLeadIdentity(finalData, fields);
 
     // Build appointment payload (if scheduling)
     const apptPayload: (OfflineAppointmentPayload & { idade?: string }) | undefined = agendou === "sim" ? {
@@ -377,7 +374,9 @@ export default function NewLeadPage() {
     // Check for existing lead with same name + phone (server-side)
     let existingLeadId: string | null = null;
     try {
-      if (leadName && leadPhone && nameField && phoneField) {
+        const nameField = fields.find((f) => f.is_name_field);
+        const phoneField = fields.find((f) => f.is_phone_field);
+        if (leadName && leadPhone && nameField && phoneField) {
         const digits = leadPhone.replace(/\D/g, "");
         const { data: matches } = await supabase
           .from("crm_leads")
