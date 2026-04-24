@@ -471,6 +471,24 @@ export default function AppointmentsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Return to Leads confirm */}
+      <AlertDialog open={!!returnId} onOpenChange={(open) => !open && setReturnId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retornar lead para a tela de Leads?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O agendamento será removido e o lead voltará para a tela de Leads na coluna original.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={returning}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReturnToLeads} disabled={returning}>
+              {returning ? "Retornando..." : "Retornar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Sale Dialog */}
       <Dialog open={saleDialogOpen} onOpenChange={(open) => { if (!open) { setSaleDialogOpen(false); setSaleApptId(null); } }}>
         <DialogContent className="sm:max-w-sm">
