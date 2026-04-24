@@ -480,9 +480,13 @@ export default function AppointmentsPage() {
       <AlertDialog open={!!returnId} onOpenChange={(open) => !open && setReturnId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Retornar lead para a tela de Leads?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {isFromRenovacao ? "Retornar para Renovações?" : "Retornar lead para a tela de Leads?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              O agendamento será removido e o lead voltará para a tela de Leads na coluna original.
+              {isFromRenovacao
+                ? "O agendamento será removido e o cliente voltará para a tela de Renovações na coluna original."
+                : "O agendamento será removido e o lead voltará para a tela de Leads na coluna original."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
