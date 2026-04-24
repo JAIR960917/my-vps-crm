@@ -57,7 +57,6 @@ export default function NewLeadPage() {
   const [observacao, setObservacao] = useState("");
   const [agDate, setAgDate] = useState(""); // yyyy-MM-dd
   const [agTime, setAgTime] = useState("09:00");
-  const [agValor, setAgValor] = useState("");
   const [agFormaPagamento, setAgFormaPagamento] = useState("");
   const [agCanal, setAgCanal] = useState("");
 
