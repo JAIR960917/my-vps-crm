@@ -130,24 +130,6 @@ export default function AppointmentsPage() {
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
   const updateField = async (id: string, field: string, value: string) => {
-    const appt = appointments.find(a => a.id === id);
-
-    if (field === "comparecimento" && value === "Não Compareceu" && appt) {
-      await supabase.from("crm_leads").update({ status: appt.previous_status } as any).eq("id", appt.lead_id);
-      await supabase.from("crm_appointments").update({ [field]: value, status: "nao_compareceu" } as any).eq("id", id);
-      toast.success("Lead devolvido à coluna original");
-      fetchAll();
-      return;
-    }
-
-    if (field === "venda" && value === "Não Vendido" && appt) {
-      await supabase.from("crm_leads").update({ status: appt.previous_status } as any).eq("id", appt.lead_id);
-      await supabase.from("crm_appointments").update({ [field]: value, status: "nao_vendido" } as any).eq("id", id);
-      toast.success("Lead devolvido à coluna original");
-      fetchAll();
-      return;
-    }
-
     if (field === "venda" && value === "Vendido") {
       setSaleApptId(id);
       setSaleValor("");
@@ -160,6 +142,21 @@ export default function AppointmentsPage() {
     const { error } = await supabase.from("crm_appointments").update({ [field]: value } as any).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+  };
+
+  const confirmReturnToLeads = async () => {
+    if (!returnId) return;
+    setReturning(true);
+    const appt = appointments.find(a => a.id === returnId);
+    if (appt?.lead_id) {
+      await supabase.from("crm_leads").update({ status: appt.previous_status || "novo", scheduled_date: null } as any).eq("id", appt.lead_id);
+    }
+    const { error } = await supabase.from("crm_appointments").delete().eq("id", returnId);
+    if (error) toast.error("Erro ao retornar lead");
+    else toast.success("Lead retornado para a tela de Leads");
+    setReturning(false);
+    setReturnId(null);
+    fetchAll();
   };
 
   const handleSaleSubmit = async () => {
