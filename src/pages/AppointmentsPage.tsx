@@ -364,6 +364,17 @@ export default function AppointmentsPage() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
+                        {appt.venda !== "Vendido" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title="Retornar para Leads"
+                            onClick={() => setReturnId(appt.id)}
+                          >
+                            <Undo2 className="h-3.5 w-3.5 text-primary" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(appt)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
