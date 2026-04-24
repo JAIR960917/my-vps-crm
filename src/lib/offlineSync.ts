@@ -19,6 +19,7 @@ export type OfflineAppointmentPayload = {
   scheduled_by: string;
   nome: string;
   telefone: string;
+  idade?: string;
   valor: number;
   forma_pagamento: string;
   canal_agendamento: string;
@@ -100,6 +101,7 @@ export async function syncOfflineQueue(): Promise<string[]> {
           scheduled_datetime: ap.scheduled_datetime,
           nome: ap.nome,
           telefone: ap.telefone,
+          idade: ap.idade || "",
           valor: ap.valor,
           forma_pagamento: ap.forma_pagamento,
           canal_agendamento: ap.canal_agendamento,
@@ -116,6 +118,7 @@ export async function syncOfflineQueue(): Promise<string[]> {
           scheduled_datetime: a.scheduled_datetime,
           nome: a.nome,
           telefone: a.telefone,
+          idade: a.idade || "",
           valor: a.valor,
           forma_pagamento: a.forma_pagamento,
           canal_agendamento: a.canal_agendamento,
@@ -140,6 +143,7 @@ export async function syncOfflineQueue(): Promise<string[]> {
       scheduled_datetime: a.scheduled_datetime,
       nome: a.nome,
       telefone: a.telefone,
+      idade: a.idade || "",
       valor: a.valor,
       forma_pagamento: a.forma_pagamento,
       canal_agendamento: a.canal_agendamento,

@@ -57,7 +57,6 @@ export default function NewLeadPage() {
   const [observacao, setObservacao] = useState("");
   const [agDate, setAgDate] = useState(""); // yyyy-MM-dd
   const [agTime, setAgTime] = useState("09:00");
-  const [agValor, setAgValor] = useState("");
   const [agFormaPagamento, setAgFormaPagamento] = useState("");
   const [agCanal, setAgCanal] = useState("");
 
@@ -321,14 +320,16 @@ export default function NewLeadPage() {
     const finalData: Record<string, any> = { ...formData };
     if (observacao.trim()) finalData.observacao = observacao.trim();
 
-    // Resolve lead name + phone from name/phone marked fields
+    // Resolve lead name + phone + idade from name/phone marked fields
     const nameField = fields.find(f => (f as any).is_name_field);
     const phoneField = fields.find(f => (f as any).is_phone_field);
+    const ageField = fields.find(f => f.label?.toLowerCase().includes("idade"));
     const leadName = nameField ? String(finalData[`field_${nameField.id}`] || "") : "";
     const leadPhone = phoneField ? String(finalData[`field_${phoneField.id}`] || "") : "";
+    const leadIdade = ageField ? String(finalData[`field_${ageField.id}`] || "") : "";
 
     // Build appointment payload (if scheduling)
-    const apptPayload: OfflineAppointmentPayload | undefined = agendou === "sim" ? {
+    const apptPayload: (OfflineAppointmentPayload & { idade?: string }) | undefined = agendou === "sim" ? {
       scheduled_datetime: (() => {
         const [y, mo, d] = agDate.split("-").map(Number);
         const [h, m] = agTime.split(":").map(Number);
@@ -337,7 +338,8 @@ export default function NewLeadPage() {
       scheduled_by: user!.id,
       nome: leadName,
       telefone: leadPhone,
-      valor: parseFloat(agValor) || 0,
+      idade: leadIdade,
+      valor: 0,
       forma_pagamento: agFormaPagamento,
       canal_agendamento: agCanal,
       resumo: observacao.trim(),
@@ -366,7 +368,7 @@ export default function NewLeadPage() {
       setFormData({});
       setObservacao("");
       setAgendou("");
-      setAgDate(""); setAgTime("09:00"); setAgValor(""); setAgFormaPagamento(""); setAgCanal("");
+      setAgDate(""); setAgTime("09:00"); setAgFormaPagamento(""); setAgCanal("");
       setStep(0);
       navigate(apptPayload ? "/agendamentos" : "/");
       return;
@@ -436,6 +438,7 @@ export default function NewLeadPage() {
         scheduled_datetime: apptPayload.scheduled_datetime,
         nome: apptPayload.nome,
         telefone: apptPayload.telefone,
+        idade: (apptPayload as any).idade || "",
         valor: apptPayload.valor,
         forma_pagamento: apptPayload.forma_pagamento,
         canal_agendamento: apptPayload.canal_agendamento,
@@ -453,7 +456,7 @@ export default function NewLeadPage() {
     setFormData({});
     setObservacao("");
     setAgendou("");
-    setAgDate(""); setAgTime("09:00"); setAgValor(""); setAgFormaPagamento(""); setAgCanal("");
+    setAgDate(""); setAgTime("09:00"); setAgFormaPagamento(""); setAgCanal("");
     setStep(0);
     navigate(apptPayload ? "/agendamentos" : "/");
   };
@@ -715,11 +718,6 @@ export default function NewLeadPage() {
                     <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive pointer-events-none" />
                     <Input type="time" value={agTime} onChange={(e) => setAgTime(e.target.value)} className="pl-10" />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Valor da Consulta (R$)</Label>
-                  <Input type="number" step="0.01" min="0" placeholder="0,00" value={agValor} onChange={(e) => setAgValor(e.target.value)} />
                 </div>
 
                 <div className="space-y-2">
