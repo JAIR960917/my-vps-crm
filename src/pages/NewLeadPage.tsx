@@ -320,14 +320,16 @@ export default function NewLeadPage() {
     const finalData: Record<string, any> = { ...formData };
     if (observacao.trim()) finalData.observacao = observacao.trim();
 
-    // Resolve lead name + phone from name/phone marked fields
+    // Resolve lead name + phone + idade from name/phone marked fields
     const nameField = fields.find(f => (f as any).is_name_field);
     const phoneField = fields.find(f => (f as any).is_phone_field);
+    const ageField = fields.find(f => f.label?.toLowerCase().includes("idade"));
     const leadName = nameField ? String(finalData[`field_${nameField.id}`] || "") : "";
     const leadPhone = phoneField ? String(finalData[`field_${phoneField.id}`] || "") : "";
+    const leadIdade = ageField ? String(finalData[`field_${ageField.id}`] || "") : "";
 
     // Build appointment payload (if scheduling)
-    const apptPayload: OfflineAppointmentPayload | undefined = agendou === "sim" ? {
+    const apptPayload: (OfflineAppointmentPayload & { idade?: string }) | undefined = agendou === "sim" ? {
       scheduled_datetime: (() => {
         const [y, mo, d] = agDate.split("-").map(Number);
         const [h, m] = agTime.split(":").map(Number);
@@ -336,7 +338,8 @@ export default function NewLeadPage() {
       scheduled_by: user!.id,
       nome: leadName,
       telefone: leadPhone,
-      valor: parseFloat(agValor) || 0,
+      idade: leadIdade,
+      valor: 0,
       forma_pagamento: agFormaPagamento,
       canal_agendamento: agCanal,
       resumo: observacao.trim(),
