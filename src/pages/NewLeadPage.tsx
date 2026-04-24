@@ -643,6 +643,93 @@ export default function NewLeadPage() {
                 </div>
               ))}
             </div>
+
+            {/* Observação */}
+            <div className="space-y-2 pt-2">
+              <Label>Observação</Label>
+              <Textarea
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="Adicione uma observação sobre o lead (opcional)"
+                rows={3}
+              />
+            </div>
+
+            {/* Agendou consulta? */}
+            <div className="space-y-2 pt-2">
+              <Label>Agendou a consulta? <span className="text-destructive">*</span></Label>
+              <Select value={agendou} onValueChange={(v) => setAgendou(v as "sim" | "nao")}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {agendou === "sim" && (
+              <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                <p className="text-sm font-medium text-primary">📅 Dados do Agendamento</p>
+
+                <div className="space-y-2">
+                  <Label>Data <span className="text-destructive">*</span></Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !agDate && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-4 w-4 text-destructive" />
+                        {agDate ? format(new Date(agDate + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR }) : "Selecionar data"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={agDate ? new Date(agDate + "T00:00:00") : undefined}
+                        onSelect={(d) => setAgDate(d ? format(d, "yyyy-MM-dd") : "")}
+                        locale={ptBR}
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Horário <span className="text-destructive">*</span></Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive pointer-events-none" />
+                    <Input type="time" value={agTime} onChange={(e) => setAgTime(e.target.value)} className="pl-10" />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Valor da Consulta (R$)</Label>
+                  <Input type="number" step="0.01" min="0" placeholder="0,00" value={agValor} onChange={(e) => setAgValor(e.target.value)} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Forma de Pagamento <span className="text-destructive">*</span></Label>
+                  <Select value={agFormaPagamento} onValueChange={setAgFormaPagamento}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {FORMAS_PAGAMENTO.map((fp) => (
+                        <SelectItem key={fp} value={fp}>{fp}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Canal de Agendamento <span className="text-destructive">*</span></Label>
+                  <Select value={agCanal} onValueChange={setAgCanal}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {CANAIS_AGENDAMENTO.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
