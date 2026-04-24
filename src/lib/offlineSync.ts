@@ -101,6 +101,7 @@ export async function syncOfflineQueue(): Promise<string[]> {
           scheduled_datetime: ap.scheduled_datetime,
           nome: ap.nome,
           telefone: ap.telefone,
+          idade: ap.idade || "",
           valor: ap.valor,
           forma_pagamento: ap.forma_pagamento,
           canal_agendamento: ap.canal_agendamento,
