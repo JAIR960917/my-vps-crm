@@ -145,16 +145,20 @@ export default function AppointmentsPage() {
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   };
 
+  const returnAppt = appointments.find(a => a.id === returnId);
+  const isFromRenovacao = !!returnAppt?.renovacao_id;
+
   const confirmReturnToLeads = async () => {
-    if (!returnId) return;
+    if (!returnId || !returnAppt) return;
     setReturning(true);
-    const appt = appointments.find(a => a.id === returnId);
-    if (appt?.lead_id) {
-      await supabase.from("crm_leads").update({ status: appt.previous_status || "novo", scheduled_date: null } as any).eq("id", appt.lead_id);
+    if (isFromRenovacao && returnAppt.renovacao_id) {
+      await supabase.from("crm_renovacoes").update({ status: returnAppt.previous_status || "novo", scheduled_date: null } as any).eq("id", returnAppt.renovacao_id);
+    } else if (returnAppt.lead_id) {
+      await supabase.from("crm_leads").update({ status: returnAppt.previous_status || "novo", scheduled_date: null } as any).eq("id", returnAppt.lead_id);
     }
     const { error } = await supabase.from("crm_appointments").delete().eq("id", returnId);
-    if (error) toast.error("Erro ao retornar lead");
-    else toast.success("Lead retornado para a tela de Leads");
+    if (error) toast.error("Erro ao retornar");
+    else toast.success(isFromRenovacao ? "Cliente retornado para Renovações" : "Lead retornado para a tela de Leads");
     setReturning(false);
     setReturnId(null);
     fetchAll();
