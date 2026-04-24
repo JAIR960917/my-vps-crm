@@ -19,6 +19,7 @@ export type OfflineAppointmentPayload = {
   scheduled_by: string;
   nome: string;
   telefone: string;
+  idade?: string;
   valor: number;
   forma_pagamento: string;
   canal_agendamento: string;
