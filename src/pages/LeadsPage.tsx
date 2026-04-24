@@ -179,13 +179,12 @@ export default function LeadsPage() {
     }
 
     try {
-      const [{ data: cols }, { data: profs }, { data: sts }, { data: comps }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
+      const [{ data: cols }, { data: profs }, { data: sts }, { data: myProfile }, { data: managerCos }, { data: ff }, { data: ffFull }, { data: fullProfs }] = await Promise.all([
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
-        isAdmin
-          ? supabase.from("companies").select("id, name").order("name")
-          : supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle(),
+        supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle(),
+        supabase.from("manager_companies").select("company_id").eq("user_id", user!.id),
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
         supabase.from("crm_form_fields").select("*").order("position"),
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
@@ -198,15 +197,20 @@ export default function LeadsPage() {
       setStatuses((sts || []) as CrmStatus[]);
       let allowedCompanies: Company[] = [];
       if (isAdmin) {
-        allowedCompanies = (comps || []) as Company[];
+        const { data: allCompanies } = await supabase.from("companies").select("id, name").order("name");
+        allowedCompanies = (allCompanies || []) as Company[];
       } else {
-        const profileCompanyId = (comps as { company_id?: string | null } | null)?.company_id;
-        const companyMatches = profileCompanyId
-          ? ((fullProfs || []).filter((p: any) => p.company_id === profileCompanyId).length >= 0)
-          : true;
-        allowedCompanies = profileCompanyId && companyMatches
-          ? [{ id: profileCompanyId, name: ((fullProfs || []).find((p: any) => p.company_id === profileCompanyId) as any)?.company_name || "" }].filter((c) => c.name)
-          : [];
+        const companyIds = new Set<string>();
+        if (myProfile?.company_id) companyIds.add(myProfile.company_id);
+        (managerCos || []).forEach((mc: any) => mc.company_id && companyIds.add(mc.company_id));
+        if (companyIds.size > 0) {
+          const { data: filteredCompanies } = await supabase
+            .from("companies")
+            .select("id, name")
+            .in("id", Array.from(companyIds))
+            .order("name");
+          allowedCompanies = (filteredCompanies || []) as Company[];
+        }
       }
       setCompanies(allowedCompanies);
       const loadedFields = (ff || []) as unknown as FormFieldInfo[];
@@ -260,6 +264,7 @@ export default function LeadsPage() {
     // Update offline ids with remaining queue
     const remaining = getOfflineQueue();
     setOfflineIds(new Set(remaining.map(l => l.id)));
+    setRefreshKey((k) => k + 1);
     await fetchAll();
   }, []);
 
@@ -478,7 +483,7 @@ export default function LeadsPage() {
     };
   }, [formFields]);
 
-  const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
+  const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; forma_pagamento: string; canal_agendamento: string }) => {
     if (!schedulingLead || !user) return;
     setScheduleSaving(true);
     const { nome, telefone, idade } = getLeadSnapshot(schedulingLead);
@@ -486,7 +491,7 @@ export default function LeadsPage() {
       lead_id: schedulingLead.id,
       scheduled_by: user.id,
       scheduled_datetime: schedData.scheduled_datetime,
-      valor: schedData.valor,
+      valor: 0,
       forma_pagamento: schedData.forma_pagamento,
       canal_agendamento: schedData.canal_agendamento,
       previous_status: schedulingLead.status,

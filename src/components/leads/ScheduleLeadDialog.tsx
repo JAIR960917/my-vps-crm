@@ -39,7 +39,6 @@ type Props = {
   saving: boolean;
   onSubmit: (data: {
     scheduled_datetime: string;
-    valor: number;
     forma_pagamento: string;
     canal_agendamento: string;
   }) => void;
@@ -48,7 +47,6 @@ type Props = {
 export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadPhone, saving, onSubmit }: Props) {
   const [dateStr, setDateStr] = useState("");
   const [time, setTime] = useState("09:00");
-  const [valor, setValor] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("");
   const [canal, setCanal] = useState("");
 
@@ -62,7 +60,6 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
 
     onSubmit({
       scheduled_datetime: dt.toISOString(),
-      valor: parseFloat(valor) || 0,
       forma_pagamento: formaPagamento,
       canal_agendamento: canal,
     });
@@ -70,7 +67,6 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
     // Reset
     setDateStr("");
     setTime("09:00");
-    setValor("");
     setFormaPagamento("");
     setCanal("");
   };
@@ -109,19 +105,6 @@ export default function ScheduleLeadDialog({ open, onOpenChange, leadName, leadP
               <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} required className="pl-10 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-8 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer" />
               <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-destructive pointer-events-none" />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Valor da Consulta (R$) <span className="text-destructive">*</span></Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0,00"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-              required
-            />
           </div>
 
           <div className="space-y-2">
