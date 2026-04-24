@@ -283,83 +283,162 @@ export default function NewLeadPage() {
       return;
     }
 
+    // Validate scheduling fields when "Sim"
+    if (agendou === "sim") {
+      if (!agDate || !agTime || !agFormaPagamento || !agCanal) {
+        toast.error("Preencha todos os campos do agendamento.");
+        return;
+      }
+    }
+
     setSaving(true);
-    const resolvedStatus = resolveStatus();
+
+    // Resolve final status: if agendou=sim → status "agendado" (if exists), else use rules
+    let resolvedStatus = resolveStatus();
+    if (agendou === "sim") {
+      const agendadoStatus = statuses.find(s => s.key === "agendado");
+      if (agendadoStatus) resolvedStatus = "agendado";
+    }
+
+    // Merge observacao into data so it's persisted on the lead
+    const finalData: Record<string, any> = { ...formData };
+    if (observacao.trim()) finalData.observacao = observacao.trim();
+
+    // Resolve lead name + phone from name/phone marked fields
+    const nameField = fields.find(f => (f as any).is_name_field);
+    const phoneField = fields.find(f => (f as any).is_phone_field);
+    const leadName = nameField ? String(finalData[`field_${nameField.id}`] || "") : "";
+    const leadPhone = phoneField ? String(finalData[`field_${phoneField.id}`] || "") : "";
+
+    // Build appointment payload (if scheduling)
+    const apptPayload: OfflineAppointmentPayload | undefined = agendou === "sim" ? {
+      scheduled_datetime: (() => {
+        const [y, mo, d] = agDate.split("-").map(Number);
+        const [h, m] = agTime.split(":").map(Number);
+        return new Date(y, mo - 1, d, h, m, 0, 0).toISOString();
+      })(),
+      scheduled_by: user!.id,
+      nome: leadName,
+      telefone: leadPhone,
+      valor: parseFloat(agValor) || 0,
+      forma_pagamento: agFormaPagamento,
+      canal_agendamento: agCanal,
+      resumo: observacao.trim(),
+      previous_status: resolvedStatus,
+    } : undefined;
+
+    const tempLeadId = crypto.randomUUID();
     const leadData = {
-      id: crypto.randomUUID(),
-      data: formData,
+      id: tempLeadId,
+      data: finalData,
       status: resolvedStatus,
       assigned_to: user?.id || null,
       created_by: user!.id,
       created_at: new Date().toISOString(),
+      pending_appointment: apptPayload,
     };
 
     if (!isOnline) {
       addToOfflineQueue(leadData);
-      toast.success("Lead salvo offline! Será sincronizado quando tiver internet.");
+      toast.success(
+        apptPayload
+          ? "Lead e agendamento salvos offline! Serão sincronizados quando voltar a internet."
+          : "Lead salvo offline! Será sincronizado quando tiver internet."
+      );
       setSaving(false);
-      // Reset form for next lead
       setFormData({});
+      setObservacao("");
+      setAgendou("");
+      setAgDate(""); setAgTime("09:00"); setAgValor(""); setAgFormaPagamento(""); setAgCanal("");
       setStep(0);
-      navigate("/");
+      navigate(apptPayload ? "/agendamentos" : "/");
       return;
     }
 
-    // Check for existing lead with same name + phone
-    let existingLead: any = null;
+    // Check for existing lead with same name + phone (server-side)
+    let existingLeadId: string | null = null;
     try {
-      const { data: ffMarkers } = await supabase.from("crm_form_fields").select("id, is_name_field, is_phone_field");
-      const nameIds = (ffMarkers || []).filter((f: any) => f.is_name_field).map((f: any) => f.id);
-      const phoneIds = (ffMarkers || []).filter((f: any) => f.is_phone_field).map((f: any) => f.id);
-
-      const leadName = nameIds.reduce<string | null>((found: string | null, id: string) => found || formData[`field_${id}`] || null, null) || "";
-      const leadPhone = phoneIds.reduce<string | null>((found: string | null, id: string) => found || formData[`field_${id}`] || null, null) || "";
-
-      if (leadName && leadPhone) {
-        const { data: allLeads } = await supabase.from("crm_leads").select("*");
-        if (allLeads) {
-          existingLead = allLeads.find((l: any) => {
-            const d = typeof l.data === "object" ? (l.data as Record<string, any>) : {};
-            const eName = nameIds.reduce<string | null>((f: string | null, id: string) => f || d[`field_${id}`] || null, null) || d.nome_lead || "";
-            const ePhone = phoneIds.reduce<string | null>((f: string | null, id: string) => f || d[`field_${id}`] || null, null) || d.telefone || "";
-            return String(eName).trim().toLowerCase() === String(leadName).trim().toLowerCase()
-              && String(ePhone).replace(/\D/g, "") === String(leadPhone).replace(/\D/g, "");
-          }) || null;
-        }
+      if (leadName && leadPhone && nameField && phoneField) {
+        const digits = leadPhone.replace(/\D/g, "");
+        const { data: matches } = await supabase
+          .from("crm_leads")
+          .select("id, data")
+          .or(
+            `data->>field_${nameField.id}.ilike.${leadName.trim()},data->>field_${phoneField.id}.ilike.%${digits}%`
+          )
+          .limit(20);
+        const found = (matches || []).find((l: any) => {
+          const d = (l.data || {}) as Record<string, any>;
+          const eName = String(d[`field_${nameField.id}`] || "").trim().toLowerCase();
+          const ePhone = String(d[`field_${phoneField.id}`] || "").replace(/\D/g, "");
+          return eName === leadName.trim().toLowerCase() && ePhone === digits;
+        });
+        if (found) existingLeadId = found.id;
       }
     } catch {}
 
-    if (existingLead) {
+    let finalLeadId: string | null = existingLeadId;
+
+    if (existingLeadId) {
       const { error } = await supabase.from("crm_leads").update({
-        data: formData,
+        data: finalData,
         status: resolvedStatus,
         assigned_to: user?.id || null,
-      }).eq("id", existingLead.id);
+      }).eq("id", existingLeadId);
       if (error) {
         addToOfflineQueue(leadData);
         toast.warning("Erro ao atualizar. Salvo offline.");
-      } else {
-        toast.success("Lead já existia — informações atualizadas!");
+        setSaving(false);
+        navigate(apptPayload ? "/agendamentos" : "/");
+        return;
       }
+      toast.success("Lead já existia — informações atualizadas!");
     } else {
-      const { error } = await supabase.from("crm_leads").insert({
-        data: formData,
+      const { data: inserted, error } = await supabase.from("crm_leads").insert({
+        data: finalData,
         status: resolvedStatus,
         assigned_to: user?.id || null,
         created_by: user!.id,
-      });
-      if (error) {
+      }).select("id").single();
+      if (error || !inserted) {
         addToOfflineQueue(leadData);
         toast.warning("Erro ao enviar. Salvo offline para sincronizar depois.");
+        setSaving(false);
+        navigate(apptPayload ? "/agendamentos" : "/");
+        return;
+      }
+      finalLeadId = inserted.id;
+      toast.success("Lead criado com sucesso!");
+    }
+
+    // Create appointment online
+    if (apptPayload && finalLeadId) {
+      const { error: aErr } = await supabase.from("crm_appointments").insert({
+        lead_id: finalLeadId,
+        scheduled_by: apptPayload.scheduled_by,
+        scheduled_datetime: apptPayload.scheduled_datetime,
+        nome: apptPayload.nome,
+        telefone: apptPayload.telefone,
+        valor: apptPayload.valor,
+        forma_pagamento: apptPayload.forma_pagamento,
+        canal_agendamento: apptPayload.canal_agendamento,
+        resumo: apptPayload.resumo || "",
+        previous_status: apptPayload.previous_status,
+      });
+      if (aErr) {
+        toast.warning("Lead salvo, mas erro ao agendar: " + aErr.message);
       } else {
-        toast.success("Lead criado com sucesso!");
+        toast.success("Agendamento criado!");
       }
     }
 
     setSaving(false);
     setFormData({});
+    setObservacao("");
+    setAgendou("");
+    setAgDate(""); setAgTime("09:00"); setAgValor(""); setAgFormaPagamento(""); setAgCanal("");
     setStep(0);
-    navigate("/");
+    navigate(apptPayload ? "/agendamentos" : "/");
   };
 
   const renderFormField = (field: FormField) => {
