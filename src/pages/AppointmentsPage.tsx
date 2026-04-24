@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarCheck, Plus, Pencil, Trash2, CalendarIcon } from "lucide-react";
+import { CalendarCheck, Plus, Pencil, Trash2, CalendarIcon, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Appointment = {
