@@ -374,7 +374,7 @@ export default function AppointmentsPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            title="Retornar para Leads"
+                            title={appt.renovacao_id ? "Retornar para Renovações" : "Retornar para Leads"}
                             onClick={() => setReturnId(appt.id)}
                           >
                             <Undo2 className="h-3.5 w-3.5 text-primary" />
