@@ -720,11 +720,6 @@ export default function NewLeadPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Valor da Consulta (R$)</Label>
-                  <Input type="number" step="0.01" min="0" placeholder="0,00" value={agValor} onChange={(e) => setAgValor(e.target.value)} />
-                </div>
-
-                <div className="space-y-2">
                   <Label>Forma de Pagamento <span className="text-destructive">*</span></Label>
                   <Select value={agFormaPagamento} onValueChange={setAgFormaPagamento}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
