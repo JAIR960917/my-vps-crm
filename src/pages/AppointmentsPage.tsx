@@ -131,18 +131,15 @@ export default function AppointmentsPage() {
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
   const updateField = async (id: string, field: string, value: string) => {
-    if (field === "venda" && value === "Vendido") {
-      setSaleApptId(id);
-      setSaleValor("");
-      setSaleEntrada("");
-      setSalePagamento("");
-      setSaleDialogOpen(true);
-      return;
-    }
-
     const { error } = await supabase.from("crm_appointments").update({ [field]: value } as any).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+    if (field === "venda" && value === "Vendido") {
+      const appt = appointments.find(a => a.id === id);
+      if (appt?.lead_id) {
+        await supabase.from("crm_leads").update({ comprou: true } as any).eq("id", appt.lead_id);
+      }
+    }
   };
 
   const returnAppt = appointments.find(a => a.id === returnId);
