@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 
 type Appointment = {
   id: string;
-  lead_id: string;
+  lead_id: string | null;
+  renovacao_id: string | null;
   scheduled_by: string;
   scheduled_datetime: string;
   valor: number;
