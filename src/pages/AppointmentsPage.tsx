@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarCheck, Plus, Pencil, Trash2, CalendarIcon } from "lucide-react";
+import { CalendarCheck, Plus, Pencil, Trash2, CalendarIcon, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Appointment = {
@@ -79,6 +79,10 @@ export default function AppointmentsPage() {
   // Delete
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Return to Leads confirmation
+  const [returnId, setReturnId] = useState<string | null>(null);
+  const [returning, setReturning] = useState(false);
+
   // Sale dialog (when "Vendido" is selected)
   const [saleDialogOpen, setSaleDialogOpen] = useState(false);
   const [saleApptId, setSaleApptId] = useState<string | null>(null);
@@ -126,24 +130,6 @@ export default function AppointmentsPage() {
   const getProfileName = (userId: string) => profiles.find(p => p.user_id === userId)?.full_name || "—";
 
   const updateField = async (id: string, field: string, value: string) => {
-    const appt = appointments.find(a => a.id === id);
-
-    if (field === "comparecimento" && value === "Não Compareceu" && appt) {
-      await supabase.from("crm_leads").update({ status: appt.previous_status } as any).eq("id", appt.lead_id);
-      await supabase.from("crm_appointments").update({ [field]: value, status: "nao_compareceu" } as any).eq("id", id);
-      toast.success("Lead devolvido à coluna original");
-      fetchAll();
-      return;
-    }
-
-    if (field === "venda" && value === "Não Vendido" && appt) {
-      await supabase.from("crm_leads").update({ status: appt.previous_status } as any).eq("id", appt.lead_id);
-      await supabase.from("crm_appointments").update({ [field]: value, status: "nao_vendido" } as any).eq("id", id);
-      toast.success("Lead devolvido à coluna original");
-      fetchAll();
-      return;
-    }
-
     if (field === "venda" && value === "Vendido") {
       setSaleApptId(id);
       setSaleValor("");
@@ -156,6 +142,21 @@ export default function AppointmentsPage() {
     const { error } = await supabase.from("crm_appointments").update({ [field]: value } as any).eq("id", id);
     if (error) toast.error("Erro ao atualizar");
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+  };
+
+  const confirmReturnToLeads = async () => {
+    if (!returnId) return;
+    setReturning(true);
+    const appt = appointments.find(a => a.id === returnId);
+    if (appt?.lead_id) {
+      await supabase.from("crm_leads").update({ status: appt.previous_status || "novo", scheduled_date: null } as any).eq("id", appt.lead_id);
+    }
+    const { error } = await supabase.from("crm_appointments").delete().eq("id", returnId);
+    if (error) toast.error("Erro ao retornar lead");
+    else toast.success("Lead retornado para a tela de Leads");
+    setReturning(false);
+    setReturnId(null);
+    fetchAll();
   };
 
   const handleSaleSubmit = async () => {
@@ -363,6 +364,17 @@ export default function AppointmentsPage() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
+                        {appt.venda !== "Vendido" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title="Retornar para Leads"
+                            onClick={() => setReturnId(appt.id)}
+                          >
+                            <Undo2 className="h-3.5 w-3.5 text-primary" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(appt)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -455,6 +467,24 @@ export default function AppointmentsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Return to Leads confirm */}
+      <AlertDialog open={!!returnId} onOpenChange={(open) => !open && setReturnId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retornar lead para a tela de Leads?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O agendamento será removido e o lead voltará para a tela de Leads na coluna original.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={returning}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReturnToLeads} disabled={returning}>
+              {returning ? "Retornando..." : "Retornar"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
