@@ -368,7 +368,7 @@ export default function NewLeadPage() {
       setFormData({});
       setObservacao("");
       setAgendou("");
-      setAgDate(""); setAgTime("09:00"); setAgValor(""); setAgFormaPagamento(""); setAgCanal("");
+      setAgDate(""); setAgTime("09:00"); setAgFormaPagamento(""); setAgCanal("");
       setStep(0);
       navigate(apptPayload ? "/agendamentos" : "/");
       return;
