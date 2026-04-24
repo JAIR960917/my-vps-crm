@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeLeadData } from "@/lib/leadIdentity";
 
 const QUEUE_KEY = "crm_offline_lead_queue";
 const APPT_QUEUE_KEY = "crm_offline_appointment_queue";
@@ -80,10 +81,11 @@ export async function syncOfflineQueue(): Promise<string[]> {
 
   // 1) Sync leads first; if a lead has a pending appointment, create it after insert with the new lead.id
   for (const lead of queue) {
+    const normalizedData = normalizeLeadData(lead.data);
     const { data: inserted, error } = await supabase
       .from("crm_leads")
       .insert({
-        data: lead.data,
+        data: normalizedData,
         status: lead.status,
         assigned_to: lead.assigned_to,
         created_by: lead.created_by,

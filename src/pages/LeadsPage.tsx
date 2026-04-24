@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { usePaginatedColumns } from "@/hooks/use-paginated-columns";
+import { normalizeLeadData, resolveLeadIdentity } from "@/lib/leadIdentity";
 
 type CrmColumn = {
   id: string; name: string; field_key: string; field_type: string;
@@ -182,7 +183,9 @@ export default function LeadsPage() {
         supabase.from("crm_columns").select("*").order("position"),
         supabase.rpc("get_profile_names"),
         supabase.from("crm_statuses").select("*").order("position"),
-        supabase.from("companies").select("id, name").order("name"),
+        isAdmin
+          ? supabase.from("companies").select("id, name").order("name")
+          : supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle(),
         supabase.from("crm_form_fields").select("id, label, is_name_field, is_phone_field, show_on_card, status_mapping, date_status_ranges").order("position"),
         supabase.from("crm_form_fields").select("*").order("position"),
         supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
@@ -193,7 +196,19 @@ export default function LeadsPage() {
       const enrichedProfiles = (profs || []).map((p: any) => ({ ...p, company_id: companyMap.get(p.user_id) || null }));
       setProfiles(enrichedProfiles);
       setStatuses((sts || []) as CrmStatus[]);
-      setCompanies((comps || []) as Company[]);
+      let allowedCompanies: Company[] = [];
+      if (isAdmin) {
+        allowedCompanies = (comps || []) as Company[];
+      } else {
+        const profileCompanyId = (comps as { company_id?: string | null } | null)?.company_id;
+        const companyMatches = profileCompanyId
+          ? ((fullProfs || []).filter((p: any) => p.company_id === profileCompanyId).length >= 0)
+          : true;
+        allowedCompanies = profileCompanyId && companyMatches
+          ? [{ id: profileCompanyId, name: ((fullProfs || []).find((p: any) => p.company_id === profileCompanyId) as any)?.company_name || "" }].filter((c) => c.name)
+          : [];
+      }
+      setCompanies(allowedCompanies);
       const loadedFields = (ff || []) as unknown as FormFieldInfo[];
       setFormFields(loadedFields);
       const me = (profs || []).find((p: Profile) => p.user_id === user?.id);
@@ -205,7 +220,7 @@ export default function LeadsPage() {
         localStorage.setItem("crm_cache_columns", JSON.stringify(cols || []));
         localStorage.setItem("crm_cache_profiles", JSON.stringify(profs || []));
         localStorage.setItem("crm_cache_statuses_full", JSON.stringify(sts || []));
-        localStorage.setItem("crm_cache_companies", JSON.stringify(comps || []));
+        localStorage.setItem("crm_cache_companies", JSON.stringify(allowedCompanies || []));
         localStorage.setItem("crm_cache_formfields", JSON.stringify(ff || []));
         localStorage.setItem("crm_cache_fields", JSON.stringify(ffFull || []));
         localStorage.setItem("crm_cache_statuses", JSON.stringify(sts || []));
@@ -454,33 +469,14 @@ export default function LeadsPage() {
   const getLeadSnapshot = useCallback((lead: Lead | null) => {
     if (!lead) return { nome: "", telefone: "", idade: "" };
 
-    const data = typeof lead.data === "object" ? (lead.data as Record<string, any>) : {};
-    const nameFields = formFields.filter((f) => f.is_name_field);
-    const phoneFields = formFields.filter((f) => f.is_phone_field);
-    const ageFields = formFields.filter((f) => f.label?.toLowerCase().includes("idade"));
-
-    const nome =
-      nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
-      data.nome_lead ||
-      columns.reduce<string | null>((found, c) => found || data[c.field_key] || null, null) ||
-      "Lead";
-
-    const telefone =
-      phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
-      data.telefone ||
-      columns.find((c) => /telefone|celular|whatsapp|fone/i.test(`${c.name} ${c.field_key}`))?.field_key &&
-        data[columns.find((c) => /telefone|celular|whatsapp|fone/i.test(`${c.name} ${c.field_key}`))!.field_key] ||
-      "";
-
-    const idade =
-      ageFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null) ||
-      data.idade ||
-      columns.find((c) => /idade/i.test(`${c.name} ${c.field_key}`))?.field_key &&
-        data[columns.find((c) => /idade/i.test(`${c.name} ${c.field_key}`))!.field_key] ||
-      "";
-
-    return { nome: String(nome || ""), telefone: String(telefone || ""), idade: String(idade || "") };
-  }, [columns, formFields]);
+    const data = normalizeLeadData(typeof lead.data === "object" ? (lead.data as Record<string, any>) : {}, formFields);
+    const identity = resolveLeadIdentity(data, formFields);
+    return {
+      nome: identity.nome || "Lead",
+      telefone: identity.telefone || "",
+      idade: identity.idade || "",
+    };
+  }, [formFields]);
 
   const handleScheduleSubmit = async (schedData: { scheduled_datetime: string; valor: number; forma_pagamento: string; canal_agendamento: string }) => {
     if (!schedulingLead || !user) return;
