@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 
 type Appointment = {
   id: string;
-  lead_id: string;
+  lead_id: string | null;
+  renovacao_id: string | null;
   scheduled_by: string;
   scheduled_datetime: string;
   valor: number;
@@ -144,16 +145,20 @@ export default function AppointmentsPage() {
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   };
 
+  const returnAppt = appointments.find(a => a.id === returnId);
+  const isFromRenovacao = !!returnAppt?.renovacao_id;
+
   const confirmReturnToLeads = async () => {
-    if (!returnId) return;
+    if (!returnId || !returnAppt) return;
     setReturning(true);
-    const appt = appointments.find(a => a.id === returnId);
-    if (appt?.lead_id) {
-      await supabase.from("crm_leads").update({ status: appt.previous_status || "novo", scheduled_date: null } as any).eq("id", appt.lead_id);
+    if (isFromRenovacao && returnAppt.renovacao_id) {
+      await supabase.from("crm_renovacoes").update({ status: returnAppt.previous_status || "novo", scheduled_date: null } as any).eq("id", returnAppt.renovacao_id);
+    } else if (returnAppt.lead_id) {
+      await supabase.from("crm_leads").update({ status: returnAppt.previous_status || "novo", scheduled_date: null } as any).eq("id", returnAppt.lead_id);
     }
     const { error } = await supabase.from("crm_appointments").delete().eq("id", returnId);
-    if (error) toast.error("Erro ao retornar lead");
-    else toast.success("Lead retornado para a tela de Leads");
+    if (error) toast.error("Erro ao retornar");
+    else toast.success(isFromRenovacao ? "Cliente retornado para Renovações" : "Lead retornado para a tela de Leads");
     setReturning(false);
     setReturnId(null);
     fetchAll();
@@ -369,7 +374,7 @@ export default function AppointmentsPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            title="Retornar para Leads"
+                            title={appt.renovacao_id ? "Retornar para Renovações" : "Retornar para Leads"}
                             onClick={() => setReturnId(appt.id)}
                           >
                             <Undo2 className="h-3.5 w-3.5 text-primary" />
@@ -475,9 +480,13 @@ export default function AppointmentsPage() {
       <AlertDialog open={!!returnId} onOpenChange={(open) => !open && setReturnId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Retornar lead para a tela de Leads?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {isFromRenovacao ? "Retornar para Renovações?" : "Retornar lead para a tela de Leads?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              O agendamento será removido e o lead voltará para a tela de Leads na coluna original.
+              {isFromRenovacao
+                ? "O agendamento será removido e o cliente voltará para a tela de Renovações na coluna original."
+                : "O agendamento será removido e o lead voltará para a tela de Leads na coluna original."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
