@@ -52,6 +52,24 @@ export default function NewLeadPage() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [step, setStep] = useState(0); // 0 = info step, then groups of 2 fields
 
+  // Inline scheduling on the preview step
+  const [agendou, setAgendou] = useState<"sim" | "nao" | "">("");
+  const [observacao, setObservacao] = useState("");
+  const [agDate, setAgDate] = useState(""); // yyyy-MM-dd
+  const [agTime, setAgTime] = useState("09:00");
+  const [agValor, setAgValor] = useState("");
+  const [agFormaPagamento, setAgFormaPagamento] = useState("");
+  const [agCanal, setAgCanal] = useState("");
+
+  const CANAIS_AGENDAMENTO = [
+    "Ligação Leads", "Ligação Renovação", "Loja", "Rede Social", "Ação Adam",
+    "Convênios", "PAP", "Reavaliação", "Recomendação", "Teste de Visão Online",
+    "Tráfego Pago", "Cortesia",
+  ];
+  const FORMAS_PAGAMENTO = [
+    "Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Convênio", "Boleto", "Cortesia",
+  ];
+
   useEffect(() => {
     const onLine = () => setIsOnline(true);
     const offLine = () => setIsOnline(false);
