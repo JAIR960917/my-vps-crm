@@ -173,12 +173,11 @@ export default function AppointmentsPage() {
       valor_venda: parseFloat(saleValor) || 0,
       valor_entrada: parseFloat(saleEntrada) || 0,
       forma_pagamento_venda: salePagamento,
-      status: "vendido",
     } as any).eq("id", saleApptId);
     if (appt?.lead_id) {
-      await supabase.from("crm_leads").update({ comprou: true, status: "vendido" } as any).eq("id", appt.lead_id);
+      await supabase.from("crm_leads").update({ comprou: true } as any).eq("id", appt.lead_id);
     }
-    toast.success("Venda registrada! Cliente movido para ativos.");
+    toast.success("Venda registrada!");
     setSaleSaving(false);
     setSaleDialogOpen(false);
     setSaleApptId(null);
