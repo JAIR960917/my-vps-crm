@@ -70,6 +70,11 @@ function RoleGate({ children }: { children: React.ReactNode }) {
     return <Navigate to="/" replace />;
   }
 
+  // Sales report is restricted to admins only
+  if (path === "/relatorio-vendas" && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
   // Admin opens the app on the dashboard by default
   if (isAdmin && path === "/") {
     return <Navigate to="/dashboard" replace />;

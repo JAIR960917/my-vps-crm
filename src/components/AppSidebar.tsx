@@ -19,7 +19,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { path: "/dashboard", label: "Dashboard", icon: BarChart3, roles: ["admin"] },
-  { path: "/relatorio-vendas", label: "Relatório de Vendas", icon: FileBarChart, roles: ["admin", "gerente"] },
+  { path: "/relatorio-vendas", label: "Relatório de Vendas", icon: FileBarChart, roles: ["admin"] },
   { path: "/", label: "Leads", icon: LayoutDashboard },
   { path: "/cobrancas", label: "Cobranças", icon: Receipt, roles: ["admin", "financeiro"] },
   { path: "/agendamentos", label: "Agendamentos", icon: CalendarCheck },
