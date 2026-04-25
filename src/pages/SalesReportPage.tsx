@@ -340,23 +340,63 @@ export default function SalesReportPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <Label htmlFor="start">Data inicial</Label>
-                <Input
-                  id="start"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
+              <div className="flex flex-col">
+                <Label className="mb-2">Data inicial</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "justify-start text-left font-normal",
+                        !startDate && "text-muted-foreground",
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {startDate
+                        ? format(new Date(startDate + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR })
+                        : "Selecionar..."}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComp
+                      mode="single"
+                      locale={ptBR}
+                      selected={startDate ? new Date(startDate + "T00:00:00") : undefined}
+                      onSelect={(d) => d && setStartDate(format(d, "yyyy-MM-dd"))}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
-              <div>
-                <Label htmlFor="end">Data final</Label>
-                <Input
-                  id="end"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
+              <div className="flex flex-col">
+                <Label className="mb-2">Data final</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "justify-start text-left font-normal",
+                        !endDate && "text-muted-foreground",
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {endDate
+                        ? format(new Date(endDate + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR })
+                        : "Selecionar..."}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComp
+                      mode="single"
+                      locale={ptBR}
+                      selected={endDate ? new Date(endDate + "T00:00:00") : undefined}
+                      onSelect={(d) => d && setEndDate(format(d, "yyyy-MM-dd"))}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               {showCompanyFilter && (
                 <div>
