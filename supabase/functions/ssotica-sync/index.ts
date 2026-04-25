@@ -1570,43 +1570,43 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ⚡ FAN-OUT: quando o cron dispara para TODAS as lojas em uma única chamada,
-    // o loop sequencial estoura o orçamento de tempo da edge function (~150-400s)
-    // e mata processos no meio, deixando lojas travadas em "running" até o próximo
-    // ciclo (6h depois). Solução: re-disparar uma chamada por loja, em paralelo,
-    // dando o tempo de execução COMPLETO da edge function para cada uma.
+    // ⚡ FAN-OUT via pg_net: enfileiramos um POST HTTP no banco para cada loja.
+    // Diferente de `fetch + waitUntil` (que pode ser morto quando o runtime pai
+    // termina), `pg_net.http_post` é executado pelo worker do Postgres — cada
+    // chamada vira uma invocação totalmente isolada da edge function, com seu
+    // próprio orçamento de tempo. Isso elimina os travamentos de Caicó/Jucurutu
+    // que ocorriam quando o runtime pai era encerrado antes dos disparos paralelos.
     if (!onlyIntegrationId && integrations.length > 1) {
       const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
       const dispatched: string[] = [];
       const fanoutSkipped: any[] = [];
+      const fanoutErrors: any[] = [];
       for (const integ of integrations as Integration[]) {
-        // Pula imediatamente as que já estão rodando e ainda não estão "stale"
         if (integ.sync_status === "running" && !isRunningSyncStale(integ as any)) {
           fanoutSkipped.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
           continue;
         }
-        // Fire-and-forget: cada loja vira um request isolado com seu próprio tempo total.
-        const p = fetch(fnUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${anonKey}`,
-          },
-          body: JSON.stringify({ mode: "incremental", integration_id: integ.id, force_full: forceFull }),
-        }).catch((err) => {
-          console.error(`[ssotica-sync][fanout] erro disparando ${integ.id}:`, err);
+        const { error: dispatchErr } = await supabase.rpc("ssotica_enqueue_sync", {
+          _url: fnUrl,
+          _auth: `Bearer ${anonKey}`,
+          _integration_id: integ.id,
+          _force_full: forceFull,
         });
-        // Mantém o runtime vivo até o disparo concluir (não espera a resposta).
-        try { (globalThis as any).EdgeRuntime?.waitUntil?.(p); } catch (_) { /* ignore */ }
+        if (dispatchErr) {
+          console.error(`[ssotica-sync][fanout] erro enfileirando ${integ.id}:`, dispatchErr);
+          fanoutErrors.push({ integration_id: integ.id, error: dispatchErr.message });
+          continue;
+        }
         dispatched.push(integ.id);
       }
       return new Response(JSON.stringify({
         ok: true,
-        mode: "incremental_fanout",
+        mode: "incremental_fanout_pgnet",
         dispatched_count: dispatched.length,
         dispatched,
         skipped: fanoutSkipped,
+        errors: fanoutErrors,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
