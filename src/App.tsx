@@ -64,6 +64,11 @@ function RoleGate({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Dashboard is restricted to admins only
+  if (path === "/dashboard" && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
   // Admin opens the app on the dashboard by default
   if (isAdmin && path === "/") {
     return <Navigate to="/dashboard" replace />;
