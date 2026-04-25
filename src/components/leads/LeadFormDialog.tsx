@@ -867,9 +867,33 @@ export default function LeadFormDialog({
               ))}
             </div>
 
+            {/* Contact attempt form */}
+            {leadId && user && (
+              <div className="px-5 py-3 border-b">
+                <ContactAttemptForm
+                  leadId={leadId}
+                  userId={user.id}
+                  leadStatus={formStatus}
+                  leadSnapshot={(() => {
+                    const identity = resolveLeadIdentity(formData, fields as any);
+                    return {
+                      nome: identity.nome || "Lead",
+                      telefone: identity.telefone || "",
+                      idade: identity.idade || "",
+                    };
+                  })()}
+                  onSaved={() => {
+                    fetchNotes();
+                    onActivityChange?.();
+                  }}
+                />
+              </div>
+            )}
+
             {/* New activity / comment input */}
             <div className="px-5 py-3 border-b space-y-3">
               {!showNewActivity ? (
+
                 <div className="flex gap-2">
                   <Input
                     value={newNote}
