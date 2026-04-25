@@ -16,7 +16,11 @@ const MAX_HISTORY_DAYS = 2880; // 96 meses
 const CHUNK_DAYS = 183;        // ~6 meses por chunk (usado pelo backfill histórico)
 const COBRANCAS_LOOKBACK_DAYS = 730; // faixa histórica total coberta pelo ciclo incremental
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
-const INCREMENTAL_COBRANCAS_SLICES = 4; // 24 meses ÷ 4 cron cycles = ~6 meses por execução
+// 24 meses ÷ 8 fatias = ~3 meses por execução. Reduzido de 4 para 8 porque
+// lojas grandes (Caicó, Jucurutu) estouravam o limite de ~400s da edge function
+// mesmo isoladas. Com 3 meses cada execução roda em <200s. Cobertura total
+// continua sendo 24 meses, agora distribuída em 8 ciclos de 3h (24h completas).
+const INCREMENTAL_COBRANCAS_SLICES = 8;
 const RUNNING_SYNC_STALE_MINUTES = 20;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
