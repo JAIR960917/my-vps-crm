@@ -106,6 +106,7 @@ export default function WhatsAppPage() {
   const [connectionStatus, setConnectionStatus] = useState<Record<string, string>>({});
   const [instanceLoading, setInstanceLoading] = useState(false);
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [allowedCompanyIds, setAllowedCompanyIds] = useState<string[] | null>(null);
   const [newInstanceCompanyId, setNewInstanceCompanyId] = useState("");
 
   const canManage = isAdmin;
