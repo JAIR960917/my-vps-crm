@@ -14,10 +14,10 @@ const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
 // Antes: 12 meses × 8 chunks. Agora: 6 meses × 16 chunks (cada chunk ~50% mais rápido).
 const MAX_HISTORY_DAYS = 2880; // 96 meses
 const CHUNK_DAYS = 183;        // ~6 meses por chunk (usado pelo backfill histórico)
-const COBRANCAS_LOOKBACK_DAYS = 730; // sync incremental de cobranças: 24 meses para trás
-                                     // (cobre crediários longos onde clientes têm parcelas
-                                     // vencidas há mais de 6 meses junto com novas)
+const COBRANCAS_LOOKBACK_DAYS = 730; // faixa histórica total coberta pelo ciclo incremental
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
+const INCREMENTAL_COBRANCAS_SLICES = 4; // 24 meses ÷ 4 cron cycles = ~6 meses por execução
+const RUNNING_SYNC_STALE_MINUTES = 20;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
@@ -64,6 +64,21 @@ function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
   if (diasDesdeUltimaCompra < 730) return "agendado";       // 1 a 2 anos
   if (diasDesdeUltimaCompra < 1095) return "renovado";      // 2 a 3 anos
   return "mais_de_3_anos";                                  // 3+ anos
+}
+
+function getBrasiliaCycleSlot(date = new Date()): number {
+  const br = new Date(date.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  return Math.floor(br.getHours() / 6) % INCREMENTAL_COBRANCAS_SLICES;
+}
+
+function getIncrementalCobrancaWindow(now = new Date()): { start: Date; end: Date; slot: number } {
+  const slot = getBrasiliaCycleSlot(now);
+  const sliceDays = Math.ceil(COBRANCAS_LOOKBACK_DAYS / INCREMENTAL_COBRANCAS_SLICES);
+  const endOffset = slot * sliceDays;
+  const startOffset = endOffset + sliceDays - 1;
+  const end = slot === 0 ? addDays(now, COBRANCAS_FUTURE_DAYS) : addDays(now, -endOffset);
+  const start = addDays(now, -startOffset);
+  return { start, end, slot };
 }
 
 // Quebra um intervalo em janelas de até 30 dias (limite SSótica)
