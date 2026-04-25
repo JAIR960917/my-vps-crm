@@ -20,6 +20,7 @@ import { X, Plus, Trash2, CheckCircle2, Clock, FileText, CalendarIcon, AlertTria
 import { cn } from "@/lib/utils";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import ClientProductsTab from "@/components/ClientProductsTab";
+import { recordCardOpen } from "@/lib/cardOpens";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type CrmStatus = { id: string; key: string; label: string };
@@ -119,6 +120,10 @@ export default function RenovacaoEditSheet(props: Props) {
       setTab("atividade");
       setNewComment("");
       setTaskOpen(false);
+      // Track card open for daily salesperson report
+      if (user?.id) {
+        recordCardOpen({ userId: user.id, cardType: "renovacao", renovacaoId });
+      }
     }
   }, [open, renovacaoId]);
 
