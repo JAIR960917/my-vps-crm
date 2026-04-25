@@ -55,20 +55,27 @@ function RoleGate({ children }: { children: React.ReactNode }) {
   if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>;
   if (!session) return <Navigate to="/login" replace />;
 
+  const path = window.location.pathname;
+
   // Financeiro role (without admin/gerente) is restricted to a small set of pages
   if (isFinanceiro && !isAdmin && !isGerente) {
-    const path = window.location.pathname;
     if (!FINANCEIRO_ALLOWED.has(path)) {
       return <Navigate to="/cobrancas" replace />;
     }
   }
+
+  // Admin opens the app on the dashboard by default
+  if (isAdmin && path === "/") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return <>{children}</>;
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, loading, isAdmin } = useAuth();
   if (loading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Carregando...</div>;
-  if (session) return <Navigate to="/" replace />;
+  if (session) return <Navigate to={isAdmin ? "/dashboard" : "/"} replace />;
   return <>{children}</>;
 }
 
