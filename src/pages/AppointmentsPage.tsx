@@ -121,6 +121,22 @@ export default function AppointmentsPage() {
 
   useEffect(() => { fetchAll(); }, [filterDate]);
 
+  // Realtime: refresh appointments when the table changes
+  useEffect(() => {
+    let scheduled = false;
+    const refresh = () => {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(() => { scheduled = false; fetchAll(); }, 400);
+    };
+    const channel = supabase
+      .channel("appointments-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "crm_appointments" }, refresh)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterDate]);
+
   const filteredAppointments = isAdmin && filterCompanyId !== "all"
     ? appointments.filter((appt) => {
         const prof = profilesFull.find(p => p.user_id === appt.scheduled_by);
