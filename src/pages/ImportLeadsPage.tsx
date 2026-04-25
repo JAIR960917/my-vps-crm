@@ -478,6 +478,62 @@ export default function ImportLeadsPage() {
                 </div>
               </div>
 
+              {(nameField || phoneField) && (
+                <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                  {nameField && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Campo essencial: Nome</p>
+                      <Select
+                        value={Object.entries(columnMap).find(([, value]) => value === nameField.id)?.[0] || IGNORE_VALUE}
+                        onValueChange={(selectedHeader) => {
+                          const currentHeader = Object.entries(columnMap).find(([, value]) => value === nameField.id)?.[0];
+                          if (currentHeader && currentHeader !== selectedHeader) setColumnTarget(currentHeader, IGNORE_VALUE);
+                          if (selectedHeader !== IGNORE_VALUE) setColumnTarget(selectedHeader, nameField.id);
+                        }}
+                      >
+                        <SelectTrigger className="text-xs">
+                          <SelectValue placeholder="Selecione a coluna do nome" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={IGNORE_VALUE}>Selecione a coluna do nome</SelectItem>
+                          {csvHeaders.map((header) => (
+                            <SelectItem key={`name-${header}`} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {phoneField && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Campo essencial: Telefone</p>
+                      <Select
+                        value={Object.entries(columnMap).find(([, value]) => value === phoneField.id)?.[0] || IGNORE_VALUE}
+                        onValueChange={(selectedHeader) => {
+                          const currentHeader = Object.entries(columnMap).find(([, value]) => value === phoneField.id)?.[0];
+                          if (currentHeader && currentHeader !== selectedHeader) setColumnTarget(currentHeader, IGNORE_VALUE);
+                          if (selectedHeader !== IGNORE_VALUE) setColumnTarget(selectedHeader, phoneField.id);
+                        }}
+                      >
+                        <SelectTrigger className="text-xs">
+                          <SelectValue placeholder="Selecione a coluna do telefone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={IGNORE_VALUE}>Selecione a coluna do telefone</SelectItem>
+                          {csvHeaders.map((header) => (
+                            <SelectItem key={`phone-${header}`} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="max-h-[55vh] overflow-y-auto">
                 <Table>
                   <TableHeader>
@@ -501,14 +557,7 @@ export default function ImportLeadsPage() {
                           <TableCell>
                             <Select
                               value={columnMap[header] || IGNORE_VALUE}
-                              onValueChange={(v) =>
-                                setColumnMap((prev) => {
-                                  const next = { ...prev };
-                                  if (v === IGNORE_VALUE) delete next[header];
-                                  else next[header] = v;
-                                  return next;
-                                })
-                              }
+                              onValueChange={(v) => setColumnTarget(header, v)}
                             >
                               <SelectTrigger className={`w-[240px] text-xs ${isMapped ? "" : "border-yellow-500/50"}`}>
                                 <SelectValue placeholder="— Ignorar —" />
