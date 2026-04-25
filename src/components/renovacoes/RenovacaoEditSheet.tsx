@@ -480,6 +480,12 @@ export default function RenovacaoEditSheet(props: Props) {
               {/* Tentativa de contato — visível para todos os usuários (admin, gerente, vendedor) */}
               {tab === "atividade" && renovacaoId && user && (
                 <div className="px-5 py-3 border-b">
+                  {requiresTratativa && !tratativaRegistrada && (
+                    <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-start gap-2">
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>É obrigatório registrar uma tratativa antes de fechar ou salvar esta renovação.</span>
+                    </div>
+                  )}
                   <RenovacaoContactAttemptForm
                     renovacaoId={renovacaoId}
                     userId={user.id}
@@ -491,7 +497,10 @@ export default function RenovacaoEditSheet(props: Props) {
                       const telefone = phoneField ? String(formData[`field_${phoneField.id}`] || "") : "";
                       return { nome, telefone, idade: "" };
                     })()}
-                    onSaved={() => fetchTimeline()}
+                    onSaved={() => {
+                      setTratativaRegistrada(true);
+                      fetchTimeline();
+                    }}
                   />
                 </div>
               )}
