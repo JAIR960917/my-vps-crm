@@ -35,6 +35,72 @@ const norm = (s: string) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
+const parseCsvLine = (line: string, separator = ";") => {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === separator && !inQuotes) {
+      cells.push(current.replace(/^\uFEFF/, "").trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.replace(/^\uFEFF/, "").trim());
+  return cells.map((cell) => cell.replace(/^"|"$/g, "").trim());
+};
+
+const parseCsvText = (text: string, separator = ";") => {
+  const rows: string[][] = [];
+  let currentLine = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        currentLine += '""';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+        currentLine += char;
+      }
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (currentLine.trim()) rows.push(parseCsvLine(currentLine, separator));
+      currentLine = "";
+      if (char === "\r" && next === "\n") i += 1;
+      continue;
+    }
+
+    currentLine += char;
+  }
+
+  if (currentLine.trim()) rows.push(parseCsvLine(currentLine, separator));
+  return rows;
+};
+
 export default function ImportLeadsPage() {
   const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
@@ -101,6 +167,21 @@ export default function ImportLeadsPage() {
     );
   }, [formFields]);
 
+  const mappedStatusHeader = useMemo(
+    () => Object.entries(columnMap).find(([, value]) => value === "__status__")?.[0] || null,
+    [columnMap],
+  );
+
+  const mappedAssignedHeader = useMemo(
+    () => Object.entries(columnMap).find(([, value]) => value === "__assigned__")?.[0] || null,
+    [columnMap],
+  );
+
+  const mappedCreatedAtHeader = useMemo(
+    () => Object.entries(columnMap).find(([, value]) => value === "__created_at__")?.[0] || null,
+    [columnMap],
+  );
+
   const setColumnTarget = useCallback((header: string, value: string) => {
     setColumnMap((prev) => {
       const next = { ...prev };
@@ -120,16 +201,11 @@ export default function ImportLeadsPage() {
       const text = ev.target?.result as string;
       if (!text) return;
 
-      const lines = text.split("\n").filter((l) => l.trim());
-      if (lines.length < 2) { toast.error("Arquivo vazio ou inválido"); return; }
+      const parsedRows = parseCsvText(text, ";");
+      if (parsedRows.length < 2) { toast.error("Arquivo vazio ou inválido"); return; }
 
-      // Parse header - remove BOM and quotes
-      const parseRow = (line: string) =>
-        line.split(";").map((c) => c.replace(/^\uFEFF/, "").replace(/^"|"$/g, "").trim());
-
-      const headers = parseRow(lines[0]);
-      const rows = lines.slice(1).map((line) => {
-        const cols = parseRow(line);
+      const headers = parsedRows[0];
+      const rows = parsedRows.slice(1).map((cols) => {
         const row: Record<string, string> = {};
         headers.forEach((h, i) => { row[h] = cols[i] || ""; });
         return row;
@@ -177,7 +253,13 @@ export default function ImportLeadsPage() {
       setColumnMap(autoMap);
 
       // Auto-map statuses
-      const uniqueStatuses = [...new Set(rows.map((r) => r["Etapa"]).filter(Boolean))];
+      const detectedStatusHeader = headers.find((h) => {
+        const n = norm(h);
+        return n === "etapa" || n === "status" || n === "status etapa";
+      });
+      const uniqueStatuses = detectedStatusHeader
+        ? [...new Set(rows.map((r) => r[detectedStatusHeader]).filter(Boolean))]
+        : [];
       const autoStatusMap: Record<string, string> = {};
       uniqueStatuses.forEach((s) => {
         const match = statuses.find((st) => st.label.toLowerCase() === s.toLowerCase());
@@ -186,7 +268,13 @@ export default function ImportLeadsPage() {
       setStatusMap(autoStatusMap);
 
       // Auto-map users
-      const uniqueUsers = [...new Set(rows.map((r) => r["Responsável"]).filter(Boolean))];
+      const detectedAssignedHeader = headers.find((h) => {
+        const n = norm(h);
+        return n === "responsavel" || n === "responsavel atual" || n === "vendedor" || n === "consultor";
+      });
+      const uniqueUsers = detectedAssignedHeader
+        ? [...new Set(rows.map((r) => r[detectedAssignedHeader]).filter(Boolean))]
+        : [];
       const autoUserMap: Record<string, string> = {};
       uniqueUsers.forEach((u) => {
         const match = profiles.find(
@@ -203,14 +291,15 @@ export default function ImportLeadsPage() {
   }, [formFields, statuses, profiles, nameField, phoneField]);
 
   // Unique CSV statuses and users
-  const csvStatuses = useMemo(
-    () => [...new Set(csvRows.map((r) => r["Etapa"]).filter(Boolean))],
-    [csvRows]
-  );
-  const csvUsers = useMemo(
-    () => [...new Set(csvRows.map((r) => r["Responsável"]).filter(Boolean))],
-    [csvRows]
-  );
+  const csvStatuses = useMemo(() => {
+    if (!mappedStatusHeader) return [];
+    return [...new Set(csvRows.map((r) => r[mappedStatusHeader]).filter(Boolean))];
+  }, [csvRows, mappedStatusHeader]);
+
+  const csvUsers = useMemo(() => {
+    if (!mappedAssignedHeader) return [];
+    return [...new Set(csvRows.map((r) => r[mappedAssignedHeader]).filter(Boolean))];
+  }, [csvRows, mappedAssignedHeader]);
 
   // Build field options for column mapping (add special entries)
   const fieldOptions = useMemo(() => {
@@ -281,9 +370,9 @@ export default function ImportLeadsPage() {
     });
 
     // Find status column and assigned column
-    const statusCol = Object.entries(specialCols).find(([, v]) => v === "__status__")?.[0] || "Etapa";
-    const assignedCol = Object.entries(specialCols).find(([, v]) => v === "__assigned__")?.[0] || "Responsável";
-    const createdAtCol = Object.entries(specialCols).find(([, v]) => v === "__created_at__")?.[0] || "Criado";
+    const statusCol = Object.entries(specialCols).find(([, v]) => v === "__status__")?.[0] || mappedStatusHeader || "Etapa";
+    const assignedCol = Object.entries(specialCols).find(([, v]) => v === "__assigned__")?.[0] || mappedAssignedHeader || "Responsável";
+    const createdAtCol = Object.entries(specialCols).find(([, v]) => v === "__created_at__")?.[0] || mappedCreatedAtHeader || "Criado";
 
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const batch = csvRows.slice(i, i + BATCH_SIZE);
@@ -336,7 +425,7 @@ export default function ImportLeadsPage() {
         }
 
         return {
-          data: data as any,
+          data,
           status,
           assigned_to: assignedTo,
           created_by: user?.id || null,
@@ -431,10 +520,13 @@ export default function ImportLeadsPage() {
                         try {
                           const { data, error } = await supabase.rpc("delete_all_leads_cascade");
                           if (error) throw error;
-                          const count = (data as any)?.deleted_leads ?? 0;
+                          const count = typeof data === "object" && data && "deleted_leads" in data
+                            ? Number((data as { deleted_leads?: number }).deleted_leads ?? 0)
+                            : 0;
                           toast.success(`${count} leads excluídos! Renovações e cobranças preservadas.`, { id: toastId });
-                        } catch (err: any) {
-                          toast.error(`Erro ao excluir: ${err.message}`, { id: toastId });
+                        } catch (err: unknown) {
+                          const message = err instanceof Error ? err.message : "Erro ao excluir";
+                          toast.error(`Erro ao excluir: ${message}`, { id: toastId });
                         }
                       }}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -475,6 +567,27 @@ export default function ImportLeadsPage() {
                       </>
                     )}
                   </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-3">
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-medium">Campos do CRM carregados:</span>
+                  <Badge variant="secondary">{formFields.length} campos</Badge>
+                  <Badge variant="outline">{crmColumns.length} colunas CRM</Badge>
+                  <Badge variant="outline">{statuses.length} status</Badge>
+                  <Badge variant="outline">{profiles.length} usuários</Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {formFields.map((field) => (
+                    <Badge key={field.id} variant="outline" className="max-w-full text-xs">
+                      <span className="truncate">
+                        {field.label}
+                        {field.is_name_field ? " • Nome" : ""}
+                        {field.is_phone_field ? " • Telefone" : ""}
+                      </span>
+                    </Badge>
+                  ))}
                 </div>
               </div>
 
@@ -565,7 +678,7 @@ export default function ImportLeadsPage() {
                               <SelectContent>
                                 <SelectItem value={IGNORE_VALUE}>— Ignorar —</SelectItem>
                                 {fieldOptions.map((o) => (
-                                  <SelectItem key={o.value} value={o.value}>
+                            <SelectItem key={`${header}-${o.value}`} value={o.value}>
                                     {o.label}
                                   </SelectItem>
                                 ))}
@@ -744,12 +857,12 @@ export default function ImportLeadsPage() {
                           <TableCell className="text-xs">{i + 1}</TableCell>
                           <TableCell className="text-xs">{nameCol ? row[nameCol] : row["Nome do Lead"] || "—"}</TableCell>
                           <TableCell className="text-xs">
-                            <Badge variant="outline">{statusMap[row["Etapa"]] || "novo"}</Badge>
+                            <Badge variant="outline">{(mappedStatusHeader && statusMap[row[mappedStatusHeader]]) || "novo"}</Badge>
                           </TableCell>
                           <TableCell className="text-xs">
-                            {userMap[row["Responsável"]]
-                              ? profiles.find((p) => p.user_id === userMap[row["Responsável"]])?.full_name
-                              : row["Responsável"] || "—"}
+                            {(mappedAssignedHeader && userMap[row[mappedAssignedHeader]])
+                              ? profiles.find((p) => p.user_id === userMap[row[mappedAssignedHeader]])?.full_name
+                              : (mappedAssignedHeader ? row[mappedAssignedHeader] : "") || "—"}
                           </TableCell>
                         </TableRow>
                       );
