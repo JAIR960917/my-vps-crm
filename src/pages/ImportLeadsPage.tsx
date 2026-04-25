@@ -27,6 +27,13 @@ import {
 type Step = "upload" | "columns" | "status" | "users" | "preview" | "importing";
 
 const IGNORE_VALUE = "__ignore__";
+const norm = (s: string) =>
+  (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 
 export default function ImportLeadsPage() {
   const { isAdmin, user } = useAuth();
@@ -74,6 +81,35 @@ export default function ImportLeadsPage() {
     },
   });
 
+  const nameField = useMemo(() => {
+    const nameFields = formFields.filter((f) => f.is_name_field);
+    return (
+      nameFields.find((f) => {
+        const label = norm(f.label);
+        return label.includes("nome do lead") || label === "nome" || label.includes("lead");
+      }) || nameFields[0]
+    );
+  }, [formFields]);
+
+  const phoneField = useMemo(() => {
+    const phoneFields = formFields.filter((f) => f.is_phone_field || f.field_type === "phone");
+    return (
+      phoneFields.find((f) => {
+        const label = norm(f.label);
+        return label.includes("telefone") || label.includes("celular") || label.includes("whatsapp");
+      }) || phoneFields[0]
+    );
+  }, [formFields]);
+
+  const setColumnTarget = useCallback((header: string, value: string) => {
+    setColumnMap((prev) => {
+      const next = { ...prev };
+      if (value === IGNORE_VALUE) delete next[header];
+      else next[header] = value;
+      return next;
+    });
+  }, []);
+
   // Parse CSV with ; separator
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -103,14 +139,6 @@ export default function ImportLeadsPage() {
       setCsvRows(rows);
 
       // Auto-map columns by label similarity (case + accent insensitive)
-      const norm = (s: string) =>
-        (s || "")
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .replace(/[^a-z0-9]+/g, " ")
-          .trim();
-
       const autoMap: Record<string, string> = {};
       formFields.forEach((ff) => {
         const target = norm(ff.label);
@@ -129,7 +157,6 @@ export default function ImportLeadsPage() {
       });
 
       // Auto-map name field
-      const nameField = formFields.find((f) => f.is_name_field);
       if (nameField) {
         const nomeHeader = headers.find((h) => {
           const n = norm(h);
@@ -139,7 +166,6 @@ export default function ImportLeadsPage() {
       }
 
       // Auto-map phone field
-      const phoneField = formFields.find((f) => f.is_phone_field);
       if (phoneField) {
         const telHeader = headers.find((h) => {
           const n = norm(h);
@@ -174,7 +200,7 @@ export default function ImportLeadsPage() {
       toast.success(`${rows.length} leads encontrados no arquivo`);
     };
     reader.readAsText(file, "UTF-8");
-  }, [formFields, statuses, profiles]);
+  }, [formFields, statuses, profiles, nameField, phoneField]);
 
   // Unique CSV statuses and users
   const csvStatuses = useMemo(
@@ -188,16 +214,16 @@ export default function ImportLeadsPage() {
 
   // Build field options for column mapping (add special entries)
   const fieldOptions = useMemo(() => {
-    // Highlight essential fields (name, phone) at the top
-    const essentialOpts = formFields
-      .filter((f) => f.is_name_field || f.is_phone_field)
+    const essentialIds = new Set([nameField?.id, phoneField?.id].filter(Boolean));
+    const essentialOpts = [nameField, phoneField]
+      .filter(Boolean)
       .map((f) => ({
         value: f.id,
         label: `⭐ ${f.label}${f.is_name_field ? " (Nome)" : ""}${f.is_phone_field ? " (Telefone)" : ""}`,
         group: "Essenciais",
       }));
     const formOpts = formFields
-      .filter((f) => !f.is_name_field && !f.is_phone_field)
+      .filter((f) => !essentialIds.has(f.id))
       .map((f) => ({ value: f.id, label: `📝 ${f.label}`, group: "Campos do Formulário" }));
     const colOpts = crmColumns.map((c) => ({ value: `col__${c.field_key}`, label: `📊 ${c.name}`, group: "Colunas CRM" }));
     const userOpts = profiles.map((p) => ({ value: `user__${p.user_id}`, label: `👤 ${p.full_name || p.email}`, group: "Usuários" }));
@@ -212,13 +238,10 @@ export default function ImportLeadsPage() {
       ...statusOpts,
       ...userOpts,
     ];
-  }, [formFields, crmColumns, profiles, statuses]);
+  }, [formFields, crmColumns, profiles, statuses, nameField, phoneField]);
 
   // Validation: detect missing essential mappings (Name, Phone, Status, Assigned)
   const validation = useMemo(() => {
-    const nameField = formFields.find((f) => f.is_name_field);
-    const phoneField = formFields.find((f) => f.is_phone_field);
-
     const mappedTargets = new Set(Object.values(columnMap));
     const hasName = nameField ? mappedTargets.has(nameField.id) : false;
     const hasPhone = phoneField ? mappedTargets.has(phoneField.id) : false;
@@ -232,7 +255,7 @@ export default function ImportLeadsPage() {
     if (!hasAssigned) issues.push("Responsável");
 
     return { hasName, hasPhone, hasStatus, hasAssigned, issues, valid: issues.length === 0 };
-  }, [columnMap, formFields]);
+  }, [columnMap, nameField, phoneField]);
 
   // Import logic
   const startImport = async () => {
@@ -455,6 +478,62 @@ export default function ImportLeadsPage() {
                 </div>
               </div>
 
+              {(nameField || phoneField) && (
+                <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+                  {nameField && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Campo essencial: Nome</p>
+                      <Select
+                        value={Object.entries(columnMap).find(([, value]) => value === nameField.id)?.[0] || IGNORE_VALUE}
+                        onValueChange={(selectedHeader) => {
+                          const currentHeader = Object.entries(columnMap).find(([, value]) => value === nameField.id)?.[0];
+                          if (currentHeader && currentHeader !== selectedHeader) setColumnTarget(currentHeader, IGNORE_VALUE);
+                          if (selectedHeader !== IGNORE_VALUE) setColumnTarget(selectedHeader, nameField.id);
+                        }}
+                      >
+                        <SelectTrigger className="text-xs">
+                          <SelectValue placeholder="Selecione a coluna do nome" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={IGNORE_VALUE}>Selecione a coluna do nome</SelectItem>
+                          {csvHeaders.map((header) => (
+                            <SelectItem key={`name-${header}`} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {phoneField && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Campo essencial: Telefone</p>
+                      <Select
+                        value={Object.entries(columnMap).find(([, value]) => value === phoneField.id)?.[0] || IGNORE_VALUE}
+                        onValueChange={(selectedHeader) => {
+                          const currentHeader = Object.entries(columnMap).find(([, value]) => value === phoneField.id)?.[0];
+                          if (currentHeader && currentHeader !== selectedHeader) setColumnTarget(currentHeader, IGNORE_VALUE);
+                          if (selectedHeader !== IGNORE_VALUE) setColumnTarget(selectedHeader, phoneField.id);
+                        }}
+                      >
+                        <SelectTrigger className="text-xs">
+                          <SelectValue placeholder="Selecione a coluna do telefone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={IGNORE_VALUE}>Selecione a coluna do telefone</SelectItem>
+                          {csvHeaders.map((header) => (
+                            <SelectItem key={`phone-${header}`} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="max-h-[55vh] overflow-y-auto">
                 <Table>
                   <TableHeader>
@@ -478,14 +557,7 @@ export default function ImportLeadsPage() {
                           <TableCell>
                             <Select
                               value={columnMap[header] || IGNORE_VALUE}
-                              onValueChange={(v) =>
-                                setColumnMap((prev) => {
-                                  const next = { ...prev };
-                                  if (v === IGNORE_VALUE) delete next[header];
-                                  else next[header] = v;
-                                  return next;
-                                })
-                              }
+                              onValueChange={(v) => setColumnTarget(header, v)}
                             >
                               <SelectTrigger className={`w-[240px] text-xs ${isMapped ? "" : "border-yellow-500/50"}`}>
                                 <SelectValue placeholder="— Ignorar —" />
