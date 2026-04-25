@@ -1570,6 +1570,41 @@ Deno.serve(async (req) => {
       });
     }
 
+    // 🧹 LIMPEZA AUTOMÁTICA: antes de qualquer fan-out, libera integrações que
+    // ficaram presas em "running" há mais de RUNNING_SYNC_STALE_MINUTES min
+    // (execuções abortadas, fechamento de browser, runtime morto, etc.) e
+    // fecha logs órfãos. Isso garante que o próximo ciclo do cron sempre comece
+    // com a fila limpa.
+    if (!onlyIntegrationId) {
+      const staleCutoff = new Date(Date.now() - RUNNING_SYNC_STALE_MINUTES * 60 * 1000).toISOString();
+      const { data: staleIntegs } = await supabase
+        .from("ssotica_integrations")
+        .select("id")
+        .eq("sync_status", "running")
+        .lt("updated_at", staleCutoff);
+      if (staleIntegs && staleIntegs.length > 0) {
+        const staleIds = staleIntegs.map((s: any) => s.id);
+        await supabase
+          .from("ssotica_integrations")
+          .update({
+            sync_status: "idle",
+            last_error: `Destravado automaticamente — execução excedeu ${RUNNING_SYNC_STALE_MINUTES} min sem finalizar.`,
+            updated_at: new Date().toISOString(),
+          })
+          .in("id", staleIds);
+        await supabase
+          .from("ssotica_sync_logs")
+          .update({
+            status: "error",
+            finished_at: new Date().toISOString(),
+            error_message: `Execução órfã encerrada automaticamente após ${RUNNING_SYNC_STALE_MINUTES} min.`,
+          })
+          .in("integration_id", staleIds)
+          .eq("status", "running");
+        console.log(`[ssotica-sync][auto-cleanup] destravadas ${staleIds.length} integrações: ${staleIds.join(", ")}`);
+      }
+    }
+
     // ⚡ FAN-OUT via pg_net: enfileiramos um POST HTTP no banco para cada loja.
     // Diferente de `fetch + waitUntil` (que pode ser morto quando o runtime pai
     // termina), `pg_net.http_post` é executado pelo worker do Postgres — cada
