@@ -1570,18 +1570,28 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 🧹 LIMPEZA AUTOMÁTICA: antes de qualquer fan-out, libera integrações que
-    // ficaram presas em "running" há mais de RUNNING_SYNC_STALE_MINUTES min
-    // (execuções abortadas, fechamento de browser, runtime morto, etc.) e
-    // fecha logs órfãos. Isso garante que o próximo ciclo do cron sempre comece
-    // com a fila limpa.
-    if (!onlyIntegrationId) {
+    // 🧹 LIMPEZA AUTOMÁTICA: SEMPRE roda (fan-out OU sub-invocação single).
+    // Libera integrações que ficaram presas em "running" há mais de
+    // RUNNING_SYNC_STALE_MINUTES min (execuções abortadas, fechamento de browser,
+    // runtime morto, timeout da edge function ~400s, etc.) e fecha logs órfãos.
+    //
+    // ⚠️ CRÍTICO: rodar isso também em sub-invocações (com onlyIntegrationId)
+    // garante que, mesmo se uma execução anterior morreu por timeout, a próxima
+    // tentativa via pg_net consiga destravar a si mesma e prosseguir. Antes,
+    // a limpeza só rodava no fan-out, então uma loja que travasse permanecia
+    // presa até o próximo ciclo COMPLETO do cron principal — e mesmo aí,
+    // se o pg_net já tivesse re-enfileirado, o status voltava a "running"
+    // antes do auto-cleanup do ciclo seguinte rodar.
+    {
       const staleCutoff = new Date(Date.now() - RUNNING_SYNC_STALE_MINUTES * 60 * 1000).toISOString();
-      const { data: staleIntegs } = await supabase
+      const staleQuery = supabase
         .from("ssotica_integrations")
         .select("id")
         .eq("sync_status", "running")
         .lt("updated_at", staleCutoff);
+      // Em sub-invocação, restringe à própria integração (evita interferir em outras lojas)
+      if (onlyIntegrationId) staleQuery.eq("id", onlyIntegrationId);
+      const { data: staleIntegs } = await staleQuery;
       if (staleIntegs && staleIntegs.length > 0) {
         const staleIds = staleIntegs.map((s: any) => s.id);
         await supabase
@@ -1601,7 +1611,7 @@ Deno.serve(async (req) => {
           })
           .in("integration_id", staleIds)
           .eq("status", "running");
-        // Atualiza o array em memória para que o fan-out reprocesse essas integrações
+        // Atualiza o array em memória para que o processamento abaixo reconheça as liberadas
         for (const integ of integrations as any[]) {
           if (staleIds.includes(integ.id)) {
             integ.sync_status = "idle";
