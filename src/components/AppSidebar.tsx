@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemSettings } from "@/contexts/SystemSettingsContext";
 
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare, CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart, History } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Columns3, Building2, FileText, Sun, Moon, Download, Settings, UserCircle, Bell, MessageSquare, CalendarCheck, UserCheck, Upload, Receipt, Plug, CalendarHeart, History, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Role = "admin" | "gerente" | "financeiro" | "vendedor";
@@ -18,6 +18,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { path: "/dashboard", label: "Dashboard", icon: BarChart3, roles: ["admin", "gerente"] },
   { path: "/", label: "Leads", icon: LayoutDashboard },
   { path: "/cobrancas", label: "Cobranças", icon: Receipt, roles: ["admin", "financeiro"] },
   { path: "/agendamentos", label: "Agendamentos", icon: CalendarCheck },

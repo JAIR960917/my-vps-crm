@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { resolveLeadIdentity } from "@/lib/leadIdentity";
 import ContactAttemptForm from "./ContactAttemptForm";
+import { recordCardOpen } from "@/lib/cardOpens";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null; company_id?: string | null };
 type Company = { id: string; name: string };
@@ -340,6 +341,10 @@ export default function LeadFormDialog({
       if (isEditing && leadId) {
         fetchActivities();
         fetchNotes();
+        // Track card open for daily salesperson report
+        if (user?.id) {
+          recordCardOpen({ userId: user.id, cardType: "lead", leadId });
+        }
       }
     }
   }, [open, leadId]);

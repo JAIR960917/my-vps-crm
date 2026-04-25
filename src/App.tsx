@@ -25,6 +25,7 @@ import ImportLeadsPage from "./pages/ImportLeadsPage";
 import CobrancasPage from "./pages/CobrancasPage";
 import SSoticaIntegrationsPage from "./pages/SSoticaIntegrationsPage";
 import TransitionLogsPage from "./pages/TransitionLogsPage";
+import DashboardPage from "./pages/DashboardPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -92,6 +93,7 @@ const AppRoutes = () => {
       <Route path="/cobrancas" element={<RoleGate><CobrancasPage /></RoleGate>} />
       <Route path="/integracoes-ssotica" element={<RoleGate><SSoticaIntegrationsPage /></RoleGate>} />
       <Route path="/logs-movimentacao" element={<RoleGate><TransitionLogsPage /></RoleGate>} />
+      <Route path="/dashboard" element={<RoleGate><DashboardPage /></RoleGate>} />
       <Route path="/instalar" element={<InstallPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

@@ -776,6 +776,33 @@ export type Database = {
           },
         ]
       }
+      lead_card_opens: {
+        Row: {
+          card_type: string
+          id: string
+          lead_id: string | null
+          opened_at: string
+          renovacao_id: string | null
+          user_id: string
+        }
+        Insert: {
+          card_type: string
+          id?: string
+          lead_id?: string | null
+          opened_at?: string
+          renovacao_id?: string | null
+          user_id: string
+        }
+        Update: {
+          card_type?: string
+          id?: string
+          lead_id?: string | null
+          opened_at?: string
+          renovacao_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       manager_companies: {
         Row: {
           company_id: string
