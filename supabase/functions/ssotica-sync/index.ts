@@ -1601,6 +1601,13 @@ Deno.serve(async (req) => {
           })
           .in("integration_id", staleIds)
           .eq("status", "running");
+        // Atualiza o array em memória para que o fan-out reprocesse essas integrações
+        for (const integ of integrations as any[]) {
+          if (staleIds.includes(integ.id)) {
+            integ.sync_status = "idle";
+            integ.updated_at = new Date().toISOString();
+          }
+        }
         console.log(`[ssotica-sync][auto-cleanup] destravadas ${staleIds.length} integrações: ${staleIds.join(", ")}`);
       }
     }
