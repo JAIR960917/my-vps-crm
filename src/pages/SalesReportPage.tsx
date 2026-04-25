@@ -1,0 +1,585 @@
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import AppLayout from "@/components/AppLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Loader2, FileDown, RefreshCw, Calendar, Package, Users, ShoppingBag } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { useAuth } from "@/contexts/AuthContext";
+
+type Venda = {
+  id: number;
+  data: string;
+  hora: string;
+  numero: number;
+  status: string;
+  valor_liquido: number;
+  valor_bruto: number;
+  desconto: number;
+  company_id: string;
+  company_name: string;
+  cliente: { id: number; nome: string } | null;
+  funcionario: { id: number; nome: string; funcao: string } | null;
+  itens: Array<{
+    id: number;
+    quantidade: number;
+    valor_unitario_liquido: number;
+    valor_total_liquido: number;
+    produto: {
+      id: number;
+      referencia: string | null;
+      descricao: string;
+      grupo: string | null;
+      grife: string | null;
+    } | null;
+  }>;
+};
+
+type Company = { id: string; name: string };
+
+const ALL = "__ALL__";
+
+const fmtBRL = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+// Calcula a quarta-feira mais próxima (passada ou hoje) e a anterior
+function getDefaultRange() {
+  const today = new Date();
+  // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
+  const dow = today.getDay();
+  // Dias até a última quarta (incluindo hoje se for quarta)
+  const daysToLastWed = (dow - 3 + 7) % 7;
+  const endWed = new Date(today);
+  endWed.setDate(today.getDate() - daysToLastWed);
+  endWed.setHours(0, 0, 0, 0);
+  const startWed = new Date(endWed);
+  startWed.setDate(endWed.getDate() - 7);
+  return {
+    start: startWed.toISOString().slice(0, 10),
+    end: endWed.toISOString().slice(0, 10),
+  };
+}
+
+export default function SalesReportPage() {
+  const { isAdmin } = useAuth();
+  const def = getDefaultRange();
+  const [startDate, setStartDate] = useState<string>(def.start);
+  const [endDate, setEndDate] = useState<string>(def.end);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companyFilter, setCompanyFilter] = useState<string>(ALL);
+  const [loading, setLoading] = useState(false);
+  const [vendas, setVendas] = useState<Venda[] | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("companies")
+        .select("id, name")
+        .order("name");
+      setCompanies((data as Company[]) || []);
+    })();
+  }, []);
+
+  const fetchReport = async () => {
+    if (!startDate || !endDate) {
+      toast.error("Selecione as datas inicial e final");
+      return;
+    }
+    if (startDate > endDate) {
+      toast.error("A data inicial deve ser anterior à final");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "ssotica-vendas-periodo",
+        {
+          body: {
+            startDate,
+            endDate,
+            companyId: companyFilter === ALL ? null : companyFilter,
+          },
+        },
+      );
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setVendas((data?.vendas as Venda[]) || []);
+      toast.success(
+        `${data?.total_vendas || 0} venda(s) encontrada(s) no período`,
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao gerar relatório");
+      setVendas([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Agrupa por vendedor (funcionario.nome). Vendas sem funcionário vão em "Sem vendedor".
+  const grouped = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        nome: string;
+        funcao: string;
+        vendas: Venda[];
+        totalValor: number;
+        totalItens: number;
+      }
+    >();
+    (vendas || []).forEach((v) => {
+      const key = v.funcionario?.nome || "Sem vendedor";
+      const cur = map.get(key) || {
+        nome: key,
+        funcao: v.funcionario?.funcao || "",
+        vendas: [],
+        totalValor: 0,
+        totalItens: 0,
+      };
+      cur.vendas.push(v);
+      cur.totalValor += v.valor_liquido;
+      cur.totalItens += v.itens.reduce((a, it) => a + it.quantidade, 0);
+      map.set(key, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => b.totalValor - a.totalValor);
+  }, [vendas]);
+
+  const totalGeral = grouped.reduce((a, g) => a + g.totalValor, 0);
+  const totalItensGeral = grouped.reduce((a, g) => a + g.totalItens, 0);
+  const totalVendasGeral = grouped.reduce((a, g) => a + g.vendas.length, 0);
+
+  const exportPDF = () => {
+    if (!vendas || vendas.length === 0) {
+      toast.error("Nenhum dado para exportar");
+      return;
+    }
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Header
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("Relatório de Vendas por Vendedor", 40, 50);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    const periodo = `Período: ${format(new Date(startDate + "T00:00:00"), "dd/MM/yyyy")} a ${format(new Date(endDate + "T00:00:00"), "dd/MM/yyyy")}`;
+    doc.text(periodo, 40, 70);
+
+    const empresaTxt =
+      companyFilter === ALL
+        ? "Todas as empresas"
+        : companies.find((c) => c.id === companyFilter)?.name || "—";
+    doc.text(`Empresa: ${empresaTxt}`, 40, 86);
+    doc.text(
+      `Total: ${totalVendasGeral} venda(s) · ${totalItensGeral} produto(s) · ${fmtBRL(totalGeral)}`,
+      40,
+      102,
+    );
+
+    let y = 120;
+
+    grouped.forEach((g, idx) => {
+      // Sub-cabeçalho do vendedor
+      if (y > 720) {
+        doc.addPage();
+        y = 50;
+      }
+      doc.setFillColor(30, 30, 30);
+      doc.setTextColor(255, 255, 255);
+      doc.rect(40, y, pageWidth - 80, 22, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`${g.nome}${g.funcao ? ` — ${g.funcao}` : ""}`, 48, y + 15);
+      const right = `${g.vendas.length} venda(s) · ${g.totalItens} produto(s) · ${fmtBRL(g.totalValor)}`;
+      doc.text(right, pageWidth - 48 - doc.getTextWidth(right), y + 15);
+      doc.setTextColor(0, 0, 0);
+      y += 28;
+
+      // Tabela de produtos do vendedor
+      const rows: any[] = [];
+      g.vendas.forEach((v) => {
+        v.itens.forEach((it) => {
+          rows.push([
+            v.data
+              ? format(new Date(v.data + "T00:00:00"), "dd/MM/yy")
+              : "—",
+            String(v.numero),
+            v.cliente?.nome || "—",
+            it.produto?.descricao || "—",
+            it.produto?.grupo || "—",
+            String(it.quantidade),
+            fmtBRL(it.valor_total_liquido),
+          ]);
+        });
+        // Vendas sem itens detalhados
+        if (v.itens.length === 0) {
+          rows.push([
+            v.data
+              ? format(new Date(v.data + "T00:00:00"), "dd/MM/yy")
+              : "—",
+            String(v.numero),
+            v.cliente?.nome || "—",
+            "(sem itens detalhados)",
+            "—",
+            "—",
+            fmtBRL(v.valor_liquido),
+          ]);
+        }
+      });
+
+      autoTable(doc, {
+        startY: y,
+        head: [["Data", "Venda", "Cliente", "Produto", "Grupo", "Qtd", "Valor"]],
+        body: rows,
+        theme: "grid",
+        styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
+        headStyles: { fillColor: [60, 60, 60], textColor: 255, fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: 50 },
+          1: { cellWidth: 40 },
+          2: { cellWidth: 90 },
+          3: { cellWidth: 130 },
+          4: { cellWidth: 60 },
+          5: { cellWidth: 30, halign: "center" },
+          6: { cellWidth: 60, halign: "right" },
+        },
+        margin: { left: 40, right: 40 },
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 18;
+    });
+
+    const filename = `relatorio-vendas-${startDate}-a-${endDate}.pdf`;
+    doc.save(filename);
+    toast.success("PDF gerado!");
+  };
+
+  const showCompanyFilter = isAdmin;
+
+  return (
+    <AppLayout>
+      <div className="p-6 space-y-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              Relatório de Vendas
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Produtos vendidos por vendedor em um período
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Filtros
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <Label htmlFor="start">Data inicial</Label>
+                <Input
+                  id="start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="end">Data final</Label>
+                <Input
+                  id="end"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+              {showCompanyFilter && (
+                <div>
+                  <Label>Empresa</Label>
+                  <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Todas as empresas</SelectItem>
+                      {companies.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="flex items-end gap-2">
+                <Button onClick={fetchReport} disabled={loading} className="flex-1">
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Carregando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Gerar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground">Atalhos:</span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const d = getDefaultRange();
+                  setStartDate(d.start);
+                  setEndDate(d.end);
+                }}
+              >
+                Quarta a quarta
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const today = new Date();
+                  const start = new Date(today);
+                  start.setDate(today.getDate() - 7);
+                  setStartDate(start.toISOString().slice(0, 10));
+                  setEndDate(today.toISOString().slice(0, 10));
+                }}
+              >
+                Últimos 7 dias
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const today = new Date();
+                  const start = new Date(today);
+                  start.setDate(today.getDate() - 30);
+                  setStartDate(start.toISOString().slice(0, 10));
+                  setEndDate(today.toISOString().slice(0, 10));
+                }}
+              >
+                Últimos 30 dias
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {vendas !== null && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <Users className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <div className="text-xs text-muted-foreground">Vendedores</div>
+                      <div className="text-2xl font-bold">{grouped.length}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <ShoppingBag className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <div className="text-xs text-muted-foreground">Vendas</div>
+                      <div className="text-2xl font-bold">{totalVendasGeral}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <Package className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <div className="text-xs text-muted-foreground">Produtos</div>
+                      <div className="text-2xl font-bold">{totalItensGeral}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-xs text-muted-foreground">Valor total</div>
+                  <div className="text-2xl font-bold">{fmtBRL(totalGeral)}</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                onClick={exportPDF}
+                disabled={!vendas || vendas.length === 0}
+                variant="default"
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                Exportar PDF
+              </Button>
+            </div>
+
+            {grouped.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  Nenhuma venda encontrada no período selecionado.
+                </CardContent>
+              </Card>
+            ) : (
+              <Accordion type="multiple" className="space-y-3">
+                {grouped.map((g) => (
+                  <AccordionItem
+                    key={g.nome}
+                    value={g.nome}
+                    className="border rounded-lg bg-card"
+                  >
+                    <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                      <div className="flex items-center justify-between w-full pr-3 gap-3 flex-wrap">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
+                            {g.nome.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="text-left min-w-0">
+                            <div className="font-medium truncate">{g.nome}</div>
+                            {g.funcao && (
+                              <div className="text-xs text-muted-foreground">
+                                {g.funcao}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline">
+                            {g.vendas.length} venda(s)
+                          </Badge>
+                          <Badge variant="outline">
+                            {g.totalItens} produto(s)
+                          </Badge>
+                          <Badge className="bg-primary/10 text-primary border-primary/30">
+                            {fmtBRL(g.totalValor)}
+                          </Badge>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                      <div className="border rounded-md overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-muted/50">
+                            <tr className="text-left">
+                              <th className="px-3 py-2 font-medium">Data</th>
+                              <th className="px-3 py-2 font-medium">Venda</th>
+                              <th className="px-3 py-2 font-medium">Cliente</th>
+                              <th className="px-3 py-2 font-medium">Produto</th>
+                              <th className="px-3 py-2 font-medium">Grupo</th>
+                              <th className="px-3 py-2 font-medium text-center">
+                                Qtd
+                              </th>
+                              <th className="px-3 py-2 font-medium text-right">
+                                Valor
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {g.vendas.flatMap((v) =>
+                              v.itens.length > 0
+                                ? v.itens.map((it) => (
+                                    <tr key={`${v.id}-${it.id}`}>
+                                      <td className="px-3 py-2 whitespace-nowrap">
+                                        {v.data
+                                          ? format(
+                                              new Date(v.data + "T00:00:00"),
+                                              "dd/MM/yy",
+                                              { locale: ptBR },
+                                            )
+                                          : "—"}
+                                      </td>
+                                      <td className="px-3 py-2">#{v.numero}</td>
+                                      <td className="px-3 py-2 truncate max-w-[180px]">
+                                        {v.cliente?.nome || "—"}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {it.produto?.descricao || "—"}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {it.produto?.grupo || "—"}
+                                      </td>
+                                      <td className="px-3 py-2 text-center">
+                                        {it.quantidade}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-medium">
+                                        {fmtBRL(it.valor_total_liquido)}
+                                      </td>
+                                    </tr>
+                                  ))
+                                : [
+                                    <tr key={`${v.id}-empty`}>
+                                      <td className="px-3 py-2 whitespace-nowrap">
+                                        {v.data
+                                          ? format(
+                                              new Date(v.data + "T00:00:00"),
+                                              "dd/MM/yy",
+                                              { locale: ptBR },
+                                            )
+                                          : "—"}
+                                      </td>
+                                      <td className="px-3 py-2">#{v.numero}</td>
+                                      <td className="px-3 py-2 truncate max-w-[180px]">
+                                        {v.cliente?.nome || "—"}
+                                      </td>
+                                      <td
+                                        className="px-3 py-2 italic text-muted-foreground"
+                                        colSpan={3}
+                                      >
+                                        (sem itens detalhados)
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-medium">
+                                        {fmtBRL(v.valor_liquido)}
+                                      </td>
+                                    </tr>,
+                                  ],
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
+          </>
+        )}
+      </div>
+    </AppLayout>
+  );
+}
