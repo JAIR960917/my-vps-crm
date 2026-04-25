@@ -902,6 +902,7 @@ export default function LeadFormDialog({
                     };
                   })()}
                   onSaved={() => {
+                    setTratativaRegistrada(true);
                     fetchNotes();
                     onActivityChange?.();
                   }}
