@@ -346,7 +346,14 @@ export default function RenovacaoEditSheet(props: Props) {
             <h2 className="font-semibold text-lg">{isEditing ? "Editar Renovação" : "Nova Renovação"}</h2>
           </div>
           <ScrollArea className="sm:flex-1">
-            <form onSubmit={onSave} id="renovacao-form" className="p-5 space-y-4">
+            <form onSubmit={(e) => {
+              if (requiresTratativa && !tratativaRegistrada) {
+                e.preventDefault();
+                toast.error("Registre uma tratativa antes de salvar esta renovação.");
+                return;
+              }
+              onSave(e);
+            }} id="renovacao-form" className="p-5 space-y-4">
               {fields.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-4">
                   Nenhuma pergunta configurada. Configure em <strong>Formulário Renovação</strong>.
