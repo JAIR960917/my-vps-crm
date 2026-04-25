@@ -406,7 +406,7 @@ export default function RenovacaoEditSheet(props: Props) {
                 </TabsTrigger>
               </TabsList>
             </Tabs>
-            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
+            <Button variant="ghost" size="icon" onClick={() => handleOpenChange(false)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
