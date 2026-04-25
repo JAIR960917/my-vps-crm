@@ -102,22 +102,51 @@ export default function ImportLeadsPage() {
       setCsvHeaders(headers.filter((h) => h));
       setCsvRows(rows);
 
-      // Auto-map columns by label similarity
+      // Auto-map columns by label similarity (case + accent insensitive)
+      const norm = (s: string) =>
+        (s || "")
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+
       const autoMap: Record<string, string> = {};
       formFields.forEach((ff) => {
-        const match = headers.find(
-          (h) => h.toLowerCase().trim() === ff.label.toLowerCase().trim()
-        );
+        const target = norm(ff.label);
+        const match = headers.find((h) => norm(h) === target);
         if (match) autoMap[match] = ff.id;
       });
-      // Auto-map nome/telefone special columns
-      const nomeHeader = headers.find((h) => h === "Nome do Lead");
-      const nameField = formFields.find((f) => f.is_name_field);
-      if (nomeHeader && nameField && !autoMap[nomeHeader]) autoMap[nomeHeader] = nameField.id;
 
-      const telHeader = headers.find((h) => h === "Celular" || h === "Outro número de telefone");
+      // Auto-map system columns: Etapa -> __status__, Responsável -> __assigned__, Criado -> __created_at__
+      headers.forEach((h) => {
+        const n = norm(h);
+        if (!autoMap[h]) {
+          if (n === "etapa" || n === "status") autoMap[h] = "__status__";
+          else if (n === "responsavel" || n === "responsavel atual") autoMap[h] = "__assigned__";
+          else if (n === "criado" || n === "data de criacao" || n === "criado em") autoMap[h] = "__created_at__";
+        }
+      });
+
+      // Auto-map name field
+      const nameField = formFields.find((f) => f.is_name_field);
+      if (nameField) {
+        const nomeHeader = headers.find((h) => {
+          const n = norm(h);
+          return n === "nome do lead" || n === "nome" || n === "nome cliente" || n === "nome do cliente" || n === "cliente";
+        });
+        if (nomeHeader && !autoMap[nomeHeader]) autoMap[nomeHeader] = nameField.id;
+      }
+
+      // Auto-map phone field
       const phoneField = formFields.find((f) => f.is_phone_field);
-      if (telHeader && phoneField && !autoMap[telHeader]) autoMap[telHeader] = phoneField.id;
+      if (phoneField) {
+        const telHeader = headers.find((h) => {
+          const n = norm(h);
+          return n === "celular" || n === "telefone" || n === "whatsapp" || n === "fone" || n === "outro numero de telefone";
+        });
+        if (telHeader && !autoMap[telHeader]) autoMap[telHeader] = phoneField.id;
+      }
 
       setColumnMap(autoMap);
 
