@@ -379,7 +379,9 @@ export default function SalesReportPage() {
                   {loading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Carregando...
+                      {progress
+                        ? `${progress.done}/${progress.total} empresas`
+                        : "Carregando..."}
                     </>
                   ) : (
                     <>
