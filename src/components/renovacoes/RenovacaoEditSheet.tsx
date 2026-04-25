@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import ClientProductsTab from "@/components/ClientProductsTab";
 import { recordCardOpen } from "@/lib/cardOpens";
+import RenovacaoContactAttemptForm from "./RenovacaoContactAttemptForm";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type CrmStatus = { id: string; key: string; label: string };
@@ -455,6 +456,25 @@ export default function RenovacaoEditSheet(props: Props) {
                   </PopoverContent>
                 </Popover>
               </div>
+
+              {/* Tentativa de contato — visível para todos os usuários (admin, gerente, vendedor) */}
+              {tab === "atividade" && renovacaoId && user && (
+                <div className="px-5 py-3 border-b">
+                  <RenovacaoContactAttemptForm
+                    renovacaoId={renovacaoId}
+                    userId={user.id}
+                    renovacaoStatus={formStatus}
+                    renovacaoSnapshot={(() => {
+                      const nameField = fields.find(f => f.is_name_field);
+                      const phoneField = fields.find(f => f.is_phone_field);
+                      const nome = nameField ? String(formData[`field_${nameField.id}`] || "Cliente") : "Cliente";
+                      const telefone = phoneField ? String(formData[`field_${phoneField.id}`] || "") : "";
+                      return { nome, telefone, idade: "" };
+                    })()}
+                    onSaved={() => fetchTimeline()}
+                  />
+                </div>
+              )}
 
               <ScrollArea className="sm:flex-1">
                 <div className="p-5 space-y-3">
