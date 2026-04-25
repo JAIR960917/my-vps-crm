@@ -26,6 +26,7 @@ import CobrancasPage from "./pages/CobrancasPage";
 import SSoticaIntegrationsPage from "./pages/SSoticaIntegrationsPage";
 import TransitionLogsPage from "./pages/TransitionLogsPage";
 import DashboardPage from "./pages/DashboardPage";
+import SalesReportPage from "./pages/SalesReportPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
