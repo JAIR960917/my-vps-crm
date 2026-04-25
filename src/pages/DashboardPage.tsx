@@ -8,27 +8,32 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, Receipt, CalendarHeart, Phone, PhoneOff, CalendarCheck, CalendarX, Calendar as CalIcon } from "lucide-react";
+import { Users, Receipt, CalendarHeart, Phone, PhoneOff, CalendarCheck, CalendarX, Calendar as CalIcon, Building2, ChevronDown, X } from "lucide-react";
 
-type Profile = { user_id: string; full_name: string; avatar_url: string | null };
+type Profile = { user_id: string; full_name: string; avatar_url: string | null; company_id: string | null };
+type Company = { id: string; name: string };
 
-type Totals = {
-  leads: number;
-  cobrancas: number;
-  renovacoes: number;
-};
+type Totals = { leads: number; cobrancas: number; renovacoes: number };
 
 type SellerRow = {
   user_id: string;
   full_name: string;
   avatar_url: string | null;
-  atendidos: number; // unique cards opened
+  company_id: string | null;
+  company_name: string;
+  atendidos: number;
   agendou: number;
   naoAtendeu: number;
   atendeuSemAgendar: number;
 };
+
+const ALL = "__all__";
 
 const todayBounds = (dateStr: string) => {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -50,8 +55,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [totals, setTotals] = useState<Totals>({ leads: 0, cobrancas: 0, renovacoes: 0 });
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [reportRows, setReportRows] = useState<SellerRow[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [allRows, setAllRows] = useState<SellerRow[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(formatDateForInput(new Date()));
+
+  const [companyFilter, setCompanyFilter] = useState<string>(ALL);
+  const [sellerFilter, setSellerFilter] = useState<string[]>([]); // empty = all
 
   const canSee = isAdmin || isGerente;
 
@@ -71,21 +80,23 @@ export default function DashboardPage() {
   const fetchReport = async (dateStr: string) => {
     const { startISO, endISO } = todayBounds(dateStr);
 
-    // 1) Profiles (visible per RLS — admin sees all, gerente sees own company)
-    const { data: profilesData } = await supabase
-      .from("profiles")
-      .select("user_id, full_name, avatar_url");
+    // Profiles + companies (RLS already scopes for gerente)
+    const [{ data: profilesData }, { data: companiesData }] = await Promise.all([
+      supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
+      supabase.from("companies").select("id, name").order("name"),
+    ]);
     const profs = (profilesData || []) as Profile[];
+    const comps = (companiesData || []) as Company[];
     setProfiles(profs);
+    setCompanies(comps);
+    const compById = new Map(comps.map((c) => [c.id, c.name]));
 
-    // 2) Card opens for the day (atendimentos)
     const { data: opens } = await supabase
       .from("lead_card_opens")
       .select("user_id, card_type, lead_id, renovacao_id, opened_at")
       .gte("opened_at", startISO)
       .lte("opened_at", endISO);
 
-    // Unique cards opened per user (lead+renovacao counted together)
     const atendidosMap = new Map<string, Set<string>>();
     (opens || []).forEach((o: any) => {
       const key = `${o.card_type}:${o.lead_id || o.renovacao_id}`;
@@ -93,8 +104,6 @@ export default function DashboardPage() {
       atendidosMap.get(o.user_id)!.add(key);
     });
 
-    // 3) Notes from contact attempts saved today
-    //    ContactAttemptForm writes structured notes into crm_lead_notes
     const { data: notes } = await supabase
       .from("crm_lead_notes")
       .select("user_id, content, created_at")
@@ -111,16 +120,13 @@ export default function DashboardPage() {
       const inc = (m: Map<string, number>) =>
         m.set(n.user_id, (m.get(n.user_id) || 0) + 1);
 
-      if (c.includes("NÃO ATENDEU")) {
-        inc(naoAtendeu);
-      } else if (c.includes("ATENDEU")) {
+      if (c.includes("NÃO ATENDEU")) inc(naoAtendeu);
+      else if (c.includes("ATENDEU")) {
         if (c.includes("✅ Consulta marcada")) inc(agendou);
-        else if (c.includes("❌ Consulta NÃO marcada")) inc(atendeuSemAgendar);
         else inc(atendeuSemAgendar);
       }
     });
 
-    // Build per-seller rows (only those with any activity today)
     const userIds = new Set<string>([
       ...atendidosMap.keys(),
       ...agendou.keys(),
@@ -134,6 +140,8 @@ export default function DashboardPage() {
         user_id: uid,
         full_name: p?.full_name || "(usuário desconhecido)",
         avatar_url: p?.avatar_url || null,
+        company_id: p?.company_id || null,
+        company_name: p?.company_id ? compById.get(p.company_id) || "—" : "—",
         atendidos: atendidosMap.get(uid)?.size || 0,
         agendou: agendou.get(uid) || 0,
         naoAtendeu: naoAtendeu.get(uid) || 0,
@@ -142,7 +150,7 @@ export default function DashboardPage() {
     });
 
     rows.sort((a, b) => b.atendidos - a.atendidos);
-    setReportRows(rows);
+    setAllRows(rows);
   };
 
   useEffect(() => {
@@ -151,8 +159,30 @@ export default function DashboardPage() {
     Promise.all([fetchTotals(), fetchReport(selectedDate)]).finally(() => setLoading(false));
   }, [canSee, user, selectedDate]);
 
+  // Reset seller filter when company changes
+  useEffect(() => {
+    setSellerFilter([]);
+  }, [companyFilter]);
+
+  // Sellers available given company filter (from profiles, so admin can pick anyone in that company even if no activity yet)
+  const availableSellers = useMemo(() => {
+    const list = profiles
+      .filter((p) => companyFilter === ALL || p.company_id === companyFilter)
+      .map((p) => ({ user_id: p.user_id, full_name: p.full_name || "(sem nome)" }));
+    list.sort((a, b) => a.full_name.localeCompare(b.full_name));
+    return list;
+  }, [profiles, companyFilter]);
+
+  const filteredRows = useMemo(() => {
+    return allRows.filter((r) => {
+      if (companyFilter !== ALL && r.company_id !== companyFilter) return false;
+      if (sellerFilter.length > 0 && !sellerFilter.includes(r.user_id)) return false;
+      return true;
+    });
+  }, [allRows, companyFilter, sellerFilter]);
+
   const reportTotals = useMemo(() => {
-    return reportRows.reduce(
+    return filteredRows.reduce(
       (acc, r) => ({
         atendidos: acc.atendidos + r.atendidos,
         agendou: acc.agendou + r.agendou,
@@ -161,7 +191,20 @@ export default function DashboardPage() {
       }),
       { atendidos: 0, agendou: 0, naoAtendeu: 0, atendeuSemAgendar: 0 },
     );
-  }, [reportRows]);
+  }, [filteredRows]);
+
+  const toggleSeller = (uid: string) => {
+    setSellerFilter((prev) =>
+      prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid],
+    );
+  };
+
+  const sellerLabel =
+    sellerFilter.length === 0
+      ? "Todos os vendedores"
+      : sellerFilter.length === 1
+      ? availableSellers.find((s) => s.user_id === sellerFilter[0])?.full_name || "1 selecionado"
+      : `${sellerFilter.length} selecionados`;
 
   if (authLoading) {
     return (
@@ -171,9 +214,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (!canSee) {
-    return <Navigate to="/" replace />;
-  }
+  if (!canSee) return <Navigate to="/" replace />;
 
   return (
     <AppLayout>
@@ -193,11 +234,7 @@ export default function DashboardPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <div className="text-3xl font-bold">{totals.leads}</div>
-              )}
+              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.leads}</div>}
               <p className="text-xs text-muted-foreground mt-1">Total de leads cadastrados</p>
             </CardContent>
           </Card>
@@ -208,11 +245,7 @@ export default function DashboardPage() {
               <Receipt className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <div className="text-3xl font-bold">{totals.cobrancas}</div>
-              )}
+              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.cobrancas}</div>}
               <p className="text-xs text-muted-foreground mt-1">Total de cobranças no sistema</p>
             </CardContent>
           </Card>
@@ -223,11 +256,7 @@ export default function DashboardPage() {
               <CalendarHeart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <div className="text-3xl font-bold">{totals.renovacoes}</div>
-              )}
+              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.renovacoes}</div>}
               <p className="text-xs text-muted-foreground mt-1">Clientes em renovação</p>
             </CardContent>
           </Card>
@@ -236,26 +265,96 @@ export default function DashboardPage() {
         {/* Relatório diário */}
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <CardTitle>Relatório de atendimentos</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Quantos cards cada vendedor abriu, quantos clientes atendeu e quantos agendaram.
+                  Filtre por empresa e selecione vendedores específicos para detalhar as métricas.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <CalIcon className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="h-9 w-[160px]"
-                />
+
+              {/* Filters */}
+              <div className="flex flex-wrap items-end gap-2">
+                {/* Company */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-muted-foreground uppercase">Empresa</label>
+                  <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                    <SelectTrigger className="h-9 w-[220px]">
+                      <Building2 className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                      <SelectValue placeholder="Todas as empresas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Todas as empresas</SelectItem>
+                      {companies.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Sellers (multi) */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-muted-foreground uppercase">Vendedores</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="h-9 w-[220px] justify-between font-normal">
+                        <span className="truncate">{sellerLabel}</span>
+                        <ChevronDown className="h-3.5 w-3.5 opacity-60 shrink-0 ml-1" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[260px] p-0" align="end">
+                      <div className="p-2 border-b flex items-center justify-between">
+                        <span className="text-xs font-medium">
+                          {sellerFilter.length} de {availableSellers.length}
+                        </span>
+                        {sellerFilter.length > 0 && (
+                          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSellerFilter([])}>
+                            <X className="h-3 w-3 mr-1" /> Limpar
+                          </Button>
+                        )}
+                      </div>
+                      <div className="max-h-[260px] overflow-y-auto py-1">
+                        {availableSellers.length === 0 ? (
+                          <p className="text-xs text-muted-foreground py-4 px-3 text-center">
+                            Nenhum vendedor para esta empresa.
+                          </p>
+                        ) : (
+                          availableSellers.map((s) => (
+                            <label
+                              key={s.user_id}
+                              className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent cursor-pointer text-sm"
+                            >
+                              <Checkbox
+                                checked={sellerFilter.includes(s.user_id)}
+                                onCheckedChange={() => toggleSeller(s.user_id)}
+                              />
+                              <span className="truncate">{s.full_name}</span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Date */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-muted-foreground uppercase">Data</label>
+                  <div className="relative">
+                    <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="h-9 w-[170px] pl-7"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            {/* Resumo do dia */}
+            {/* Resumo */}
             <div className="grid gap-3 sm:grid-cols-4 mb-4">
               <SummaryStat label="Atendidos" value={reportTotals.atendidos} icon={Users} tone="default" />
               <SummaryStat label="Agendaram" value={reportTotals.agendou} icon={CalendarCheck} tone="success" />
@@ -270,9 +369,9 @@ export default function DashboardPage() {
               <TabsContent value="vendedores" className="mt-4">
                 {loading ? (
                   <Skeleton className="h-40 w-full" />
-                ) : reportRows.length === 0 ? (
+                ) : filteredRows.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-8 text-center">
-                    Nenhum atendimento registrado nesta data.
+                    Nenhum atendimento registrado para os filtros selecionados.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -280,6 +379,7 @@ export default function DashboardPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Vendedor</TableHead>
+                          <TableHead>Empresa</TableHead>
                           <TableHead className="text-center">
                             <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Atendidos</span>
                           </TableHead>
@@ -295,7 +395,7 @@ export default function DashboardPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {reportRows.map((row) => (
+                        {filteredRows.map((row) => (
                           <TableRow key={row.user_id}>
                             <TableCell>
                               <div className="flex items-center gap-2">
@@ -308,6 +408,7 @@ export default function DashboardPage() {
                                 <span className="font-medium">{row.full_name}</span>
                               </div>
                             </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{row.company_name}</TableCell>
                             <TableCell className="text-center font-semibold">{row.atendidos}</TableCell>
                             <TableCell className="text-center">
                               <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 bg-emerald-500/10">
