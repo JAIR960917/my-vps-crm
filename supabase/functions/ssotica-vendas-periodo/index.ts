@@ -1,6 +1,6 @@
 // Edge function: ssotica-vendas-periodo
-// Busca todas as vendas (com itens/produtos) de um período em uma ou mais empresas SSótica.
-// Usado pelo Relatório de Vendas por Vendedor.
+// Busca vendas (com itens/produtos) de UMA empresa SSótica em um período.
+// O frontend chama uma vez por empresa (em paralelo) para evitar timeout.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const SSOTICA_BASE = "https://app.ssotica.com.br/api/v1/integracoes";
@@ -56,9 +56,9 @@ Deno.serve(async (req) => {
     const endDate: string = body.endDate;
     const companyId: string | null = body.companyId || null;
 
-    if (!startDate || !endDate) {
+    if (!startDate || !endDate || !companyId) {
       return new Response(
-        JSON.stringify({ error: "startDate e endDate são obrigatórios (formato YYYY-MM-DD)" }),
+        JSON.stringify({ error: "startDate, endDate e companyId são obrigatórios" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -99,122 +99,117 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Busca integrações SSótica (todas para admin; do(s) próprio(s) company_id para gerente)
-    let integQuery = supabase
+    // Busca integração da empresa solicitada
+    const { data: integ, error: integErr } = await supabase
       .from("ssotica_integrations")
-      .select("id, company_id, cnpj, bearer_token, is_active");
+      .select("id, company_id, cnpj, bearer_token, is_active")
+      .eq("company_id", companyId)
+      .maybeSingle();
 
-    if (companyId) {
-      integQuery = integQuery.eq("company_id", companyId);
-    } else if (!isAdmin) {
-      // Gerente sem filtro: usar empresas dele (profile + manager_companies)
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const { data: mc } = await supabase
-        .from("manager_companies")
-        .select("company_id")
-        .eq("user_id", user.id);
-      const ids = new Set<string>();
-      if (prof?.company_id) ids.add(prof.company_id);
-      (mc || []).forEach((m: any) => m.company_id && ids.add(m.company_id));
-      if (ids.size === 0) {
-        return new Response(
-          JSON.stringify({ vendas: [], total_vendas: 0, total_itens: 0 }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      integQuery = integQuery.in("company_id", Array.from(ids));
-    }
-
-    const { data: integrations, error: integErr } = await integQuery;
-    if (integErr) throw integErr;
-    if (!integrations || integrations.length === 0) {
+    if (integErr || !integ) {
       return new Response(
-        JSON.stringify({ vendas: [], total_vendas: 0, total_itens: 0 }),
+        JSON.stringify({
+          companyId,
+          vendas: [],
+          total_vendas: 0,
+          total_itens: 0,
+          warning: "Integração SSótica não encontrada para esta empresa",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if (!integ.is_active) {
+      return new Response(
+        JSON.stringify({
+          companyId,
+          vendas: [],
+          total_vendas: 0,
+          total_itens: 0,
+          warning: "Integração SSótica inativa",
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
+    let token = integ.bearer_token;
+    if (token && token.startsWith("enc:")) {
+      const { data: dec } = await supabase.rpc("decrypt_secret", { _ciphertext: token });
+      if (typeof dec === "string") token = dec;
+    }
+    const cnpj = normalizeIdentifier(integ.cnpj);
+
+    // Nome da empresa
+    const { data: comp } = await supabase
+      .from("companies")
+      .select("name")
+      .eq("id", companyId)
+      .maybeSingle();
+    const companyName = (comp as any)?.name || "—";
+
     const start = new Date(`${startDate}T00:00:00`);
     const end = new Date(`${endDate}T00:00:00`);
-    const windows = buildWindows(start, end, 30);
+    // Janelas maiores (60 dias) para reduzir chamadas em períodos longos
+    const windows = buildWindows(start, end, 60);
 
-    // Mapa company_id -> nome
-    const { data: companiesData } = await supabase
-      .from("companies")
-      .select("id, name");
-    const compName = new Map<string, string>(
-      (companiesData || []).map((c: any) => [c.id, c.name]),
-    );
-
-    const vendasOut: any[] = [];
-
-    for (const integ of integrations) {
-      if (!integ.is_active) continue;
-
-      let token = integ.bearer_token;
-      if (token && token.startsWith("enc:")) {
-        const { data: dec } = await supabase.rpc("decrypt_secret", { _ciphertext: token });
-        if (typeof dec === "string") token = dec;
-      }
-      const cnpj = normalizeIdentifier(integ.cnpj);
-
-      for (const w of windows) {
+    // Executa janelas em paralelo (limitado) para acelerar
+    const results = await Promise.all(
+      windows.map(async (w) => {
         const url = `${SSOTICA_BASE}/vendas/periodo?cnpj=${encodeURIComponent(cnpj)}&inicio_periodo=${w.start}&fim_periodo=${w.end}`;
         try {
           const vendas = await fetchSSotica(url, token);
-          if (!Array.isArray(vendas)) continue;
-          for (const venda of vendas) {
-            // Filtra vendas dentro do range (a janela de 30 dias pode incluir extra)
-            const vData = String(venda.data || "");
-            if (vData < startDate || vData > endDate) continue;
-
-            vendasOut.push({
-              id: venda.id,
-              data: venda.data,
-              hora: venda.hora,
-              numero: venda.numero,
-              status: venda.status,
-              valor_bruto: Number(venda.valor_bruto ?? 0),
-              valor_liquido: Number(venda.valor_liquido ?? 0),
-              desconto: Number(venda.desconto ?? 0),
-              company_id: integ.company_id,
-              company_name: compName.get(integ.company_id) || "—",
-              cliente: venda.cliente
-                ? { id: venda.cliente.id, nome: venda.cliente.nome }
-                : null,
-              funcionario: venda.funcionario
-                ? {
-                    id: venda.funcionario.id,
-                    nome: venda.funcionario.nome,
-                    funcao: venda.funcionario.funcao,
-                  }
-                : null,
-              itens: Array.isArray(venda.itens)
-                ? venda.itens.map((it: any) => ({
-                    id: it.id,
-                    quantidade: Number(it.quantidade ?? 0),
-                    valor_unitario_liquido: Number(it.valor_unitario_liquido ?? 0),
-                    valor_total_liquido: Number(it.valor_total_liquido ?? 0),
-                    produto: it.produto
-                      ? {
-                          id: it.produto.id,
-                          referencia: it.produto.referencia,
-                          descricao: it.produto.descricao,
-                          grupo: it.produto.grupo,
-                          grife: it.produto.grife,
-                        }
-                      : null,
-                  }))
-                : [],
-            });
-          }
+          return Array.isArray(vendas) ? vendas : [];
         } catch (err) {
-          console.error(`[ssotica-vendas-periodo] ${integ.cnpj} ${w.start}→${w.end}`, err);
+          console.error(`[ssotica-vendas-periodo] ${cnpj} ${w.start}→${w.end}`, err);
+          return [];
         }
+      }),
+    );
+
+    const vendasOut: any[] = [];
+    for (const vendas of results) {
+      for (const venda of vendas) {
+        const vData = String(venda.data || "");
+        if (vData < startDate || vData > endDate) continue;
+
+        vendasOut.push({
+          id: venda.id,
+          data: venda.data,
+          hora: venda.hora,
+          numero: venda.numero,
+          status: venda.status,
+          valor_bruto: Number(venda.valor_bruto ?? 0),
+          valor_liquido: Number(venda.valor_liquido ?? 0),
+          desconto: Number(venda.desconto ?? 0),
+          company_id: companyId,
+          company_name: companyName,
+          cliente: venda.cliente
+            ? { id: venda.cliente.id, nome: venda.cliente.nome }
+            : null,
+          funcionario: venda.funcionario
+            ? {
+                id: venda.funcionario.id,
+                nome: venda.funcionario.nome,
+                funcao: venda.funcionario.funcao,
+              }
+            : null,
+          itens: Array.isArray(venda.itens)
+            ? venda.itens.map((it: any) => ({
+                id: it.id,
+                quantidade: Number(it.quantidade ?? 0),
+                valor_unitario_liquido: Number(it.valor_unitario_liquido ?? 0),
+                valor_total_liquido: Number(it.valor_total_liquido ?? 0),
+                produto: it.produto
+                  ? {
+                      id: it.produto.id,
+                      referencia: it.produto.referencia,
+                      descricao: it.produto.descricao,
+                      grupo: it.produto.grupo,
+                      grife: it.produto.grife,
+                    }
+                  : null,
+              }))
+            : [],
+        });
       }
     }
 
@@ -223,6 +218,8 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        companyId,
+        companyName,
         start: startDate,
         end: endDate,
         total_vendas: vendasOut.length,
