@@ -56,12 +56,19 @@ export default function LeadCard({
   const nameFields = formFields.filter((f) => f.is_name_field);
   const phoneFields = formFields.filter((f) => f.is_phone_field);
 
-  const displayName = nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
+  // Robust resolution: tries field_<id>, legacy keys (nome_lead, telefone), and label-matching
+  const identity = resolveLeadIdentity(data, formFields as any);
+
+  const displayName =
+    identity.nome
+    || nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
     || data.nome_lead
     || (columns[0] && data[columns[0].field_key])
     || "Sem nome";
 
-  const displayPhone = phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
+  const displayPhone =
+    identity.telefone
+    || phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
     || data.telefone
     || null;
 
@@ -77,6 +84,7 @@ export default function LeadCard({
 
   const nameFieldIds = new Set(nameFields.map((f) => f.id));
   const phoneFieldIds = new Set(phoneFields.map((f) => f.id));
+
 
   // Activity status
   const pendingActivities = (activities || []).filter(a => !a.completed_at);
