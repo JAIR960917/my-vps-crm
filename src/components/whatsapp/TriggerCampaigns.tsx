@@ -152,7 +152,8 @@ export default function TriggerCampaigns({ instances }: Props) {
 
   useEffect(() => {
     fetchData();
-  }, []);
+    /* eslint-disable-next-line */
+  }, [user?.id, isAdmin, isGerente]);
 
   const resetForm = () => {
     setName("");
