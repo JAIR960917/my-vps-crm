@@ -101,6 +101,7 @@ export default function ActiveClientsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [allowedCompanyIds, setAllowedCompanyIds] = useState<string[] | null>(null); // null = no restriction (admin)
   const [fields, setFields] = useState<FormField[]>([]);
   const [activities, setActivities] = useState<RenovacaoActivity[]>([]);
   const [noteIds, setNoteIds] = useState<Set<string>>(new Set());
@@ -132,12 +133,16 @@ export default function ActiveClientsPage() {
   const columnFilter = useMemo(() => ({
     apply: (q: any) => {
       let res = q;
-      if (filterCompanyId !== "all") res = res.eq("ssotica_company_id", filterCompanyId);
+      if (filterCompanyId !== "all") {
+        res = res.eq("ssotica_company_id", filterCompanyId);
+      } else if (allowedCompanyIds && allowedCompanyIds.length > 0) {
+        res = res.in("ssotica_company_id", allowedCompanyIds);
+      }
       if (filterAssignedTo === "__unassigned__") res = res.is("assigned_to", null);
       else if (filterAssignedTo !== "all") res = res.eq("assigned_to", filterAssignedTo);
       return res;
     },
-  }), [filterCompanyId, filterAssignedTo]);
+  }), [filterCompanyId, filterAssignedTo, allowedCompanyIds]);
 
   // ilike search across name/phone in jsonb
   const buildSearchOr = useCallback((q: string) => {
@@ -178,11 +183,27 @@ export default function ActiveClientsPage() {
     setStatuses((sts || []) as CrmStatus[]);
     setProfiles((profs || []) as Profile[]);
     setUserRoles((roles || []) as UserRole[]);
-    setCompanies((comps || []) as Company[]);
     setFields((ff || []) as unknown as FormField[]);
     setActivities((acts || []) as RenovacaoActivity[]);
     setNoteIds(new Set((notes || []).map((n: any) => n.renovacao_id)));
-  }, []);
+
+    // For gerente: restrict allowed companies to their own (profile + manager_companies)
+    if (isGerente && !isAdmin && user?.id) {
+      const [{ data: myProfile }, { data: mgrCompanies }] = await Promise.all([
+        supabase.from("profiles").select("company_id").eq("user_id", user.id).maybeSingle(),
+        supabase.from("manager_companies").select("company_id").eq("user_id", user.id),
+      ]);
+      const ids = new Set<string>();
+      if (myProfile?.company_id) ids.add(myProfile.company_id);
+      (mgrCompanies || []).forEach((m: any) => m?.company_id && ids.add(m.company_id));
+      const allowed = Array.from(ids);
+      setAllowedCompanyIds(allowed);
+      setCompanies(((comps || []) as Company[]).filter((c) => allowed.includes(c.id)));
+    } else {
+      setAllowedCompanyIds(null);
+      setCompanies((comps || []) as Company[]);
+    }
+  }, [isGerente, isAdmin, user?.id]);
 
   // Count unassigned (server-side)
   const refreshUnassignedCount = useCallback(async () => {
@@ -192,9 +213,10 @@ export default function ActiveClientsPage() {
       .is("assigned_to", null)
       .not("ssotica_company_id", "is", null);
     if (filterCompanyId !== "all") q = q.eq("ssotica_company_id", filterCompanyId);
+    else if (allowedCompanyIds && allowedCompanyIds.length > 0) q = q.in("ssotica_company_id", allowedCompanyIds);
     const { count } = await q;
     setUnassignedCount(count || 0);
-  }, [filterCompanyId]);
+  }, [filterCompanyId, allowedCompanyIds]);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
   useEffect(() => { refreshUnassignedCount(); }, [refreshUnassignedCount, refreshKey]);
@@ -640,13 +662,13 @@ export default function ActiveClientsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {(isAdmin || isGerente) && companies.length > 0 && (
+          {(isAdmin || isGerente) && companies.length > 1 && (
             <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
               <SelectTrigger className="h-9 w-full sm:w-56">
                 <SelectValue placeholder="Filtrar por empresa" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas as empresas</SelectItem>
+                <SelectItem value="all">{isGerente && !isAdmin ? "Minhas empresas" : "Todas as empresas"}</SelectItem>
                 {companies.map(c => (
                   <SelectItem key={c.id} value={c.id}>{c.name.trim()}</SelectItem>
                 ))}
@@ -656,13 +678,13 @@ export default function ActiveClientsPage() {
           {(isAdmin || isGerente) && profiles.length > 0 && (
             <Select value={filterAssignedTo} onValueChange={setFilterAssignedTo}>
               <SelectTrigger className="h-9 w-full sm:w-56">
-                <SelectValue placeholder="Filtrar por responsável" />
+                <SelectValue placeholder="Filtrar por vendedor" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os responsáveis</SelectItem>
+                <SelectItem value="all">Todos os vendedores</SelectItem>
                 <SelectItem value="__unassigned__">— Sem responsável —</SelectItem>
                 {[...profiles]
-                  .filter(p => p.full_name?.trim())
+                  .filter(p => p.full_name?.trim() && (isAdmin || vendedorIds.has(p.user_id)))
                   .sort((a, b) => a.full_name.localeCompare(b.full_name))
                   .map(p => (
                     <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
