@@ -260,8 +260,8 @@ export default function DashboardPage() {
     setLoading(true);
     const start = dateMode === "day" ? selectedDate : startDate;
     const end = dateMode === "day" ? selectedDate : endDate;
-    Promise.all([fetchTotals(), fetchReport(start, end)]).finally(() => setLoading(false));
-  }, [canSee, user, dateMode, selectedDate, startDate, endDate]);
+    Promise.all([fetchTotals(companyFilter), fetchReport(start, end)]).finally(() => setLoading(false));
+  }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter]);
 
   // Reset seller filter when company changes
   useEffect(() => {
