@@ -161,13 +161,7 @@ export default function LeadCard({
         <p className="text-xs text-emerald-500 mt-1 font-medium">Sincronizado ✓</p>
       )}
 
-      {/* Telefone */}
-      {displayPhone && (
-        <div className="mt-1.5 flex items-center gap-1 text-xs">
-          <Phone className="h-3 w-3 text-muted-foreground shrink-0" />
-          <span className="font-medium text-foreground truncate">{formatPhoneBR(String(displayPhone))}</span>
-        </div>
-      )}
+      {/* Telefone oculto propositalmente — vendedor precisa abrir o card para ver */}
 
       {/* Fields marked as show_on_card OR matching key labels (exame, dores, sintomas, doenças) */}
       {formFields
