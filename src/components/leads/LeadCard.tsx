@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Pencil, Trash2, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus, Clock } from "lucide-react";
+import { Pencil, Trash2, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus, Clock, Phone } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { resolveLeadIdentity } from "@/lib/leadIdentity";
+import { formatPhoneBR } from "@/lib/phoneFormat";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 
