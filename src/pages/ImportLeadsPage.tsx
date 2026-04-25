@@ -346,45 +346,10 @@ export default function ImportLeadsPage() {
                       onClick={async () => {
                         const toastId = toast.loading("Excluindo leads...");
                         try {
-                          // Buscar todos os IDs de leads (renovações e cobranças NÃO estão em crm_leads)
-                          const { data: leads, error: leadsErr } = await supabase
-                            .from("crm_leads")
-                            .select("id");
-                          if (leadsErr) throw leadsErr;
-                          const leadIds = (leads || []).map((l) => l.id);
-
-                          if (leadIds.length === 0) {
-                            toast.success("Nenhum lead para excluir.", { id: toastId });
-                            return;
-                          }
-
-                          // Excluir dados relacionados APENAS aos leads (preservando renovações/cobranças)
-                          // Processa em lotes para evitar URLs muito longas
-                          const chunk = <T,>(arr: T[], size: number) => {
-                            const out: T[][] = [];
-                            for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-                            return out;
-                          };
-                          const batches = chunk(leadIds, 200);
-
-                          for (const batch of batches) {
-                            await supabase.from("crm_lead_notes").delete().in("lead_id", batch);
-                            await supabase.from("lead_activities").delete().in("lead_id", batch);
-                            // Apenas agendamentos vinculados a leads (renovações ficam intactas)
-                            await supabase.from("crm_appointments").delete().in("lead_id", batch);
-                            await supabase.from("notifications").delete().in("lead_id", batch);
-                            await supabase.from("whatsapp_campaign_sends").delete().in("lead_id", batch);
-                            await supabase.from("whatsapp_trigger_sends").delete().in("lead_id", batch);
-                            await supabase.from("scheduled_whatsapp_messages").delete().in("lead_id", batch);
-                          }
-
-                          // Excluir os leads
-                          const { error } = await supabase
-                            .from("crm_leads")
-                            .delete()
-                            .in("id", leadIds);
+                          const { data, error } = await supabase.rpc("delete_all_leads_cascade");
                           if (error) throw error;
-                          toast.success(`${leadIds.length} leads excluídos! Renovações e cobranças preservadas.`, { id: toastId });
+                          const count = (data as any)?.deleted_leads ?? 0;
+                          toast.success(`${count} leads excluídos! Renovações e cobranças preservadas.`, { id: toastId });
                         } catch (err: any) {
                           toast.error(`Erro ao excluir: ${err.message}`, { id: toastId });
                         }
