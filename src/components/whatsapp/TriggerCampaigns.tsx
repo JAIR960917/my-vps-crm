@@ -79,6 +79,7 @@ export default function TriggerCampaigns({ instances }: Props) {
     leads: [], cobrancas: [], renovacoes: [],
   });
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [allowedCompanyIds, setAllowedCompanyIds] = useState<string[] | null>(null);
   const [sendStats, setSendStats] = useState<Record<string, TriggerSendStats>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
