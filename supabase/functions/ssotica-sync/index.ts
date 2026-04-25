@@ -145,6 +145,7 @@ interface Integration {
   cnpj: string;
   license_code: string | null;
   bearer_token: string;
+  sync_status: string;
   updated_at?: string | null;
   initial_sync_done: boolean;
   last_sync_vendas_at: string | null;
