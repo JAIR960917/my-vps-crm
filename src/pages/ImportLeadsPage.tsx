@@ -188,7 +188,17 @@ export default function ImportLeadsPage() {
 
   // Build field options for column mapping (add special entries)
   const fieldOptions = useMemo(() => {
-    const formOpts = formFields.map((f) => ({ value: f.id, label: `📝 ${f.label}`, group: "Campos do Formulário" }));
+    // Highlight essential fields (name, phone) at the top
+    const essentialOpts = formFields
+      .filter((f) => f.is_name_field || f.is_phone_field)
+      .map((f) => ({
+        value: f.id,
+        label: `⭐ ${f.label}${f.is_name_field ? " (Nome)" : ""}${f.is_phone_field ? " (Telefone)" : ""}`,
+        group: "Essenciais",
+      }));
+    const formOpts = formFields
+      .filter((f) => !f.is_name_field && !f.is_phone_field)
+      .map((f) => ({ value: f.id, label: `📝 ${f.label}`, group: "Campos do Formulário" }));
     const colOpts = crmColumns.map((c) => ({ value: `col__${c.field_key}`, label: `📊 ${c.name}`, group: "Colunas CRM" }));
     const userOpts = profiles.map((p) => ({ value: `user__${p.user_id}`, label: `👤 ${p.full_name || p.email}`, group: "Usuários" }));
     const statusOpts = statuses.map((s) => ({ value: `status__${s.key}`, label: `🏷️ ${s.label}`, group: "Status" }));
@@ -196,6 +206,7 @@ export default function ImportLeadsPage() {
       { value: "__status__", label: "⚙️ Status/Etapa", group: "Sistema" },
       { value: "__assigned__", label: "⚙️ Responsável", group: "Sistema" },
       { value: "__created_at__", label: "⚙️ Data de criação", group: "Sistema" },
+      ...essentialOpts,
       ...formOpts,
       ...colOpts,
       ...statusOpts,
