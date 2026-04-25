@@ -425,7 +425,7 @@ export default function ImportLeadsPage() {
         }
 
         return {
-          data: data as any,
+          data,
           status,
           assigned_to: assignedTo,
           created_by: user?.id || null,
@@ -520,10 +520,13 @@ export default function ImportLeadsPage() {
                         try {
                           const { data, error } = await supabase.rpc("delete_all_leads_cascade");
                           if (error) throw error;
-                          const count = (data as any)?.deleted_leads ?? 0;
+                          const count = typeof data === "object" && data && "deleted_leads" in data
+                            ? Number((data as { deleted_leads?: number }).deleted_leads ?? 0)
+                            : 0;
                           toast.success(`${count} leads excluídos! Renovações e cobranças preservadas.`, { id: toastId });
-                        } catch (err: any) {
-                          toast.error(`Erro ao excluir: ${err.message}`, { id: toastId });
+                        } catch (err: unknown) {
+                          const message = err instanceof Error ? err.message : "Erro ao excluir";
+                          toast.error(`Erro ao excluir: ${message}`, { id: toastId });
                         }
                       }}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
