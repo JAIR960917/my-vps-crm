@@ -105,6 +105,10 @@ export default function RenovacaoEditSheet(props: Props) {
 
   const isEditing = !!renovacaoId;
 
+  // Mandatory tratativa: enforced for non-admin users
+  const [tratativaRegistrada, setTratativaRegistrada] = useState(false);
+  const requiresTratativa = isEditing && !isAdmin;
+
   const fetchTimeline = async () => {
     if (!renovacaoId) return;
     const [{ data: acts }, { data: ns }] = await Promise.all([
@@ -121,12 +125,21 @@ export default function RenovacaoEditSheet(props: Props) {
       setTab("atividade");
       setNewComment("");
       setTaskOpen(false);
+      setTratativaRegistrada(false);
       // Track card open for daily salesperson report
       if (user?.id) {
         recordCardOpen({ userId: user.id, cardType: "renovacao", renovacaoId });
       }
     }
   }, [open, renovacaoId]);
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next && requiresTratativa && !tratativaRegistrada) {
+      toast.error("Registre uma tratativa antes de fechar esta renovação.");
+      return;
+    }
+    onOpenChange(next);
+  };
 
   const timeline = useMemo(() => {
     const items = [
