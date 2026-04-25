@@ -128,6 +128,13 @@ export default function RenovacaoContactAttemptForm({
         } as any);
         if (apptErr) throw apptErr;
 
+        // Move the renovação to "agendado" so it leaves the active board
+        const { error: statusErr } = await supabase
+          .from("crm_renovacoes")
+          .update({ status: "agendado" })
+          .eq("id", renovacaoId);
+        if (statusErr) console.warn("Falha ao atualizar status da renovação:", statusErr);
+
         toast.success("Contato registrado e consulta agendada!");
       } else {
         toast.success("Contato registrado!");
