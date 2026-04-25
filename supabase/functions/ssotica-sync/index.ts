@@ -16,7 +16,11 @@ const MAX_HISTORY_DAYS = 2880; // 96 meses
 const CHUNK_DAYS = 183;        // ~6 meses por chunk (usado pelo backfill histórico)
 const COBRANCAS_LOOKBACK_DAYS = 730; // faixa histórica total coberta pelo ciclo incremental
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
-const INCREMENTAL_COBRANCAS_SLICES = 4; // 24 meses ÷ 4 cron cycles = ~6 meses por execução
+// 24 meses ÷ 8 fatias = ~3 meses por execução. Reduzido de 4 para 8 porque
+// lojas grandes (Caicó, Jucurutu) estouravam o limite de ~400s da edge function
+// mesmo isoladas. Com 3 meses cada execução roda em <200s. Cobertura total
+// continua sendo 24 meses, agora distribuída em 8 ciclos de 3h (24h completas).
+const INCREMENTAL_COBRANCAS_SLICES = 8;
 const RUNNING_SYNC_STALE_MINUTES = 20;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
@@ -68,7 +72,9 @@ function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
 
 function getBrasiliaCycleSlot(date = new Date()): number {
   const br = new Date(date.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-  return Math.floor(br.getHours() / 6) % INCREMENTAL_COBRANCAS_SLICES;
+  // 24 horas / SLICES = horas por slot (3h quando SLICES=8)
+  const hoursPerSlot = Math.max(1, Math.floor(24 / INCREMENTAL_COBRANCAS_SLICES));
+  return Math.floor(br.getHours() / hoursPerSlot) % INCREMENTAL_COBRANCAS_SLICES;
 }
 
 function getIncrementalCobrancaWindow(now = new Date()): { start: Date; end: Date; slot: number } {
@@ -1563,6 +1569,47 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // ⚡ FAN-OUT: quando o cron dispara para TODAS as lojas em uma única chamada,
+    // o loop sequencial estoura o orçamento de tempo da edge function (~150-400s)
+    // e mata processos no meio, deixando lojas travadas em "running" até o próximo
+    // ciclo (6h depois). Solução: re-disparar uma chamada por loja, em paralelo,
+    // dando o tempo de execução COMPLETO da edge function para cada uma.
+    if (!onlyIntegrationId && integrations.length > 1) {
+      const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const dispatched: string[] = [];
+      const fanoutSkipped: any[] = [];
+      for (const integ of integrations as Integration[]) {
+        // Pula imediatamente as que já estão rodando e ainda não estão "stale"
+        if (integ.sync_status === "running" && !isRunningSyncStale(integ as any)) {
+          fanoutSkipped.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
+          continue;
+        }
+        // Fire-and-forget: cada loja vira um request isolado com seu próprio tempo total.
+        const p = fetch(fnUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({ mode: "incremental", integration_id: integ.id, force_full: forceFull }),
+        }).catch((err) => {
+          console.error(`[ssotica-sync][fanout] erro disparando ${integ.id}:`, err);
+        });
+        // Mantém o runtime vivo até o disparo concluir (não espera a resposta).
+        try { (globalThis as any).EdgeRuntime?.waitUntil?.(p); } catch (_) { /* ignore */ }
+        dispatched.push(integ.id);
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        mode: "incremental_fanout",
+        dispatched_count: dispatched.length,
+        dispatched,
+        skipped: fanoutSkipped,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     await decryptIntegrations(supabase, integrations as Integration[]);
 
     const results: any[] = [];
