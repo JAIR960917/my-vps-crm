@@ -1632,6 +1632,15 @@ export type Database = {
       is_same_company: { Args: { _user_id: string }; Returns: boolean }
       manage_ssotica_cron: { Args: never; Returns: undefined }
       manage_whatsapp_cron: { Args: never; Returns: undefined }
+      ssotica_enqueue_sync: {
+        Args: {
+          _auth: string
+          _force_full?: boolean
+          _integration_id: string
+          _url: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       app_role: "admin" | "vendedor" | "gerente" | "financeiro"
