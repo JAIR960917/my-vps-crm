@@ -72,7 +72,9 @@ function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
 
 function getBrasiliaCycleSlot(date = new Date()): number {
   const br = new Date(date.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-  return Math.floor(br.getHours() / 6) % INCREMENTAL_COBRANCAS_SLICES;
+  // 24 horas / SLICES = horas por slot (3h quando SLICES=8)
+  const hoursPerSlot = Math.max(1, Math.floor(24 / INCREMENTAL_COBRANCAS_SLICES));
+  return Math.floor(br.getHours() / hoursPerSlot) % INCREMENTAL_COBRANCAS_SLICES;
 }
 
 function getIncrementalCobrancaWindow(now = new Date()): { start: Date; end: Date; slot: number } {
