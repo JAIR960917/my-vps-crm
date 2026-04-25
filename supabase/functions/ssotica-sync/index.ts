@@ -21,7 +21,7 @@ const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
 // mesmo isoladas. Com 3 meses cada execução roda em <200s. Cobertura total
 // continua sendo 24 meses, agora distribuída em 8 ciclos de 3h (24h completas).
 const INCREMENTAL_COBRANCAS_SLICES = 8;
-const RUNNING_SYNC_STALE_MINUTES = 20;
+const RUNNING_SYNC_STALE_MINUTES = 5;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
