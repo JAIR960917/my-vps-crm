@@ -161,18 +161,31 @@ export default function LeadCard({
         <p className="text-xs text-emerald-500 mt-1 font-medium">Sincronizado ✓</p>
       )}
 
-      {/* Telefone removido propositalmente do card para forçar abertura da edição */}
+      {/* Telefone */}
+      {displayPhone && (
+        <div className="mt-1.5 flex items-center gap-1 text-xs">
+          <Phone className="h-3 w-3 text-muted-foreground shrink-0" />
+          <span className="font-medium text-foreground truncate">{formatPhoneBR(String(displayPhone))}</span>
+        </div>
+      )}
 
-      {/* Fields marked as show_on_card */}
+      {/* Fields marked as show_on_card OR matching key labels (exame, dores, sintomas, doenças) */}
       {formFields
-        .filter((f) => f.show_on_card && !nameFieldIds.has(f.id) && !phoneFieldIds.has(f.id))
+        .filter((f) => {
+          if (nameFieldIds.has(f.id) || phoneFieldIds.has(f.id)) return false;
+          if (f.show_on_card) return true;
+          const label = (f.label || "").toLowerCase();
+          return /exame|dor|sintoma|doen|idade|cidade/.test(label);
+        })
         .map((f) => {
           const value = data[`field_${f.id}`];
           if (value === undefined || value === null || value === "") return null;
+          const display = Array.isArray(value) ? value.join(", ") : String(value);
+          if (!display.trim()) return null;
           return (
             <div key={f.id} className="mt-1.5">
               <p className="text-[11px] text-muted-foreground leading-tight">{f.label}</p>
-              <p className="text-xs font-medium text-foreground truncate">{String(value)}</p>
+              <p className="text-xs font-medium text-foreground line-clamp-2">{display}</p>
             </div>
           );
         })}
