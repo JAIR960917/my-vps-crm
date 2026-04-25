@@ -105,10 +105,18 @@ export default function DashboardPage() {
       .gte("opened_at", startISO)
       .lte("opened_at", endISO);
 
+    // Atendidos: cards distintos abertos por vendedor por dia
+    // Chave: vendedor -> Set("dia|tipo:cardId")
     const atendidosMap = new Map<string, Set<string>>();
+    const dayKey = (iso: string) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    };
     (opens || []).forEach((o: any) => {
-      if (adminSet.has(o.user_id)) return; // ignora admins
-      const key = `${o.card_type}:${o.lead_id || o.renovacao_id}`;
+      if (adminSet.has(o.user_id)) return;
+      const cardId = o.lead_id || o.renovacao_id;
+      if (!cardId) return;
+      const key = `${dayKey(o.opened_at)}|${o.card_type}:${cardId}`;
       if (!atendidosMap.has(o.user_id)) atendidosMap.set(o.user_id, new Set());
       atendidosMap.get(o.user_id)!.add(key);
     });
@@ -116,33 +124,69 @@ export default function DashboardPage() {
     const [{ data: leadNotes }, { data: renovNotes }] = await Promise.all([
       supabase
         .from("crm_lead_notes")
-        .select("user_id, content, created_at")
+        .select("user_id, lead_id, content, created_at")
         .gte("created_at", startISO)
         .lte("created_at", endISO),
       supabase
         .from("crm_renovacao_notes" as any)
-        .select("user_id, content, created_at")
+        .select("user_id, renovacao_id, content, created_at")
         .gte("created_at", startISO)
         .lte("created_at", endISO),
     ]);
+
+    // Para cada (vendedor, card, dia) armazenamos APENAS a última tentativa de contato.
+    // Assim o lead aparece em apenas uma categoria no dia (a mais recente).
+    type Cat = "agendou" | "naoAtendeu" | "atendeuSemAgendar";
+    type LastEntry = { ts: number; cat: Cat };
+    const latestPerCardDay = new Map<string, LastEntry>();
+    // chave: `${userId}|${dayKey}|${cardType}:${cardId}`
+
+    const classify = (content: string): Cat | null => {
+      if (!content.startsWith("📞 Tentativa de contato")) return null;
+      if (content.includes("NÃO ATENDEU")) return "naoAtendeu";
+      if (content.includes("ATENDEU")) {
+        if (content.includes("✅ Consulta marcada")) return "agendou";
+        return "atendeuSemAgendar";
+      }
+      return null;
+    };
+
+    const ingestNote = (
+      userId: string,
+      cardType: "lead" | "renovacao",
+      cardId: string,
+      content: string,
+      createdAt: string,
+    ) => {
+      if (adminSet.has(userId)) return;
+      const cat = classify(content);
+      if (!cat) return;
+      const ts = new Date(createdAt).getTime();
+      const key = `${userId}|${dayKey(createdAt)}|${cardType}:${cardId}`;
+      const prev = latestPerCardDay.get(key);
+      if (!prev || ts > prev.ts) latestPerCardDay.set(key, { ts, cat });
+    };
+
+    (leadNotes || []).forEach((n: any) =>
+      ingestNote(n.user_id, "lead", n.lead_id, n.content || "", n.created_at),
+    );
+    ((renovNotes as any[]) || []).forEach((n: any) =>
+      ingestNote(n.user_id, "renovacao", n.renovacao_id, n.content || "", n.created_at),
+    );
 
     const agendou = new Map<string, number>();
     const naoAtendeu = new Map<string, number>();
     const atendeuSemAgendar = new Map<string, number>();
 
-    const allNotes = [...(leadNotes || []), ...((renovNotes as any[]) || [])];
-    allNotes.forEach((n: any) => {
-      if (adminSet.has(n.user_id)) return; // ignora admins
-      const c: string = n.content || "";
-      if (!c.startsWith("📞 Tentativa de contato")) return;
-      const inc = (m: Map<string, number>) =>
-        m.set(n.user_id, (m.get(n.user_id) || 0) + 1);
-
-      if (c.includes("NÃO ATENDEU")) inc(naoAtendeu);
-      else if (c.includes("ATENDEU")) {
-        if (c.includes("✅ Consulta marcada")) inc(agendou);
-        else inc(atendeuSemAgendar);
-      }
+    latestPerCardDay.forEach((entry, key) => {
+      const userId = key.split("|")[0];
+      const target =
+        entry.cat === "agendou"
+          ? agendou
+          : entry.cat === "naoAtendeu"
+          ? naoAtendeu
+          : atendeuSemAgendar;
+      target.set(userId, (target.get(userId) || 0) + 1);
     });
 
     const userIds = new Set<string>([
