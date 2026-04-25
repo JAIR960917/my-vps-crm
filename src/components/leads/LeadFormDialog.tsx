@@ -791,7 +791,7 @@ export default function LeadFormDialog({
             <div className="px-5 py-4 border-b">
               <DialogTitle className="text-lg font-bold">Editar Lead</DialogTitle>
             </div>
-            <ScrollArea className="flex-1 px-5 py-4">
+            <ScrollArea className="md:flex-1 px-5 py-4">
               <form id="lead-edit-form" onSubmit={(e) => { e.preventDefault(); onSubmit(e); }} className="space-y-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Empresa</Label>
@@ -845,7 +845,7 @@ export default function LeadFormDialog({
           </div>
 
           {/* RIGHT PANEL — Timeline */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col md:overflow-hidden">
             {/* Tabs */}
             <div className="px-5 py-3 border-b flex items-center gap-1 flex-wrap">
               {[
@@ -956,7 +956,7 @@ export default function LeadFormDialog({
             </div>
 
             {/* Timeline */}
-            <ScrollArea className="flex-1">
+            <ScrollArea className="md:flex-1">
               <div className="px-5 py-4">
                 {timeline.length === 0 ? (
                   <p className="text-center text-muted-foreground text-sm py-12">
