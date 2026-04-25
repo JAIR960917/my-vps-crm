@@ -349,19 +349,64 @@ export default function DashboardPage() {
                   </Popover>
                 </div>
 
-                {/* Date */}
+                {/* Date mode */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-medium text-muted-foreground uppercase">Data</label>
-                  <div className="relative">
-                    <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                    <Input
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="h-9 w-[170px] pl-7"
-                    />
-                  </div>
+                  <label className="text-[11px] font-medium text-muted-foreground uppercase">Período</label>
+                  <Select value={dateMode} onValueChange={(v) => setDateMode(v as "day" | "range")}>
+                    <SelectTrigger className="h-9 w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="day">Dia</SelectItem>
+                      <SelectItem value="range">Intervalo</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {/* Date(s) */}
+                {dateMode === "day" ? (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-muted-foreground uppercase">Data</label>
+                    <div className="relative">
+                      <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="h-9 w-[170px] pl-7"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-medium text-muted-foreground uppercase">De</label>
+                      <div className="relative">
+                        <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="date"
+                          value={startDate}
+                          max={endDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="h-9 w-[160px] pl-7"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-medium text-muted-foreground uppercase">Até</label>
+                      <div className="relative">
+                        <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="date"
+                          value={endDate}
+                          min={startDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="h-9 w-[160px] pl-7"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </CardHeader>
