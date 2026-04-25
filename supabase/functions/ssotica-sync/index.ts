@@ -1454,6 +1454,13 @@ async function runBackfillChunk(
   }
 }
 
+function isRunningSyncStale(integration: Pick<Integration, "sync_status" | "updated_at">): boolean {
+  if (integration.sync_status !== "running" || !integration.updated_at) return false;
+  const updatedAt = new Date(integration.updated_at).getTime();
+  if (Number.isNaN(updatedAt)) return false;
+  return Date.now() - updatedAt > RUNNING_SYNC_STALE_MINUTES * 60 * 1000;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -1561,7 +1568,35 @@ Deno.serve(async (req) => {
     for (const integ of integrations as Integration[]) {
       let logId: string | null = null;
       try {
-        await supabase.from("ssotica_integrations").update({ sync_status: "running", last_error: null }).eq("id", integ.id);
+        if (integ.sync_status === "running" && !isRunningSyncStale(integ)) {
+          results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
+          continue;
+        }
+
+        if (isRunningSyncStale(integ)) {
+          await supabase
+            .from("ssotica_sync_logs")
+            .update({
+              finished_at: new Date().toISOString(),
+              status: "error",
+              error_message: `Execução anterior excedeu ${RUNNING_SYNC_STALE_MINUTES} min e foi encerrada automaticamente antes do novo ciclo.`,
+            })
+            .eq("integration_id", integ.id)
+            .eq("status", "running");
+        }
+
+        const { data: claimedIntegration } = await supabase
+          .from("ssotica_integrations")
+          .update({ sync_status: "running", last_error: null })
+          .eq("id", integ.id)
+          .neq("sync_status", "running")
+          .select("id")
+          .maybeSingle();
+
+        if (!claimedIntegration) {
+          results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "claim_failed" });
+          continue;
+        }
 
         // ===== Se o backfill ainda está em andamento, roda TODOS os chunks pendentes
         // de uma vez antes do incremental. Isso garante que o usuário não veja
