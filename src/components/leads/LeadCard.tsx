@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Pencil, Trash2, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus, Clock } from "lucide-react";
+import { Pencil, Trash2, CloudOff, CheckCircle2, CalendarPlus, CalendarClock, AlertTriangle, Plus, Clock, Phone } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { resolveLeadIdentity } from "@/lib/leadIdentity";
+import { formatPhoneBR } from "@/lib/phoneFormat";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null };
 
@@ -54,12 +56,19 @@ export default function LeadCard({
   const nameFields = formFields.filter((f) => f.is_name_field);
   const phoneFields = formFields.filter((f) => f.is_phone_field);
 
-  const displayName = nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
+  // Robust resolution: tries field_<id>, legacy keys (nome_lead, telefone), and label-matching
+  const identity = resolveLeadIdentity(data, formFields as any);
+
+  const displayName =
+    identity.nome
+    || nameFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
     || data.nome_lead
     || (columns[0] && data[columns[0].field_key])
     || "Sem nome";
 
-  const displayPhone = phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
+  const displayPhone =
+    identity.telefone
+    || phoneFields.reduce<string | null>((found, f) => found || data[`field_${f.id}`] || null, null)
     || data.telefone
     || null;
 
@@ -75,6 +84,7 @@ export default function LeadCard({
 
   const nameFieldIds = new Set(nameFields.map((f) => f.id));
   const phoneFieldIds = new Set(phoneFields.map((f) => f.id));
+
 
   // Activity status
   const pendingActivities = (activities || []).filter(a => !a.completed_at);
@@ -151,18 +161,31 @@ export default function LeadCard({
         <p className="text-xs text-emerald-500 mt-1 font-medium">Sincronizado ✓</p>
       )}
 
-      {/* Telefone removido propositalmente do card para forçar abertura da edição */}
+      {/* Telefone */}
+      {displayPhone && (
+        <div className="mt-1.5 flex items-center gap-1 text-xs">
+          <Phone className="h-3 w-3 text-muted-foreground shrink-0" />
+          <span className="font-medium text-foreground truncate">{formatPhoneBR(String(displayPhone))}</span>
+        </div>
+      )}
 
-      {/* Fields marked as show_on_card */}
+      {/* Fields marked as show_on_card OR matching key labels (exame, dores, sintomas, doenças) */}
       {formFields
-        .filter((f) => f.show_on_card && !nameFieldIds.has(f.id) && !phoneFieldIds.has(f.id))
+        .filter((f) => {
+          if (nameFieldIds.has(f.id) || phoneFieldIds.has(f.id)) return false;
+          if (f.show_on_card) return true;
+          const label = (f.label || "").toLowerCase();
+          return /exame|dor|sintoma|doen|idade|cidade/.test(label);
+        })
         .map((f) => {
           const value = data[`field_${f.id}`];
           if (value === undefined || value === null || value === "") return null;
+          const display = Array.isArray(value) ? value.join(", ") : String(value);
+          if (!display.trim()) return null;
           return (
             <div key={f.id} className="mt-1.5">
               <p className="text-[11px] text-muted-foreground leading-tight">{f.label}</p>
-              <p className="text-xs font-medium text-foreground truncate">{String(value)}</p>
+              <p className="text-xs font-medium text-foreground line-clamp-2">{display}</p>
             </div>
           );
         })}
