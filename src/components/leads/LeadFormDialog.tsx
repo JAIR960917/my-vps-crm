@@ -19,6 +19,8 @@ import { ptBR } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { resolveLeadIdentity } from "@/lib/leadIdentity";
+import ContactAttemptForm from "./ContactAttemptForm";
 
 type Profile = { user_id: string; full_name: string; email?: string; avatar_url?: string | null; company_id?: string | null };
 type Company = { id: string; name: string };
@@ -865,9 +867,33 @@ export default function LeadFormDialog({
               ))}
             </div>
 
+            {/* Contact attempt form */}
+            {leadId && user && (
+              <div className="px-5 py-3 border-b">
+                <ContactAttemptForm
+                  leadId={leadId}
+                  userId={user.id}
+                  leadStatus={formStatus}
+                  leadSnapshot={(() => {
+                    const identity = resolveLeadIdentity(formData, fields as any);
+                    return {
+                      nome: identity.nome || "Lead",
+                      telefone: identity.telefone || "",
+                      idade: identity.idade || "",
+                    };
+                  })()}
+                  onSaved={() => {
+                    fetchNotes();
+                    onActivityChange?.();
+                  }}
+                />
+              </div>
+            )}
+
             {/* New activity / comment input */}
             <div className="px-5 py-3 border-b space-y-3">
               {!showNewActivity ? (
+
                 <div className="flex gap-2">
                   <Input
                     value={newNote}
