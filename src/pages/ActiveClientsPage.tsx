@@ -517,11 +517,7 @@ export default function ActiveClientsPage() {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-sm truncate">{d.nome || "Sem nome"}</p>
-            {d.telefone && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                <Phone className="h-3 w-3" />{formatPhoneBR(d.telefone)}
-              </p>
-            )}
+            {/* Telefone removido para forçar abertura do lead na edição */}
           </div>
           {Number(item.valor || 0) > 0 && (
             <Badge variant="outline" className="text-xs shrink-0">
