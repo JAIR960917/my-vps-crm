@@ -423,60 +423,88 @@ export default function ImportLeadsPage() {
                 Vincule cada coluna do CSV a um campo do CRM. Colunas sem vínculo serão ignoradas.
               </CardDescription>
             </CardHeader>
-            <CardContent className="max-h-[60vh] overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Coluna CSV</TableHead>
-                    <TableHead>Exemplo</TableHead>
-                    <TableHead>Campo CRM</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {csvHeaders.map((header) => {
-                    const sample = csvRows.find((r) => r[header])?.[header] || "";
-                    return (
-                      <TableRow key={header}>
-                        <TableCell className="font-medium text-xs">{header}</TableCell>
-                        <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
-                          {sample.slice(0, 60)}
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={columnMap[header] || IGNORE_VALUE}
-                            onValueChange={(v) =>
-                              setColumnMap((prev) => {
-                                const next = { ...prev };
-                                if (v === IGNORE_VALUE) delete next[header];
-                                else next[header] = v;
-                                return next;
-                              })
-                            }
-                          >
-                            <SelectTrigger className="w-[220px] text-xs">
-                              <SelectValue placeholder="Ignorar" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={IGNORE_VALUE}>— Ignorar —</SelectItem>
-                              {fieldOptions.map((o) => (
-                                <SelectItem key={o.value} value={o.value}>
-                                  {o.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+            <CardContent className="space-y-3">
+              {/* Validation banner */}
+              <div className={`rounded-lg border p-3 text-sm ${validation.valid ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-800 dark:text-yellow-400"}`}>
+                <div className="flex items-start gap-2">
+                  {validation.valid ? <Check className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+                  <div className="space-y-1">
+                    {validation.valid ? (
+                      <p className="font-medium">Todos os campos essenciais estão mapeados.</p>
+                    ) : (
+                      <>
+                        <p className="font-medium">Mapeie os campos essenciais antes de continuar:</p>
+                        <ul className="list-disc pl-5">
+                          {validation.issues.map((i) => (<li key={i}>{i}</li>))}
+                        </ul>
+                        <p className="text-xs opacity-80">Sem esses mapeamentos os leads aparecerão sem nome, telefone ou responsável na tela de Leads.</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="max-h-[55vh] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Coluna CSV</TableHead>
+                      <TableHead>Exemplo</TableHead>
+                      <TableHead>Campo CRM</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {csvHeaders.map((header) => {
+                      const sample = csvRows.find((r) => r[header])?.[header] || "";
+                      const current = columnMap[header];
+                      const isMapped = !!current && current !== IGNORE_VALUE;
+                      return (
+                        <TableRow key={header} className={!isMapped ? "opacity-70" : ""}>
+                          <TableCell className="font-medium text-xs">{header}</TableCell>
+                          <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
+                            {sample.slice(0, 60)}
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={columnMap[header] || IGNORE_VALUE}
+                              onValueChange={(v) =>
+                                setColumnMap((prev) => {
+                                  const next = { ...prev };
+                                  if (v === IGNORE_VALUE) delete next[header];
+                                  else next[header] = v;
+                                  return next;
+                                })
+                              }
+                            >
+                              <SelectTrigger className={`w-[240px] text-xs ${isMapped ? "" : "border-yellow-500/50"}`}>
+                                <SelectValue placeholder="— Ignorar —" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={IGNORE_VALUE}>— Ignorar —</SelectItem>
+                                {fieldOptions.map((o) => (
+                                  <SelectItem key={o.value} value={o.value}>
+                                    {o.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
             <div className="flex justify-between p-4 pt-0">
               <Button variant="outline" onClick={() => setStep("upload")}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
               </Button>
-              <Button onClick={() => setStep("status")}>
+              <Button
+                onClick={() => setStep("status")}
+                disabled={!validation.valid}
+                title={!validation.valid ? `Faltando: ${validation.issues.join(", ")}` : undefined}
+              >
                 Próximo <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
