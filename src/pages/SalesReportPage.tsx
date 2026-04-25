@@ -88,15 +88,23 @@ export default function SalesReportPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyFilter, setCompanyFilter] = useState<string>(ALL);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [vendas, setVendas] = useState<Venda[] | null>(null);
 
   useEffect(() => {
     (async () => {
+      // Apenas empresas que possuem integração SSótica ativa
+      const { data: integs } = await supabase
+        .from("ssotica_integrations")
+        .select("company_id, is_active")
+        .eq("is_active", true);
+      const ids = new Set<string>((integs || []).map((i: any) => i.company_id));
       const { data } = await supabase
         .from("companies")
         .select("id, name")
         .order("name");
-      setCompanies((data as Company[]) || []);
+      const filtered = ((data as Company[]) || []).filter((c) => ids.has(c.id));
+      setCompanies(filtered);
     })();
   }, []);
 
@@ -109,29 +117,59 @@ export default function SalesReportPage() {
       toast.error("A data inicial deve ser anterior à final");
       return;
     }
+    if (companies.length === 0) {
+      toast.error("Nenhuma empresa com integração SSótica ativa");
+      return;
+    }
+    const targets =
+      companyFilter === ALL ? companies : companies.filter((c) => c.id === companyFilter);
+    if (targets.length === 0) {
+      toast.error("Selecione uma empresa válida");
+      return;
+    }
+
     setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke(
-        "ssotica-vendas-periodo",
-        {
-          body: {
-            startDate,
-            endDate,
-            companyId: companyFilter === ALL ? null : companyFilter,
+    setProgress({ done: 0, total: targets.length });
+    setVendas(null);
+    const all: Venda[] = [];
+    let completed = 0;
+    const errors: string[] = [];
+
+    // Processa empresas SEQUENCIALMENTE (uma por vez) para evitar sobrecarregar o SSótica
+    for (const c of targets) {
+      try {
+        const { data, error } = await supabase.functions.invoke(
+          "ssotica-vendas-periodo",
+          {
+            body: {
+              startDate,
+              endDate,
+              companyId: c.id,
+            },
           },
-        },
+        );
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        all.push(...((data?.vendas as Venda[]) || []));
+      } catch (err: any) {
+        console.error(`[relatorio-vendas] empresa ${c.name}`, err);
+        errors.push(`${c.name}: ${err?.message || "erro"}`);
+      } finally {
+        completed += 1;
+        setProgress({ done: completed, total: targets.length });
+        // Atualiza incrementalmente para o usuário ver o progresso
+        setVendas([...all].sort((a, b) => (b.data || "").localeCompare(a.data || "")));
+      }
+    }
+
+    setLoading(false);
+    setProgress(null);
+    if (errors.length > 0) {
+      toast.warning(
+        `Relatório gerado com ${errors.length} erro(s). ${all.length} vendas carregadas.`,
       );
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      setVendas((data?.vendas as Venda[]) || []);
-      toast.success(
-        `${data?.total_vendas || 0} venda(s) encontrada(s) no período`,
-      );
-    } catch (err: any) {
-      toast.error(err?.message || "Erro ao gerar relatório");
-      setVendas([]);
-    } finally {
-      setLoading(false);
+    } else {
+      toast.success(`${all.length} venda(s) encontrada(s) no período`);
     }
   };
 
@@ -341,7 +379,9 @@ export default function SalesReportPage() {
                   {loading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Carregando...
+                      {progress
+                        ? `${progress.done}/${progress.total} empresas`
+                        : "Carregando..."}
                     </>
                   ) : (
                     <>
