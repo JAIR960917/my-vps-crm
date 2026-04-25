@@ -332,38 +332,49 @@ export default function DashboardPage() {
 
         {/* Totais */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Leads</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.leads}</div>}
-              <p className="text-xs text-muted-foreground mt-1">Total de leads cadastrados</p>
-            </CardContent>
-          </Card>
+          {(() => {
+            const selectedCompanyName =
+              companyFilter === ALL
+                ? null
+                : companies.find((c) => c.id === companyFilter)?.name || null;
+            const suffix = selectedCompanyName ? ` — ${selectedCompanyName}` : "";
+            return (
+              <>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Leads</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.leads}</div>}
+                    <p className="text-xs text-muted-foreground mt-1">Total de leads cadastrados{suffix}</p>
+                  </CardContent>
+                </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Cobranças</CardTitle>
-              <Receipt className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.cobrancas}</div>}
-              <p className="text-xs text-muted-foreground mt-1">Total de cobranças no sistema</p>
-            </CardContent>
-          </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Cobranças</CardTitle>
+                    <Receipt className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.cobrancas}</div>}
+                    <p className="text-xs text-muted-foreground mt-1">Total de cobranças no sistema{suffix}</p>
+                  </CardContent>
+                </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Renovação</CardTitle>
-              <CalendarHeart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.renovacoes}</div>}
-              <p className="text-xs text-muted-foreground mt-1">Clientes em renovação</p>
-            </CardContent>
-          </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Renovação</CardTitle>
+                    <CalendarHeart className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.renovacoes}</div>}
+                    <p className="text-xs text-muted-foreground mt-1">Clientes em renovação{suffix}</p>
+                  </CardContent>
+                </Card>
+              </>
+            );
+          })()}
         </div>
 
         {/* Relatório diário */}
