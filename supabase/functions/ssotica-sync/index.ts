@@ -1563,6 +1563,46 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // ⚡ FAN-OUT: quando o cron dispara para TODAS as lojas em uma única chamada,
+    // o loop sequencial estoura o orçamento de tempo da edge function (~150-400s)
+    // e mata processos no meio, deixando lojas travadas em "running" até o próximo
+    // ciclo (6h depois). Solução: re-disparar uma chamada por loja, em paralelo,
+    // dando o tempo de execução COMPLETO da edge function para cada uma.
+    if (!onlyIntegrationId && integrations.length > 1) {
+      const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const dispatched: string[] = [];
+      for (const integ of integrations as Integration[]) {
+        // Pula imediatamente as que já estão rodando e ainda não estão "stale"
+        if (integ.sync_status === "running" && !isRunningSyncStale(integ as any)) {
+          results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
+          continue;
+        }
+        // Fire-and-forget: cada loja vira um request isolado com seu próprio tempo total.
+        const p = fetch(fnUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({ mode: "incremental", integration_id: integ.id, force_full: forceFull }),
+        }).catch((err) => {
+          console.error(`[ssotica-sync][fanout] erro disparando ${integ.id}:`, err);
+        });
+        // Mantém o runtime vivo até o disparo concluir (não espera a resposta).
+        try { (globalThis as any).EdgeRuntime?.waitUntil?.(p); } catch (_) { /* ignore */ }
+        dispatched.push(integ.id);
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        mode: "incremental_fanout",
+        dispatched_count: dispatched.length,
+        dispatched,
+        skipped: results,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     await decryptIntegrations(supabase, integrations as Integration[]);
 
     const results: any[] = [];
