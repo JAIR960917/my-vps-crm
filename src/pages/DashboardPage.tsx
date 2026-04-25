@@ -58,7 +58,11 @@ export default function DashboardPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [allRows, setAllRows] = useState<SellerRow[]>([]);
+  const [dateMode, setDateMode] = useState<"day" | "range">("day");
   const [selectedDate, setSelectedDate] = useState<string>(formatDateForInput(new Date()));
+  const [startDate, setStartDate] = useState<string>(formatDateForInput(new Date()));
+  const [endDate, setEndDate] = useState<string>(formatDateForInput(new Date()));
+  const [adminIds, setAdminIds] = useState<Set<string>>(new Set());
 
   const [companyFilter, setCompanyFilter] = useState<string>(ALL);
   const [sellerFilter, setSellerFilter] = useState<string[]>([]); // empty = all
