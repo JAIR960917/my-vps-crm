@@ -69,11 +69,51 @@ export default function DashboardPage() {
 
   const canSee = isAdmin || isGerente;
 
-  const fetchTotals = async () => {
+  const fetchTotals = async (companyId: string) => {
+    if (companyId === ALL) {
+      const [leadsRes, cobRes, renRes] = await Promise.all([
+        supabase.from("crm_leads").select("id", { count: "exact", head: true }),
+        supabase.from("crm_cobrancas").select("id", { count: "exact", head: true }),
+        supabase.from("crm_renovacoes").select("id", { count: "exact", head: true }),
+      ]);
+      setTotals({
+        leads: leadsRes.count || 0,
+        cobrancas: cobRes.count || 0,
+        renovacoes: renRes.count || 0,
+      });
+      return;
+    }
+
+    // Leads/renovacoes não têm company_id direto — filtramos pelo assigned_to
+    // dos vendedores daquela empresa.
+    const { data: companyProfiles } = await supabase
+      .from("profiles")
+      .select("user_id")
+      .eq("company_id", companyId);
+    const userIds = (companyProfiles || []).map((p: any) => p.user_id);
+
+    if (userIds.length === 0) {
+      const cobRes = await supabase
+        .from("crm_cobrancas")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      setTotals({ leads: 0, cobrancas: cobRes.count || 0, renovacoes: 0 });
+      return;
+    }
+
     const [leadsRes, cobRes, renRes] = await Promise.all([
-      supabase.from("crm_leads").select("id", { count: "exact", head: true }),
-      supabase.from("crm_cobrancas").select("id", { count: "exact", head: true }),
-      supabase.from("crm_renovacoes").select("id", { count: "exact", head: true }),
+      supabase
+        .from("crm_leads")
+        .select("id", { count: "exact", head: true })
+        .in("assigned_to", userIds),
+      supabase
+        .from("crm_cobrancas")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId),
+      supabase
+        .from("crm_renovacoes")
+        .select("id", { count: "exact", head: true })
+        .or(`ssotica_company_id.eq.${companyId},assigned_to.in.(${userIds.join(",")})`),
     ]);
     setTotals({
       leads: leadsRes.count || 0,
