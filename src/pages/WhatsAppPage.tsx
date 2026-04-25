@@ -525,7 +525,7 @@ export default function WhatsAppPage() {
               <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
                 <SelectTrigger className="w-[220px] h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  <SelectItem value="all">{isGerente && !isAdmin ? "Minhas empresas" : "Todas as empresas"}</SelectItem>
                   {companies.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
