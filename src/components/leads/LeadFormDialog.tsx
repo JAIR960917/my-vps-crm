@@ -320,11 +320,16 @@ export default function LeadFormDialog({
   const [newNote, setNewNote] = useState("");
   const [noteSending, setNoteSending] = useState(false);
 
+  // Mandatory tratativa: enforced for non-admin users on edit mode
+  const [tratativaRegistrada, setTratativaRegistrada] = useState(false);
+  const requiresTratativa = isEditing && !isAdmin;
+
   useEffect(() => {
     if (open) {
       setShowPreview(false);
       setShowNewActivity(false);
       setTimelineFilter("all");
+      setTratativaRegistrada(false);
       supabase
         .from("crm_form_fields")
         .select("*")
@@ -348,6 +353,15 @@ export default function LeadFormDialog({
       }
     }
   }, [open, leadId]);
+
+  // Wrap onOpenChange to block close until tratativa is registered (non-admin only)
+  const handleOpenChange = (next: boolean) => {
+    if (!next && requiresTratativa && !tratativaRegistrada) {
+      toast.error("Registre uma tratativa antes de fechar este lead.");
+      return;
+    }
+    onOpenChange(next);
+  };
 
   useEffect(() => {
     if (!open || fields.length === 0) return;
@@ -788,7 +802,7 @@ export default function LeadFormDialog({
 
   // EDIT MODE — split layout
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-[1100px] p-0 flex flex-col overflow-y-auto md:overflow-hidden">
         <div className="flex flex-col md:flex-row flex-1 md:overflow-hidden">
           {/* LEFT PANEL — Lead Data */}
@@ -797,7 +811,14 @@ export default function LeadFormDialog({
               <DialogTitle className="text-lg font-bold">Editar Lead</DialogTitle>
             </div>
             <ScrollArea className="md:flex-1 px-5 py-4">
-              <form id="lead-edit-form" onSubmit={(e) => { e.preventDefault(); onSubmit(e); }} className="space-y-3">
+              <form id="lead-edit-form" onSubmit={(e) => {
+                e.preventDefault();
+                if (requiresTratativa && !tratativaRegistrada) {
+                  toast.error("Registre uma tratativa antes de salvar este lead.");
+                  return;
+                }
+                onSubmit(e);
+              }} className="space-y-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Empresa</Label>
                   <Input value={assignedCompanyName} readOnly className="bg-muted h-9 text-sm" />
@@ -875,6 +896,12 @@ export default function LeadFormDialog({
             {/* Contact attempt form */}
             {leadId && user && (
               <div className="px-5 py-3 border-b">
+                {requiresTratativa && !tratativaRegistrada && (
+                  <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>É obrigatório registrar uma tratativa antes de fechar ou salvar este lead.</span>
+                  </div>
+                )}
                 <ContactAttemptForm
                   leadId={leadId}
                   userId={user.id}
@@ -888,6 +915,7 @@ export default function LeadFormDialog({
                     };
                   })()}
                   onSaved={() => {
+                    setTratativaRegistrada(true);
                     fetchNotes();
                     onActivityChange?.();
                   }}

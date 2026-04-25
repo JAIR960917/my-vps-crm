@@ -105,6 +105,10 @@ export default function RenovacaoEditSheet(props: Props) {
 
   const isEditing = !!renovacaoId;
 
+  // Mandatory tratativa: enforced for non-admin users
+  const [tratativaRegistrada, setTratativaRegistrada] = useState(false);
+  const requiresTratativa = isEditing && !isAdmin;
+
   const fetchTimeline = async () => {
     if (!renovacaoId) return;
     const [{ data: acts }, { data: ns }] = await Promise.all([
@@ -121,12 +125,21 @@ export default function RenovacaoEditSheet(props: Props) {
       setTab("atividade");
       setNewComment("");
       setTaskOpen(false);
+      setTratativaRegistrada(false);
       // Track card open for daily salesperson report
       if (user?.id) {
         recordCardOpen({ userId: user.id, cardType: "renovacao", renovacaoId });
       }
     }
   }, [open, renovacaoId]);
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next && requiresTratativa && !tratativaRegistrada) {
+      toast.error("Registre uma tratativa antes de fechar esta renovação.");
+      return;
+    }
+    onOpenChange(next);
+  };
 
   const timeline = useMemo(() => {
     const items = [
@@ -325,7 +338,7 @@ export default function RenovacaoEditSheet(props: Props) {
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-[1100px] p-0 flex flex-col sm:flex-row gap-0 overflow-y-auto sm:overflow-hidden">
         {/* LEFT: Form */}
         <div className="w-full sm:w-[420px] sm:border-r border-b sm:border-b-0 border-border flex flex-col bg-card sm:overflow-hidden">
@@ -333,7 +346,14 @@ export default function RenovacaoEditSheet(props: Props) {
             <h2 className="font-semibold text-lg">{isEditing ? "Editar Renovação" : "Nova Renovação"}</h2>
           </div>
           <ScrollArea className="sm:flex-1">
-            <form onSubmit={onSave} id="renovacao-form" className="p-5 space-y-4">
+            <form onSubmit={(e) => {
+              if (requiresTratativa && !tratativaRegistrada) {
+                e.preventDefault();
+                toast.error("Registre uma tratativa antes de salvar esta renovação.");
+                return;
+              }
+              onSave(e);
+            }} id="renovacao-form" className="p-5 space-y-4">
               {fields.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-4">
                   Nenhuma pergunta configurada. Configure em <strong>Formulário Renovação</strong>.
@@ -386,7 +406,7 @@ export default function RenovacaoEditSheet(props: Props) {
                 </TabsTrigger>
               </TabsList>
             </Tabs>
-            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
+            <Button variant="ghost" size="icon" onClick={() => handleOpenChange(false)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -460,6 +480,12 @@ export default function RenovacaoEditSheet(props: Props) {
               {/* Tentativa de contato — visível para todos os usuários (admin, gerente, vendedor) */}
               {tab === "atividade" && renovacaoId && user && (
                 <div className="px-5 py-3 border-b">
+                  {requiresTratativa && !tratativaRegistrada && (
+                    <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-start gap-2">
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <span>É obrigatório registrar uma tratativa antes de fechar ou salvar esta renovação.</span>
+                    </div>
+                  )}
                   <RenovacaoContactAttemptForm
                     renovacaoId={renovacaoId}
                     userId={user.id}
@@ -471,7 +497,10 @@ export default function RenovacaoEditSheet(props: Props) {
                       const telefone = phoneField ? String(formData[`field_${phoneField.id}`] || "") : "";
                       return { nome, telefone, idade: "" };
                     })()}
-                    onSaved={() => fetchTimeline()}
+                    onSaved={() => {
+                      setTratativaRegistrada(true);
+                      fetchTimeline();
+                    }}
                   />
                 </div>
               )}
