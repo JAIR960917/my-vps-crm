@@ -35,10 +35,11 @@ type SellerRow = {
 
 const ALL = "__all__";
 
-const todayBounds = (dateStr: string) => {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const start = new Date(y, m - 1, d, 0, 0, 0, 0);
-  const end = new Date(y, m - 1, d, 23, 59, 59, 999);
+const rangeBounds = (startStr: string, endStr: string) => {
+  const [ys, ms, ds] = startStr.split("-").map(Number);
+  const [ye, me, de] = endStr.split("-").map(Number);
+  const start = new Date(ys, ms - 1, ds, 0, 0, 0, 0);
+  const end = new Date(ye, me - 1, de, 23, 59, 59, 999);
   return { startISO: start.toISOString(), endISO: end.toISOString() };
 };
 
