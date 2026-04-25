@@ -69,11 +69,51 @@ export default function DashboardPage() {
 
   const canSee = isAdmin || isGerente;
 
-  const fetchTotals = async () => {
+  const fetchTotals = async (companyId: string) => {
+    if (companyId === ALL) {
+      const [leadsRes, cobRes, renRes] = await Promise.all([
+        supabase.from("crm_leads").select("id", { count: "exact", head: true }),
+        supabase.from("crm_cobrancas").select("id", { count: "exact", head: true }),
+        supabase.from("crm_renovacoes").select("id", { count: "exact", head: true }),
+      ]);
+      setTotals({
+        leads: leadsRes.count || 0,
+        cobrancas: cobRes.count || 0,
+        renovacoes: renRes.count || 0,
+      });
+      return;
+    }
+
+    // Leads/renovacoes não têm company_id direto — filtramos pelo assigned_to
+    // dos vendedores daquela empresa.
+    const { data: companyProfiles } = await supabase
+      .from("profiles")
+      .select("user_id")
+      .eq("company_id", companyId);
+    const userIds = (companyProfiles || []).map((p: any) => p.user_id);
+
+    if (userIds.length === 0) {
+      const cobRes = await supabase
+        .from("crm_cobrancas")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      setTotals({ leads: 0, cobrancas: cobRes.count || 0, renovacoes: 0 });
+      return;
+    }
+
     const [leadsRes, cobRes, renRes] = await Promise.all([
-      supabase.from("crm_leads").select("id", { count: "exact", head: true }),
-      supabase.from("crm_cobrancas").select("id", { count: "exact", head: true }),
-      supabase.from("crm_renovacoes").select("id", { count: "exact", head: true }),
+      supabase
+        .from("crm_leads")
+        .select("id", { count: "exact", head: true })
+        .in("assigned_to", userIds),
+      supabase
+        .from("crm_cobrancas")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId),
+      supabase
+        .from("crm_renovacoes")
+        .select("id", { count: "exact", head: true })
+        .or(`ssotica_company_id.eq.${companyId},assigned_to.in.(${userIds.join(",")})`),
     ]);
     setTotals({
       leads: leadsRes.count || 0,
@@ -220,8 +260,8 @@ export default function DashboardPage() {
     setLoading(true);
     const start = dateMode === "day" ? selectedDate : startDate;
     const end = dateMode === "day" ? selectedDate : endDate;
-    Promise.all([fetchTotals(), fetchReport(start, end)]).finally(() => setLoading(false));
-  }, [canSee, user, dateMode, selectedDate, startDate, endDate]);
+    Promise.all([fetchTotals(companyFilter), fetchReport(start, end)]).finally(() => setLoading(false));
+  }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter]);
 
   // Reset seller filter when company changes
   useEffect(() => {
@@ -292,38 +332,49 @@ export default function DashboardPage() {
 
         {/* Totais */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Leads</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.leads}</div>}
-              <p className="text-xs text-muted-foreground mt-1">Total de leads cadastrados</p>
-            </CardContent>
-          </Card>
+          {(() => {
+            const selectedCompanyName =
+              companyFilter === ALL
+                ? null
+                : companies.find((c) => c.id === companyFilter)?.name || null;
+            const suffix = selectedCompanyName ? ` — ${selectedCompanyName}` : "";
+            return (
+              <>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Leads</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.leads}</div>}
+                    <p className="text-xs text-muted-foreground mt-1">Total de leads cadastrados{suffix}</p>
+                  </CardContent>
+                </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Cobranças</CardTitle>
-              <Receipt className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.cobrancas}</div>}
-              <p className="text-xs text-muted-foreground mt-1">Total de cobranças no sistema</p>
-            </CardContent>
-          </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Cobranças</CardTitle>
+                    <Receipt className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.cobrancas}</div>}
+                    <p className="text-xs text-muted-foreground mt-1">Total de cobranças no sistema{suffix}</p>
+                  </CardContent>
+                </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Renovação</CardTitle>
-              <CalendarHeart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.renovacoes}</div>}
-              <p className="text-xs text-muted-foreground mt-1">Clientes em renovação</p>
-            </CardContent>
-          </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Renovação</CardTitle>
+                    <CalendarHeart className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? <Skeleton className="h-8 w-20" /> : <div className="text-3xl font-bold">{totals.renovacoes}</div>}
+                    <p className="text-xs text-muted-foreground mt-1">Clientes em renovação{suffix}</p>
+                  </CardContent>
+                </Card>
+              </>
+            );
+          })()}
         </div>
 
         {/* Relatório diário */}
