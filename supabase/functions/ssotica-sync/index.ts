@@ -14,10 +14,10 @@ const MAX_WINDOW_DAYS = 30; // limite da API SSótica por janela
 // Antes: 12 meses × 8 chunks. Agora: 6 meses × 16 chunks (cada chunk ~50% mais rápido).
 const MAX_HISTORY_DAYS = 2880; // 96 meses
 const CHUNK_DAYS = 183;        // ~6 meses por chunk (usado pelo backfill histórico)
-const COBRANCAS_LOOKBACK_DAYS = 730; // sync incremental de cobranças: 24 meses para trás
-                                     // (cobre crediários longos onde clientes têm parcelas
-                                     // vencidas há mais de 6 meses junto com novas)
+const COBRANCAS_LOOKBACK_DAYS = 730; // faixa histórica total coberta pelo ciclo incremental
 const COBRANCAS_FUTURE_DAYS = 60; // pegar parcelas que vencem em breve
+const INCREMENTAL_COBRANCAS_SLICES = 4; // 24 meses ÷ 4 cron cycles = ~6 meses por execução
+const RUNNING_SYNC_STALE_MINUTES = 20;
 const DIRECIONAMENTO_STATUS = "fazer_direcionamento_para_o_vendedor";
 
 type AppRole = "admin" | "vendedor" | "gerente" | "financeiro";
@@ -64,6 +64,21 @@ function statusKeyForRenovacao(diasDesdeUltimaCompra: number | null): string {
   if (diasDesdeUltimaCompra < 730) return "agendado";       // 1 a 2 anos
   if (diasDesdeUltimaCompra < 1095) return "renovado";      // 2 a 3 anos
   return "mais_de_3_anos";                                  // 3+ anos
+}
+
+function getBrasiliaCycleSlot(date = new Date()): number {
+  const br = new Date(date.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  return Math.floor(br.getHours() / 6) % INCREMENTAL_COBRANCAS_SLICES;
+}
+
+function getIncrementalCobrancaWindow(now = new Date()): { start: Date; end: Date; slot: number } {
+  const slot = getBrasiliaCycleSlot(now);
+  const sliceDays = Math.ceil(COBRANCAS_LOOKBACK_DAYS / INCREMENTAL_COBRANCAS_SLICES);
+  const endOffset = slot * sliceDays;
+  const startOffset = endOffset + sliceDays - 1;
+  const end = slot === 0 ? addDays(now, COBRANCAS_FUTURE_DAYS) : addDays(now, -endOffset);
+  const start = addDays(now, -startOffset);
+  return { start, end, slot };
 }
 
 // Quebra um intervalo em janelas de até 30 dias (limite SSótica)
@@ -130,6 +145,8 @@ interface Integration {
   cnpj: string;
   license_code: string | null;
   bearer_token: string;
+  sync_status: string;
+  updated_at?: string | null;
   initial_sync_done: boolean;
   last_sync_vendas_at: string | null;
   last_sync_receber_at: string | null;
@@ -243,10 +260,12 @@ async function syncContasReceber(
   // "1 dia antes do vencimento".
   const nowBR = new Date(Date.now() - 3 * 60 * 60 * 1000);
   const today = new Date(Date.UTC(nowBR.getUTCFullYear(), nowBR.getUTCMonth(), nowBR.getUTCDate()));
-  // Janela: por padrão, últimos 12 meses + 60 dias à frente (sync incremental).
-  // Quando há windowOverride (modo backfill), processa apenas o chunk de 12 meses indicado.
-  const overallStart = windowOverride?.start ?? addDays(today, -COBRANCAS_LOOKBACK_DAYS);
-  const overallEnd = windowOverride?.end ?? addDays(today, COBRANCAS_FUTURE_DAYS);
+  // Janela: no incremental processamos 1 fatia por rodada do ciclo de 24 meses,
+  // para garantir que toda empresa conclua dentro do tempo do cron.
+  // Quando há windowOverride (modo backfill), processa apenas o chunk indicado.
+  const incrementalWindow = windowOverride ? null : getIncrementalCobrancaWindow(today);
+  const overallStart = windowOverride?.start ?? incrementalWindow!.start;
+  const overallEnd = windowOverride?.end ?? incrementalWindow!.end;
   const isBackfillChunk = !!windowOverride;
 
   let processed = 0, created = 0, updated = 0, removed = 0;
@@ -457,7 +476,7 @@ async function syncContasReceber(
     }
   }
   const chunksProcessed = 1;
-  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_em_atraso=${parcelasPorCliente.size} backfill_chunk=${isBackfillChunk}`);
+  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_em_atraso=${parcelasPorCliente.size} backfill_chunk=${isBackfillChunk}${incrementalWindow ? ` slot=${incrementalWindow.slot + 1}/${INCREMENTAL_COBRANCAS_SLICES}` : ""}`);
 
   // ===== Upsert por cliente: 1 card com a lista de TODAS as parcelas em atraso =====
   for (const [clienteIdNum, { cliente, parcelas }] of parcelasPorCliente.entries()) {
@@ -1436,6 +1455,13 @@ async function runBackfillChunk(
   }
 }
 
+function isRunningSyncStale(integration: Pick<Integration, "sync_status" | "updated_at">): boolean {
+  if (integration.sync_status !== "running" || !integration.updated_at) return false;
+  const updatedAt = new Date(integration.updated_at).getTime();
+  if (Number.isNaN(updatedAt)) return false;
+  return Date.now() - updatedAt > RUNNING_SYNC_STALE_MINUTES * 60 * 1000;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -1543,7 +1569,35 @@ Deno.serve(async (req) => {
     for (const integ of integrations as Integration[]) {
       let logId: string | null = null;
       try {
-        await supabase.from("ssotica_integrations").update({ sync_status: "running", last_error: null }).eq("id", integ.id);
+        if (integ.sync_status === "running" && !isRunningSyncStale(integ)) {
+          results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
+          continue;
+        }
+
+        if (isRunningSyncStale(integ)) {
+          await supabase
+            .from("ssotica_sync_logs")
+            .update({
+              finished_at: new Date().toISOString(),
+              status: "error",
+              error_message: `Execução anterior excedeu ${RUNNING_SYNC_STALE_MINUTES} min e foi encerrada automaticamente antes do novo ciclo.`,
+            })
+            .eq("integration_id", integ.id)
+            .eq("status", "running");
+        }
+
+        const { data: claimedIntegration } = await supabase
+          .from("ssotica_integrations")
+          .update({ sync_status: "running", last_error: null })
+          .eq("id", integ.id)
+          .neq("sync_status", "running")
+          .select("id")
+          .maybeSingle();
+
+        if (!claimedIntegration) {
+          results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "claim_failed" });
+          continue;
+        }
 
         // ===== Se o backfill ainda está em andamento, roda TODOS os chunks pendentes
         // de uma vez antes do incremental. Isso garante que o usuário não veja
