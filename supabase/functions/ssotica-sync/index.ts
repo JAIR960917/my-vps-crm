@@ -1573,10 +1573,11 @@ Deno.serve(async (req) => {
       const fnUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ssotica-sync`;
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
       const dispatched: string[] = [];
+      const fanoutSkipped: any[] = [];
       for (const integ of integrations as Integration[]) {
         // Pula imediatamente as que já estão rodando e ainda não estão "stale"
         if (integ.sync_status === "running" && !isRunningSyncStale(integ as any)) {
-          results.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
+          fanoutSkipped.push({ integration_id: integ.id, ok: true, skipped: true, reason: "already_running" });
           continue;
         }
         // Fire-and-forget: cada loja vira um request isolado com seu próprio tempo total.
@@ -1599,7 +1600,7 @@ Deno.serve(async (req) => {
         mode: "incremental_fanout",
         dispatched_count: dispatched.length,
         dispatched,
-        skipped: results,
+        skipped: fanoutSkipped,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
