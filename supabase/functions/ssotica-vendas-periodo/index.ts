@@ -213,6 +213,69 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Sobrescreve a "funcao" do funcionario com o cargo (role) do nosso sistema,
+    // quando houver mapeamento ssotica_user_mappings -> user_roles.
+    // O SSótica retorna "Vendedor" para todo mundo; o nosso sistema é a fonte da verdade.
+    const funcIds = Array.from(
+      new Set(
+        vendasOut
+          .map((v) => v.funcionario?.id)
+          .filter((x): x is number => typeof x === "number"),
+      ),
+    );
+
+    const roleLabel: Record<string, string> = {
+      admin: "Administrador",
+      gerente: "Gerente",
+      financeiro: "Financeiro",
+      vendedor: "Vendedor",
+    };
+
+    if (funcIds.length > 0) {
+      const { data: mappings } = await supabase
+        .from("ssotica_user_mappings")
+        .select("ssotica_funcionario_id, user_id")
+        .eq("company_id", companyId)
+        .in("ssotica_funcionario_id", funcIds);
+
+      const userIds = Array.from(
+        new Set((mappings || []).map((m: any) => m.user_id)),
+      );
+      let rolesByUser = new Map<string, string>();
+      if (userIds.length > 0) {
+        const { data: rolesRows } = await supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .in("user_id", userIds);
+        // Prioridade: admin > gerente > financeiro > vendedor
+        const priority: Record<string, number> = {
+          admin: 4,
+          gerente: 3,
+          financeiro: 2,
+          vendedor: 1,
+        };
+        for (const r of rolesRows || []) {
+          const cur = rolesByUser.get(r.user_id);
+          if (!cur || (priority[r.role] || 0) > (priority[cur] || 0)) {
+            rolesByUser.set(r.user_id, r.role);
+          }
+        }
+      }
+      const funcToRole = new Map<number, string>();
+      for (const m of mappings || []) {
+        const role = rolesByUser.get(m.user_id);
+        if (role) funcToRole.set(m.ssotica_funcionario_id, role);
+      }
+
+      for (const v of vendasOut) {
+        const fid = v.funcionario?.id;
+        if (fid && funcToRole.has(fid)) {
+          const role = funcToRole.get(fid)!;
+          v.funcionario.funcao = roleLabel[role] || v.funcionario.funcao;
+        }
+      }
+    }
+
     vendasOut.sort((a, b) => (b.data || "").localeCompare(a.data || ""));
     const totalItens = vendasOut.reduce((acc, v) => acc + v.itens.length, 0);
 
