@@ -107,6 +107,7 @@ const AppRoutes = () => {
       <Route path="/integracoes-ssotica" element={<RoleGate><SSoticaIntegrationsPage /></RoleGate>} />
       <Route path="/logs-movimentacao" element={<RoleGate><TransitionLogsPage /></RoleGate>} />
       <Route path="/dashboard" element={<RoleGate><DashboardPage /></RoleGate>} />
+      <Route path="/relatorio-vendas" element={<RoleGate><SalesReportPage /></RoleGate>} />
       <Route path="/instalar" element={<InstallPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
