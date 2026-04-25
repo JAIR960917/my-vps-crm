@@ -133,12 +133,16 @@ export default function ActiveClientsPage() {
   const columnFilter = useMemo(() => ({
     apply: (q: any) => {
       let res = q;
-      if (filterCompanyId !== "all") res = res.eq("ssotica_company_id", filterCompanyId);
+      if (filterCompanyId !== "all") {
+        res = res.eq("ssotica_company_id", filterCompanyId);
+      } else if (allowedCompanyIds && allowedCompanyIds.length > 0) {
+        res = res.in("ssotica_company_id", allowedCompanyIds);
+      }
       if (filterAssignedTo === "__unassigned__") res = res.is("assigned_to", null);
       else if (filterAssignedTo !== "all") res = res.eq("assigned_to", filterAssignedTo);
       return res;
     },
-  }), [filterCompanyId, filterAssignedTo]);
+  }), [filterCompanyId, filterAssignedTo, allowedCompanyIds]);
 
   // ilike search across name/phone in jsonb
   const buildSearchOr = useCallback((q: string) => {
