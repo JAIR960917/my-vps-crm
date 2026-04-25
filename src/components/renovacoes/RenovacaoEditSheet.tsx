@@ -338,7 +338,7 @@ export default function RenovacaoEditSheet(props: Props) {
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-[1100px] p-0 flex flex-col sm:flex-row gap-0 overflow-y-auto sm:overflow-hidden">
         {/* LEFT: Form */}
         <div className="w-full sm:w-[420px] sm:border-r border-b sm:border-b-0 border-border flex flex-col bg-card sm:overflow-hidden">
