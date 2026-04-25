@@ -662,13 +662,13 @@ export default function ActiveClientsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {(isAdmin || isGerente) && companies.length > 0 && (
+          {(isAdmin || isGerente) && companies.length > 1 && (
             <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
               <SelectTrigger className="h-9 w-full sm:w-56">
                 <SelectValue placeholder="Filtrar por empresa" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas as empresas</SelectItem>
+                <SelectItem value="all">{isGerente && !isAdmin ? "Minhas empresas" : "Todas as empresas"}</SelectItem>
                 {companies.map(c => (
                   <SelectItem key={c.id} value={c.id}>{c.name.trim()}</SelectItem>
                 ))}
@@ -678,13 +678,13 @@ export default function ActiveClientsPage() {
           {(isAdmin || isGerente) && profiles.length > 0 && (
             <Select value={filterAssignedTo} onValueChange={setFilterAssignedTo}>
               <SelectTrigger className="h-9 w-full sm:w-56">
-                <SelectValue placeholder="Filtrar por responsável" />
+                <SelectValue placeholder="Filtrar por vendedor" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os responsáveis</SelectItem>
+                <SelectItem value="all">Todos os vendedores</SelectItem>
                 <SelectItem value="__unassigned__">— Sem responsável —</SelectItem>
                 {[...profiles]
-                  .filter(p => p.full_name?.trim())
+                  .filter(p => p.full_name?.trim() && (isAdmin || vendedorIds.has(p.user_id)))
                   .sort((a, b) => a.full_name.localeCompare(b.full_name))
                   .map(p => (
                     <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
