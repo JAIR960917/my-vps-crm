@@ -230,6 +230,28 @@ export function usePaginatedColumns<T extends { id: string; status: string }>(
     statusKeys.forEach((k) => fetchColumn(k, 0));
   }, [statusKeys, fetchColumn]);
 
+  // Realtime: refresh columns when the underlying table changes
+  useEffect(() => {
+    if (statusKeys.length === 0) return;
+    let scheduled = false;
+    const refresh = () => {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(() => {
+        scheduled = false;
+        statusKeys.forEach((k) => fetchColumn(k, 0));
+      }, 400);
+    };
+    const channel = supabase
+      .channel(`paginated-${table}-${Math.random().toString(36).slice(2, 8)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table }, refresh)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, statusKeys.join("|")]);
+
   return {
     columns,
     loadMore,
