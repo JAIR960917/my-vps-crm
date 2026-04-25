@@ -213,9 +213,10 @@ export default function ActiveClientsPage() {
       .is("assigned_to", null)
       .not("ssotica_company_id", "is", null);
     if (filterCompanyId !== "all") q = q.eq("ssotica_company_id", filterCompanyId);
+    else if (allowedCompanyIds && allowedCompanyIds.length > 0) q = q.in("ssotica_company_id", allowedCompanyIds);
     const { count } = await q;
     setUnassignedCount(count || 0);
-  }, [filterCompanyId]);
+  }, [filterCompanyId, allowedCompanyIds]);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
   useEffect(() => { refreshUnassignedCount(); }, [refreshUnassignedCount, refreshKey]);
