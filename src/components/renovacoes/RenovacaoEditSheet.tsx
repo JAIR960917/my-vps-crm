@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { formatPhoneBR } from "@/lib/phoneFormat";
 import ClientProductsTab from "@/components/ClientProductsTab";
 import { recordCardOpen } from "@/lib/cardOpens";
+import RenovacaoContactAttemptForm from "./RenovacaoContactAttemptForm";
 
 type Profile = { user_id: string; full_name: string; avatar_url?: string | null };
 type CrmStatus = { id: string; key: string; label: string };
