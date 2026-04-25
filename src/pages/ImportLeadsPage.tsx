@@ -102,22 +102,51 @@ export default function ImportLeadsPage() {
       setCsvHeaders(headers.filter((h) => h));
       setCsvRows(rows);
 
-      // Auto-map columns by label similarity
+      // Auto-map columns by label similarity (case + accent insensitive)
+      const norm = (s: string) =>
+        (s || "")
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+
       const autoMap: Record<string, string> = {};
       formFields.forEach((ff) => {
-        const match = headers.find(
-          (h) => h.toLowerCase().trim() === ff.label.toLowerCase().trim()
-        );
+        const target = norm(ff.label);
+        const match = headers.find((h) => norm(h) === target);
         if (match) autoMap[match] = ff.id;
       });
-      // Auto-map nome/telefone special columns
-      const nomeHeader = headers.find((h) => h === "Nome do Lead");
-      const nameField = formFields.find((f) => f.is_name_field);
-      if (nomeHeader && nameField && !autoMap[nomeHeader]) autoMap[nomeHeader] = nameField.id;
 
-      const telHeader = headers.find((h) => h === "Celular" || h === "Outro número de telefone");
+      // Auto-map system columns: Etapa -> __status__, Responsável -> __assigned__, Criado -> __created_at__
+      headers.forEach((h) => {
+        const n = norm(h);
+        if (!autoMap[h]) {
+          if (n === "etapa" || n === "status") autoMap[h] = "__status__";
+          else if (n === "responsavel" || n === "responsavel atual") autoMap[h] = "__assigned__";
+          else if (n === "criado" || n === "data de criacao" || n === "criado em") autoMap[h] = "__created_at__";
+        }
+      });
+
+      // Auto-map name field
+      const nameField = formFields.find((f) => f.is_name_field);
+      if (nameField) {
+        const nomeHeader = headers.find((h) => {
+          const n = norm(h);
+          return n === "nome do lead" || n === "nome" || n === "nome cliente" || n === "nome do cliente" || n === "cliente";
+        });
+        if (nomeHeader && !autoMap[nomeHeader]) autoMap[nomeHeader] = nameField.id;
+      }
+
+      // Auto-map phone field
       const phoneField = formFields.find((f) => f.is_phone_field);
-      if (telHeader && phoneField && !autoMap[telHeader]) autoMap[telHeader] = phoneField.id;
+      if (phoneField) {
+        const telHeader = headers.find((h) => {
+          const n = norm(h);
+          return n === "celular" || n === "telefone" || n === "whatsapp" || n === "fone" || n === "outro numero de telefone";
+        });
+        if (telHeader && !autoMap[telHeader]) autoMap[telHeader] = phoneField.id;
+      }
 
       setColumnMap(autoMap);
 
@@ -173,6 +202,26 @@ export default function ImportLeadsPage() {
       ...userOpts,
     ];
   }, [formFields, crmColumns, profiles, statuses]);
+
+  // Validation: detect missing essential mappings (Name, Phone, Status, Assigned)
+  const validation = useMemo(() => {
+    const nameField = formFields.find((f) => f.is_name_field);
+    const phoneField = formFields.find((f) => f.is_phone_field);
+
+    const mappedTargets = new Set(Object.values(columnMap));
+    const hasName = nameField ? mappedTargets.has(nameField.id) : false;
+    const hasPhone = phoneField ? mappedTargets.has(phoneField.id) : false;
+    const hasStatus = mappedTargets.has("__status__");
+    const hasAssigned = mappedTargets.has("__assigned__");
+
+    const issues: string[] = [];
+    if (!hasName) issues.push("Nome do Lead");
+    if (!hasPhone) issues.push("Telefone");
+    if (!hasStatus) issues.push("Status/Etapa");
+    if (!hasAssigned) issues.push("Responsável");
+
+    return { hasName, hasPhone, hasStatus, hasAssigned, issues, valid: issues.length === 0 };
+  }, [columnMap, formFields]);
 
   // Import logic
   const startImport = async () => {
@@ -374,60 +423,88 @@ export default function ImportLeadsPage() {
                 Vincule cada coluna do CSV a um campo do CRM. Colunas sem vínculo serão ignoradas.
               </CardDescription>
             </CardHeader>
-            <CardContent className="max-h-[60vh] overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Coluna CSV</TableHead>
-                    <TableHead>Exemplo</TableHead>
-                    <TableHead>Campo CRM</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {csvHeaders.map((header) => {
-                    const sample = csvRows.find((r) => r[header])?.[header] || "";
-                    return (
-                      <TableRow key={header}>
-                        <TableCell className="font-medium text-xs">{header}</TableCell>
-                        <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
-                          {sample.slice(0, 60)}
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={columnMap[header] || IGNORE_VALUE}
-                            onValueChange={(v) =>
-                              setColumnMap((prev) => {
-                                const next = { ...prev };
-                                if (v === IGNORE_VALUE) delete next[header];
-                                else next[header] = v;
-                                return next;
-                              })
-                            }
-                          >
-                            <SelectTrigger className="w-[220px] text-xs">
-                              <SelectValue placeholder="Ignorar" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={IGNORE_VALUE}>— Ignorar —</SelectItem>
-                              {fieldOptions.map((o) => (
-                                <SelectItem key={o.value} value={o.value}>
-                                  {o.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+            <CardContent className="space-y-3">
+              {/* Validation banner */}
+              <div className={`rounded-lg border p-3 text-sm ${validation.valid ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-800 dark:text-yellow-400"}`}>
+                <div className="flex items-start gap-2">
+                  {validation.valid ? <Check className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+                  <div className="space-y-1">
+                    {validation.valid ? (
+                      <p className="font-medium">Todos os campos essenciais estão mapeados.</p>
+                    ) : (
+                      <>
+                        <p className="font-medium">Mapeie os campos essenciais antes de continuar:</p>
+                        <ul className="list-disc pl-5">
+                          {validation.issues.map((i) => (<li key={i}>{i}</li>))}
+                        </ul>
+                        <p className="text-xs opacity-80">Sem esses mapeamentos os leads aparecerão sem nome, telefone ou responsável na tela de Leads.</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="max-h-[55vh] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Coluna CSV</TableHead>
+                      <TableHead>Exemplo</TableHead>
+                      <TableHead>Campo CRM</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {csvHeaders.map((header) => {
+                      const sample = csvRows.find((r) => r[header])?.[header] || "";
+                      const current = columnMap[header];
+                      const isMapped = !!current && current !== IGNORE_VALUE;
+                      return (
+                        <TableRow key={header} className={!isMapped ? "opacity-70" : ""}>
+                          <TableCell className="font-medium text-xs">{header}</TableCell>
+                          <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
+                            {sample.slice(0, 60)}
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={columnMap[header] || IGNORE_VALUE}
+                              onValueChange={(v) =>
+                                setColumnMap((prev) => {
+                                  const next = { ...prev };
+                                  if (v === IGNORE_VALUE) delete next[header];
+                                  else next[header] = v;
+                                  return next;
+                                })
+                              }
+                            >
+                              <SelectTrigger className={`w-[240px] text-xs ${isMapped ? "" : "border-yellow-500/50"}`}>
+                                <SelectValue placeholder="— Ignorar —" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={IGNORE_VALUE}>— Ignorar —</SelectItem>
+                                {fieldOptions.map((o) => (
+                                  <SelectItem key={o.value} value={o.value}>
+                                    {o.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
             <div className="flex justify-between p-4 pt-0">
               <Button variant="outline" onClick={() => setStep("upload")}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
               </Button>
-              <Button onClick={() => setStep("status")}>
+              <Button
+                onClick={() => setStep("status")}
+                disabled={!validation.valid}
+                title={!validation.valid ? `Faltando: ${validation.issues.join(", ")}` : undefined}
+              >
                 Próximo <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
