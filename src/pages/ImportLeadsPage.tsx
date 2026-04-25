@@ -370,9 +370,9 @@ export default function ImportLeadsPage() {
     });
 
     // Find status column and assigned column
-    const statusCol = Object.entries(specialCols).find(([, v]) => v === "__status__")?.[0] || "Etapa";
-    const assignedCol = Object.entries(specialCols).find(([, v]) => v === "__assigned__")?.[0] || "Responsável";
-    const createdAtCol = Object.entries(specialCols).find(([, v]) => v === "__created_at__")?.[0] || "Criado";
+    const statusCol = Object.entries(specialCols).find(([, v]) => v === "__status__")?.[0] || mappedStatusHeader || "Etapa";
+    const assignedCol = Object.entries(specialCols).find(([, v]) => v === "__assigned__")?.[0] || mappedAssignedHeader || "Responsável";
+    const createdAtCol = Object.entries(specialCols).find(([, v]) => v === "__created_at__")?.[0] || mappedCreatedAtHeader || "Criado";
 
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const batch = csvRows.slice(i, i + BATCH_SIZE);
@@ -654,7 +654,7 @@ export default function ImportLeadsPage() {
                               <SelectContent>
                                 <SelectItem value={IGNORE_VALUE}>— Ignorar —</SelectItem>
                                 {fieldOptions.map((o) => (
-                                  <SelectItem key={o.value} value={o.value}>
+                            <SelectItem key={`${header}-${o.value}`} value={o.value}>
                                     {o.label}
                                   </SelectItem>
                                 ))}
@@ -833,12 +833,12 @@ export default function ImportLeadsPage() {
                           <TableCell className="text-xs">{i + 1}</TableCell>
                           <TableCell className="text-xs">{nameCol ? row[nameCol] : row["Nome do Lead"] || "—"}</TableCell>
                           <TableCell className="text-xs">
-                            <Badge variant="outline">{statusMap[row["Etapa"]] || "novo"}</Badge>
+                            <Badge variant="outline">{(mappedStatusHeader && statusMap[row[mappedStatusHeader]]) || "novo"}</Badge>
                           </TableCell>
                           <TableCell className="text-xs">
-                            {userMap[row["Responsável"]]
-                              ? profiles.find((p) => p.user_id === userMap[row["Responsável"]])?.full_name
-                              : row["Responsável"] || "—"}
+                            {(mappedAssignedHeader && userMap[row[mappedAssignedHeader]])
+                              ? profiles.find((p) => p.user_id === userMap[row[mappedAssignedHeader]])?.full_name
+                              : (mappedAssignedHeader ? row[mappedAssignedHeader] : "") || "—"}
                           </TableCell>
                         </TableRow>
                       );
