@@ -802,7 +802,7 @@ export default function LeadFormDialog({
 
   // EDIT MODE — split layout
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-[1100px] p-0 flex flex-col overflow-y-auto md:overflow-hidden">
         <div className="flex flex-col md:flex-row flex-1 md:overflow-hidden">
           {/* LEFT PANEL — Lead Data */}
