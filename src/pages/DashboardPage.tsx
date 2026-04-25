@@ -113,17 +113,25 @@ export default function DashboardPage() {
       atendidosMap.get(o.user_id)!.add(key);
     });
 
-    const { data: notes } = await supabase
-      .from("crm_lead_notes")
-      .select("user_id, content, created_at")
-      .gte("created_at", startISO)
-      .lte("created_at", endISO);
+    const [{ data: leadNotes }, { data: renovNotes }] = await Promise.all([
+      supabase
+        .from("crm_lead_notes")
+        .select("user_id, content, created_at")
+        .gte("created_at", startISO)
+        .lte("created_at", endISO),
+      supabase
+        .from("crm_renovacao_notes" as any)
+        .select("user_id, content, created_at")
+        .gte("created_at", startISO)
+        .lte("created_at", endISO),
+    ]);
 
     const agendou = new Map<string, number>();
     const naoAtendeu = new Map<string, number>();
     const atendeuSemAgendar = new Map<string, number>();
 
-    (notes || []).forEach((n: any) => {
+    const allNotes = [...(leadNotes || []), ...((renovNotes as any[]) || [])];
+    allNotes.forEach((n: any) => {
       if (adminSet.has(n.user_id)) return; // ignora admins
       const c: string = n.content || "";
       if (!c.startsWith("📞 Tentativa de contato")) return;
