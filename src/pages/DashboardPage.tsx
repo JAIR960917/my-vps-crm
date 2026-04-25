@@ -263,6 +263,36 @@ export default function DashboardPage() {
     Promise.all([fetchTotals(companyFilter), fetchReport(start, end)]).finally(() => setLoading(false));
   }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter]);
 
+  // Realtime: refresh report when opens or notes change
+  useEffect(() => {
+    if (!canSee || !user) return;
+
+    let scheduled = false;
+    const refresh = () => {
+      if (scheduled) return;
+      scheduled = true;
+      // Debounce burst of events into a single refresh
+      setTimeout(() => {
+        scheduled = false;
+        const start = dateMode === "day" ? selectedDate : startDate;
+        const end = dateMode === "day" ? selectedDate : endDate;
+        fetchReport(start, end);
+        fetchTotals(companyFilter);
+      }, 400);
+    };
+
+    const channel = supabase
+      .channel("dashboard-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lead_card_opens" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "crm_lead_notes" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "crm_renovacao_notes" }, refresh)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [canSee, user, dateMode, selectedDate, startDate, endDate, companyFilter]);
+
   // Reset seller filter when company changes
   useEffect(() => {
     setSellerFilter([]);
