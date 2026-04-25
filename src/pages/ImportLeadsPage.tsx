@@ -203,6 +203,26 @@ export default function ImportLeadsPage() {
     ];
   }, [formFields, crmColumns, profiles, statuses]);
 
+  // Validation: detect missing essential mappings (Name, Phone, Status, Assigned)
+  const validation = useMemo(() => {
+    const nameField = formFields.find((f) => f.is_name_field);
+    const phoneField = formFields.find((f) => f.is_phone_field);
+
+    const mappedTargets = new Set(Object.values(columnMap));
+    const hasName = nameField ? mappedTargets.has(nameField.id) : false;
+    const hasPhone = phoneField ? mappedTargets.has(phoneField.id) : false;
+    const hasStatus = mappedTargets.has("__status__");
+    const hasAssigned = mappedTargets.has("__assigned__");
+
+    const issues: string[] = [];
+    if (!hasName) issues.push("Nome do Lead");
+    if (!hasPhone) issues.push("Telefone");
+    if (!hasStatus) issues.push("Status/Etapa");
+    if (!hasAssigned) issues.push("Responsável");
+
+    return { hasName, hasPhone, hasStatus, hasAssigned, issues, valid: issues.length === 0 };
+  }, [columnMap, formFields]);
+
   // Import logic
   const startImport = async () => {
     setStep("importing");
