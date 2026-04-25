@@ -35,10 +35,11 @@ type SellerRow = {
 
 const ALL = "__all__";
 
-const todayBounds = (dateStr: string) => {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const start = new Date(y, m - 1, d, 0, 0, 0, 0);
-  const end = new Date(y, m - 1, d, 23, 59, 59, 999);
+const rangeBounds = (startStr: string, endStr: string) => {
+  const [ys, ms, ds] = startStr.split("-").map(Number);
+  const [ye, me, de] = endStr.split("-").map(Number);
+  const start = new Date(ys, ms - 1, ds, 0, 0, 0, 0);
+  const end = new Date(ye, me - 1, de, 23, 59, 59, 999);
   return { startISO: start.toISOString(), endISO: end.toISOString() };
 };
 
@@ -57,7 +58,11 @@ export default function DashboardPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [allRows, setAllRows] = useState<SellerRow[]>([]);
+  const [dateMode, setDateMode] = useState<"day" | "range">("day");
   const [selectedDate, setSelectedDate] = useState<string>(formatDateForInput(new Date()));
+  const [startDate, setStartDate] = useState<string>(formatDateForInput(new Date()));
+  const [endDate, setEndDate] = useState<string>(formatDateForInput(new Date()));
+  const [adminIds, setAdminIds] = useState<Set<string>>(new Set());
 
   const [companyFilter, setCompanyFilter] = useState<string>(ALL);
   const [sellerFilter, setSellerFilter] = useState<string[]>([]); // empty = all
@@ -77,18 +82,21 @@ export default function DashboardPage() {
     });
   };
 
-  const fetchReport = async (dateStr: string) => {
-    const { startISO, endISO } = todayBounds(dateStr);
+  const fetchReport = async (startStr: string, endStr: string) => {
+    const { startISO, endISO } = rangeBounds(startStr, endStr);
 
-    // Profiles + companies (RLS already scopes for gerente)
-    const [{ data: profilesData }, { data: companiesData }] = await Promise.all([
+    // Profiles + companies + admins (RLS already scopes for gerente)
+    const [{ data: profilesData }, { data: companiesData }, { data: adminRoles }] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
       supabase.from("companies").select("id, name").order("name"),
+      supabase.from("user_roles").select("user_id").eq("role", "admin"),
     ]);
     const profs = (profilesData || []) as Profile[];
     const comps = (companiesData || []) as Company[];
-    setProfiles(profs);
+    const adminSet = new Set<string>((adminRoles || []).map((r: any) => r.user_id));
+    setProfiles(profs.filter((p) => !adminSet.has(p.user_id)));
     setCompanies(comps);
+    setAdminIds(adminSet);
     const compById = new Map(comps.map((c) => [c.id, c.name]));
 
     const { data: opens } = await supabase
@@ -99,6 +107,7 @@ export default function DashboardPage() {
 
     const atendidosMap = new Map<string, Set<string>>();
     (opens || []).forEach((o: any) => {
+      if (adminSet.has(o.user_id)) return; // ignora admins
       const key = `${o.card_type}:${o.lead_id || o.renovacao_id}`;
       if (!atendidosMap.has(o.user_id)) atendidosMap.set(o.user_id, new Set());
       atendidosMap.get(o.user_id)!.add(key);
@@ -115,6 +124,7 @@ export default function DashboardPage() {
     const atendeuSemAgendar = new Map<string, number>();
 
     (notes || []).forEach((n: any) => {
+      if (adminSet.has(n.user_id)) return; // ignora admins
       const c: string = n.content || "";
       if (!c.startsWith("📞 Tentativa de contato")) return;
       const inc = (m: Map<string, number>) =>
@@ -156,8 +166,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!canSee || !user) return;
     setLoading(true);
-    Promise.all([fetchTotals(), fetchReport(selectedDate)]).finally(() => setLoading(false));
-  }, [canSee, user, selectedDate]);
+    const start = dateMode === "day" ? selectedDate : startDate;
+    const end = dateMode === "day" ? selectedDate : endDate;
+    Promise.all([fetchTotals(), fetchReport(start, end)]).finally(() => setLoading(false));
+  }, [canSee, user, dateMode, selectedDate, startDate, endDate]);
 
   // Reset seller filter when company changes
   useEffect(() => {
@@ -337,19 +349,64 @@ export default function DashboardPage() {
                   </Popover>
                 </div>
 
-                {/* Date */}
+                {/* Date mode */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-medium text-muted-foreground uppercase">Data</label>
-                  <div className="relative">
-                    <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                    <Input
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="h-9 w-[170px] pl-7"
-                    />
-                  </div>
+                  <label className="text-[11px] font-medium text-muted-foreground uppercase">Período</label>
+                  <Select value={dateMode} onValueChange={(v) => setDateMode(v as "day" | "range")}>
+                    <SelectTrigger className="h-9 w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="day">Dia</SelectItem>
+                      <SelectItem value="range">Intervalo</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {/* Date(s) */}
+                {dateMode === "day" ? (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-muted-foreground uppercase">Data</label>
+                    <div className="relative">
+                      <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="h-9 w-[170px] pl-7"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-medium text-muted-foreground uppercase">De</label>
+                      <div className="relative">
+                        <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="date"
+                          value={startDate}
+                          max={endDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="h-9 w-[160px] pl-7"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-medium text-muted-foreground uppercase">Até</label>
+                      <div className="relative">
+                        <CalIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                        <Input
+                          type="date"
+                          value={endDate}
+                          min={startDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="h-9 w-[160px] pl-7"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </CardHeader>
