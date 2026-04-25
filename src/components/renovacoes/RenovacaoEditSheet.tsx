@@ -320,13 +320,13 @@ export default function RenovacaoEditSheet(props: Props) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-[1100px] p-0 flex flex-col sm:flex-row gap-0">
+      <SheetContent side="right" className="w-full sm:max-w-[1100px] p-0 flex flex-col sm:flex-row gap-0 overflow-y-auto sm:overflow-hidden">
         {/* LEFT: Form */}
-        <div className="w-full sm:w-[420px] sm:border-r border-border flex flex-col bg-card">
+        <div className="w-full sm:w-[420px] sm:border-r border-b sm:border-b-0 border-border flex flex-col bg-card sm:overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b">
             <h2 className="font-semibold text-lg">{isEditing ? "Editar Renovação" : "Nova Renovação"}</h2>
           </div>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="sm:flex-1">
             <form onSubmit={onSave} id="renovacao-form" className="p-5 space-y-4">
               {fields.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-4">
@@ -367,7 +367,7 @@ export default function RenovacaoEditSheet(props: Props) {
         </div>
 
         {/* RIGHT: Timeline */}
-        <div className="flex-1 flex flex-col bg-background min-w-0">
+        <div className="flex-1 flex flex-col bg-background min-w-0 sm:overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b">
             <Tabs value={tab} onValueChange={setTab} className="flex-1">
               <TabsList className="bg-transparent">
@@ -451,7 +451,7 @@ export default function RenovacaoEditSheet(props: Props) {
                 </Popover>
               </div>
 
-              <ScrollArea className="flex-1">
+              <ScrollArea className="sm:flex-1">
                 <div className="p-5 space-y-3">
                   {tab === "atividade" && timeline.length === 0 && (
                     <p className="text-center text-sm text-muted-foreground py-12">Nenhuma atividade registrada ainda.</p>
