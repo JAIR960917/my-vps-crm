@@ -82,18 +82,21 @@ export default function DashboardPage() {
     });
   };
 
-  const fetchReport = async (dateStr: string) => {
-    const { startISO, endISO } = todayBounds(dateStr);
+  const fetchReport = async (startStr: string, endStr: string) => {
+    const { startISO, endISO } = rangeBounds(startStr, endStr);
 
-    // Profiles + companies (RLS already scopes for gerente)
-    const [{ data: profilesData }, { data: companiesData }] = await Promise.all([
+    // Profiles + companies + admins (RLS already scopes for gerente)
+    const [{ data: profilesData }, { data: companiesData }, { data: adminRoles }] = await Promise.all([
       supabase.from("profiles").select("user_id, full_name, avatar_url, company_id"),
       supabase.from("companies").select("id, name").order("name"),
+      supabase.from("user_roles").select("user_id").eq("role", "admin"),
     ]);
     const profs = (profilesData || []) as Profile[];
     const comps = (companiesData || []) as Company[];
-    setProfiles(profs);
+    const adminSet = new Set<string>((adminRoles || []).map((r: any) => r.user_id));
+    setProfiles(profs.filter((p) => !adminSet.has(p.user_id)));
     setCompanies(comps);
+    setAdminIds(adminSet);
     const compById = new Map(comps.map((c) => [c.id, c.name]));
 
     const { data: opens } = await supabase
@@ -104,6 +107,7 @@ export default function DashboardPage() {
 
     const atendidosMap = new Map<string, Set<string>>();
     (opens || []).forEach((o: any) => {
+      if (adminSet.has(o.user_id)) return; // ignora admins
       const key = `${o.card_type}:${o.lead_id || o.renovacao_id}`;
       if (!atendidosMap.has(o.user_id)) atendidosMap.set(o.user_id, new Set());
       atendidosMap.get(o.user_id)!.add(key);
@@ -120,6 +124,7 @@ export default function DashboardPage() {
     const atendeuSemAgendar = new Map<string, number>();
 
     (notes || []).forEach((n: any) => {
+      if (adminSet.has(n.user_id)) return; // ignora admins
       const c: string = n.content || "";
       if (!c.startsWith("📞 Tentativa de contato")) return;
       const inc = (m: Map<string, number>) =>
@@ -161,8 +166,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!canSee || !user) return;
     setLoading(true);
-    Promise.all([fetchTotals(), fetchReport(selectedDate)]).finally(() => setLoading(false));
-  }, [canSee, user, selectedDate]);
+    const start = dateMode === "day" ? selectedDate : startDate;
+    const end = dateMode === "day" ? selectedDate : endDate;
+    Promise.all([fetchTotals(), fetchReport(start, end)]).finally(() => setLoading(false));
+  }, [canSee, user, dateMode, selectedDate, startDate, endDate]);
 
   // Reset seller filter when company changes
   useEffect(() => {
