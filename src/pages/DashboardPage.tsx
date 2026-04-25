@@ -420,10 +420,7 @@ export default function DashboardPage() {
             </div>
 
             <Tabs defaultValue="vendedores">
-              <TabsList>
-                <TabsTrigger value="vendedores">Por vendedor</TabsTrigger>
-              </TabsList>
-              <TabsContent value="vendedores" className="mt-4">
+              <TabsContent value="vendedores" className="mt-0">
                 {loading ? (
                   <Skeleton className="h-40 w-full" />
                 ) : filteredRows.length === 0 ? (
