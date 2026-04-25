@@ -151,13 +151,7 @@ export default function LeadCard({
         <p className="text-xs text-emerald-500 mt-1 font-medium">Sincronizado ✓</p>
       )}
 
-      {/* Phone */}
-      {displayPhone && (
-        <div className="mt-1.5">
-          <p className="text-[11px] text-muted-foreground leading-tight">Telefone</p>
-          <p className="text-xs font-medium text-foreground">{displayPhone}</p>
-        </div>
-      )}
+      {/* Telefone removido propositalmente do card para forçar abertura da edição */}
 
       {/* Fields marked as show_on_card */}
       {formFields
