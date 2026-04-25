@@ -320,11 +320,16 @@ export default function LeadFormDialog({
   const [newNote, setNewNote] = useState("");
   const [noteSending, setNoteSending] = useState(false);
 
+  // Mandatory tratativa: enforced for non-admin users on edit mode
+  const [tratativaRegistrada, setTratativaRegistrada] = useState(false);
+  const requiresTratativa = isEditing && !isAdmin;
+
   useEffect(() => {
     if (open) {
       setShowPreview(false);
       setShowNewActivity(false);
       setTimelineFilter("all");
+      setTratativaRegistrada(false);
       supabase
         .from("crm_form_fields")
         .select("*")
@@ -348,6 +353,15 @@ export default function LeadFormDialog({
       }
     }
   }, [open, leadId]);
+
+  // Wrap onOpenChange to block close until tratativa is registered (non-admin only)
+  const handleOpenChange = (next: boolean) => {
+    if (!next && requiresTratativa && !tratativaRegistrada) {
+      toast.error("Registre uma tratativa antes de fechar este lead.");
+      return;
+    }
+    onOpenChange(next);
+  };
 
   useEffect(() => {
     if (!open || fields.length === 0) return;
