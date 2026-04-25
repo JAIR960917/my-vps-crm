@@ -106,6 +106,7 @@ export default function WhatsAppPage() {
   const [connectionStatus, setConnectionStatus] = useState<Record<string, string>>({});
   const [instanceLoading, setInstanceLoading] = useState(false);
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [allowedCompanyIds, setAllowedCompanyIds] = useState<string[] | null>(null);
   const [newInstanceCompanyId, setNewInstanceCompanyId] = useState("");
 
   const canManage = isAdmin;
@@ -129,7 +130,23 @@ export default function WhatsAppPage() {
       renovacoes: (renStatusRes.data || []) as Status[],
     });
     setInstances((instancesRes.data || []) as Instance[]);
-    setCompanies((companiesRes.data || []) as { id: string; name: string }[]);
+    const allCompanies = (companiesRes.data || []) as { id: string; name: string }[];
+
+    if (isGerente && !isAdmin && user?.id) {
+      const [{ data: myProfile }, { data: mgrCompanies }] = await Promise.all([
+        supabase.from("profiles").select("company_id").eq("user_id", user.id).maybeSingle(),
+        supabase.from("manager_companies").select("company_id").eq("user_id", user.id),
+      ]);
+      const ids = new Set<string>();
+      if (myProfile?.company_id) ids.add(myProfile.company_id);
+      (mgrCompanies || []).forEach((m: any) => m?.company_id && ids.add(m.company_id));
+      const allowed = Array.from(ids);
+      setAllowedCompanyIds(allowed);
+      setCompanies(allCompanies.filter((c) => allowed.includes(c.id)));
+    } else {
+      setAllowedCompanyIds(null);
+      setCompanies(allCompanies);
+    }
 
     const stats: Record<string, SendStats> = {};
     for (const send of (sendsRes.data || []) as { campaign_id: string; status: string }[]) {
@@ -145,7 +162,7 @@ export default function WhatsAppPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); /* eslint-disable-next-line */ }, [user?.id, isAdmin, isGerente]);
 
   const callApiFull = async (action: string, session: string, extraBody: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("apifull-whatsapp", {
@@ -508,7 +525,7 @@ export default function WhatsAppPage() {
               <Select value={filterCompanyId} onValueChange={setFilterCompanyId}>
                 <SelectTrigger className="w-[220px] h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  <SelectItem value="all">{isGerente && !isAdmin ? "Minhas empresas" : "Todas as empresas"}</SelectItem>
                   {companies.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
