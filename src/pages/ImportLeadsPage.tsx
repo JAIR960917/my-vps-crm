@@ -567,6 +567,27 @@ export default function ImportLeadsPage() {
                 </div>
               </div>
 
+              <div className="rounded-lg border p-3">
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-medium">Campos do CRM carregados:</span>
+                  <Badge variant="secondary">{formFields.length} campos</Badge>
+                  <Badge variant="outline">{crmColumns.length} colunas CRM</Badge>
+                  <Badge variant="outline">{statuses.length} status</Badge>
+                  <Badge variant="outline">{profiles.length} usuários</Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {formFields.map((field) => (
+                    <Badge key={field.id} variant="outline" className="max-w-full text-xs">
+                      <span className="truncate">
+                        {field.label}
+                        {field.is_name_field ? " • Nome" : ""}
+                        {field.is_phone_field ? " • Telefone" : ""}
+                      </span>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
               {(nameField || phoneField) && (
                 <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
                   {nameField && (
