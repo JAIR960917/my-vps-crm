@@ -162,7 +162,7 @@ export default function WhatsAppPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); /* eslint-disable-next-line */ }, [user?.id, isAdmin, isGerente]);
 
   const callApiFull = async (action: string, session: string, extraBody: Record<string, any> = {}) => {
     const { data, error } = await supabase.functions.invoke("apifull-whatsapp", {
