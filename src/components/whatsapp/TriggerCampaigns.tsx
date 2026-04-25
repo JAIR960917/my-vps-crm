@@ -120,7 +120,22 @@ export default function TriggerCampaigns({ instances }: Props) {
       cobrancas: (cobStatusRes.data || []) as Status[],
       renovacoes: (renStatusRes.data || []) as Status[],
     });
-    setCompanies((companiesRes.data || []) as Company[]);
+    const allCompanies = (companiesRes.data || []) as Company[];
+    if (isGerente && !isAdmin && user?.id) {
+      const [{ data: myProfile }, { data: mgrCompanies }] = await Promise.all([
+        supabase.from("profiles").select("company_id").eq("user_id", user.id).maybeSingle(),
+        supabase.from("manager_companies").select("company_id").eq("user_id", user.id),
+      ]);
+      const ids = new Set<string>();
+      if (myProfile?.company_id) ids.add(myProfile.company_id);
+      (mgrCompanies || []).forEach((m: any) => m?.company_id && ids.add(m.company_id));
+      const allowed = Array.from(ids);
+      setAllowedCompanyIds(allowed);
+      setCompanies(allCompanies.filter((c) => allowed.includes(c.id)));
+    } else {
+      setAllowedCompanyIds(null);
+      setCompanies(allCompanies);
+    }
 
     const stats: Record<string, TriggerSendStats> = {};
     for (const send of (sendsRes.data || []) as { campaign_id: string; status: string }[]) {
