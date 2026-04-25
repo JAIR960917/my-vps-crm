@@ -145,6 +145,7 @@ interface Integration {
   cnpj: string;
   license_code: string | null;
   bearer_token: string;
+  updated_at?: string | null;
   initial_sync_done: boolean;
   last_sync_vendas_at: string | null;
   last_sync_receber_at: string | null;
@@ -258,10 +259,12 @@ async function syncContasReceber(
   // "1 dia antes do vencimento".
   const nowBR = new Date(Date.now() - 3 * 60 * 60 * 1000);
   const today = new Date(Date.UTC(nowBR.getUTCFullYear(), nowBR.getUTCMonth(), nowBR.getUTCDate()));
-  // Janela: por padrão, últimos 12 meses + 60 dias à frente (sync incremental).
-  // Quando há windowOverride (modo backfill), processa apenas o chunk de 12 meses indicado.
-  const overallStart = windowOverride?.start ?? addDays(today, -COBRANCAS_LOOKBACK_DAYS);
-  const overallEnd = windowOverride?.end ?? addDays(today, COBRANCAS_FUTURE_DAYS);
+  // Janela: no incremental processamos 1 fatia por rodada do ciclo de 24 meses,
+  // para garantir que toda empresa conclua dentro do tempo do cron.
+  // Quando há windowOverride (modo backfill), processa apenas o chunk indicado.
+  const incrementalWindow = windowOverride ? null : getIncrementalCobrancaWindow(today);
+  const overallStart = windowOverride?.start ?? incrementalWindow!.start;
+  const overallEnd = windowOverride?.end ?? incrementalWindow!.end;
   const isBackfillChunk = !!windowOverride;
 
   let processed = 0, created = 0, updated = 0, removed = 0;
@@ -472,7 +475,7 @@ async function syncContasReceber(
     }
   }
   const chunksProcessed = 1;
-  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_em_atraso=${parcelasPorCliente.size} backfill_chunk=${isBackfillChunk}`);
+  console.log(`[ssotica-sync][cobrancas] empresa=${integ.company_id} janela=${ymd(overallStart)}→${ymd(overallEnd)} processed=${processed} clientes_em_atraso=${parcelasPorCliente.size} backfill_chunk=${isBackfillChunk}${incrementalWindow ? ` slot=${incrementalWindow.slot + 1}/${INCREMENTAL_COBRANCAS_SLICES}` : ""}`);
 
   // ===== Upsert por cliente: 1 card com a lista de TODAS as parcelas em atraso =====
   for (const [clienteIdNum, { cliente, parcelas }] of parcelasPorCliente.entries()) {
